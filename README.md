@@ -2,6 +2,8 @@
 
 Private-login web console plus a persistent Minecraft Java worker, prepared as two Railway services. Both run server-side when the user's computer is off. The worker has no public domain and is called by the web service over Railway private networking.
 
+The dashboard is also compatible with a private Codex Sites deployment. On Sites, the platform-provided OpenAI identity header grants access and the custom Railway login is bypassed. Sites cannot host the persistent raw-TCP Minecraft worker; set `WORKER_URL` and `WORKER_API_TOKEN` as Sites secrets pointing to the external worker.
+
 ## Security invariants
 
 - Minecraft, Microsoft cache, server and SOCKS5 values are worker environment variables only.
