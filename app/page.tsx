@@ -5,7 +5,7 @@ import { FormEvent, useEffect, useState } from 'react';
 type LogEntry = { time: string; tone?: 'ok' | 'warn'; text: string };
 const initialLogs: LogEntry[] = [
   { time: '21:03:18', tone: 'ok', text: 'Proxy-Guard aktiv · Direktverbindungen blockiert' },
-  { time: '21:03:19', text: 'Worker wartet auf eine sichere Konfiguration' },
+  { time: '21:03:19', text: 'Externer Worker ist noch nicht verbunden' },
 ];
 
 export default function Home() {
@@ -38,7 +38,7 @@ export default function Home() {
       const result = await response.json() as { error?: string };
       if (!response.ok) throw new Error(result.error ?? 'Worker nicht erreichbar');
       setConnected(next);
-      setLogs((items) => [...items, { time: now(), tone: next ? 'ok' : undefined, text: next ? 'Sichere Railway-Verbindung angefordert' : 'Verbindung getrennt' }]);
+      setLogs((items) => [...items, { time: now(), tone: next ? 'ok' : undefined, text: next ? 'Sichere Worker-Verbindung angefordert' : 'Verbindung getrennt' }]);
     } catch (error) {
       setLogs((items) => [...items, { time: now(), tone: 'warn', text: error instanceof Error ? error.message : 'Worker nicht erreichbar' }]);
     }
@@ -98,15 +98,15 @@ export default function Home() {
 
           <aside className="config-card">
             <div className="card-head"><div><p className="eyebrow">VERBINDUNG</p><h2>Instanz</h2></div><span className="lock">●</span></div>
-            <label>Server-Adresse<input value="Railway Secret" disabled /></label>
-            <div className="split"><label>Port<input value="Railway Secret" disabled /></label><label>Edition<select aria-label="Edition" defaultValue="java" disabled><option value="java">Java</option></select></label></div>
-            <label>Minecraft-Konto<input value="Railway Secret" disabled /></label>
+            <label>Server-Adresse<input value="Im Worker konfiguriert" disabled /></label>
+            <div className="split"><label>Port<input value="Worker" disabled /></label><label>Edition<select aria-label="Edition" defaultValue="java" disabled><option value="java">Java</option></select></label></div>
+            <label>Minecraft-Konto<input value="Microsoft-Geräteanmeldung" disabled /></label>
             <div className="proxy-box">
               <div className="proxy-title"><span className="shield">◆</span><div><strong>Proxy-Zwang aktiv</strong><small>Kein automatischer Direkt-Fallback</small></div></div>
-              <label>SOCKS5 Proxy<input value="In Railway verschlüsselt" disabled /></label>
+              <label>SOCKS5 Proxy<input value="Sicher im Worker hinterlegt" disabled /></label>
               <div className="guard-row"><span>Kill-Switch</span><strong>AN</strong></div>
             </div>
-            <p className="privacy-note">Alle Konto-, Server- und Proxy-Daten liegen ausschließlich als Railway-Secrets auf dem Worker. Den Microsoft-Login bestätigst du einmalig per offiziellem Gerätecode.</p>
+            <p className="privacy-note">Codex Sites hostet dieses private Dashboard. Server- und Proxy-Daten liegen nur im getrennten AFK-Worker. Den Microsoft-Login bestätigst du einmalig per offiziellem Gerätecode.</p>
           </aside>
         </div>
         <footer><span>HUSHCRAFT</span><p>Mineflayer worker · SOCKS5 egress · serverseitig</p><span>v0.1</span></footer>
