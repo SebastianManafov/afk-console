@@ -7,7 +7,7 @@ index 5b1f6a1..a14f779 100644
                      return proxy.CreateConnection(host, port);
                  }
 -                else return new TcpClient(host, port);
-+                else throw new InvalidOperationException(
++                else throw new System.InvalidOperationException(
 +                    "Proxy-only policy: direct TCP connections are disabled.");
              }
              catch (ProxyException e)
