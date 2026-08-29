@@ -33,6 +33,7 @@ h1 { margin: 0; font-size: clamp(28px, 3.2vw, 48px); letter-spacing: -.045em; fo
 .proxy-credentials { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
 .world-layout { display: grid; grid-template-columns: minmax(0, 1.6fr) minmax(300px, .7fr); gap: 16px; min-height: 590px; }
 .world-card, .telemetry-card, .security-grid section { border: 1px solid var(--line); border-radius: 17px; background: var(--panel); overflow: hidden; }
+.live-viewer { display: block; width: 100%; min-height: 620px; border: 0; background: #080a09; }
 .world-map { width: min(620px, calc(100% - 56px)); aspect-ratio: 1; margin: 28px auto 18px; display: grid; grid-template-columns: repeat(15, 1fr); gap: 2px; padding: 10px; border: 1px solid #303a31; border-radius: 14px; background: #0b0d0c; box-shadow: inset 0 0 50px #0008; }
 .block { display: grid; place-items: center; min-width: 0; border-radius: 2px; color: #111; font-size: clamp(8px, 1.2vw, 18px); text-shadow: 0 1px #fff6; }.block.grass { background: #577c3e; }.block.water { background: #315d78; }.block.lava { background: #c4582e; }.block.sand { background: #a89662; }.block.wood { background: #76583b; }.block.snow { background: #d8e2df; }.block.stone { background: #5a615e; }.block.earth { background: #594735; }.block.unknown { background: #1c211e; }
 .block.bot-block { color: var(--green); background: #111b12; outline: 2px solid var(--green); box-shadow: 0 0 16px #b9f27c66; }

@@ -3,7 +3,18 @@
   "version": "0.1.0",
   "private": true,
   "type": "module",
-  "engines": { "node": ">=22.13.0" },
-  "scripts": { "start": "node src/server.js", "check": "node --check src/server.js" },
-  "dependencies": {}
+  "engines": {
+    "node": ">=22.13.0"
+  },
+  "scripts": {
+    "start": "node src/server.js",
+    "check": "node --check src/server.js"
+  },
+  "dependencies": {
+    "express": "^4.22.2",
+    "mineflayer": "^4.38.0",
+    "prismarine-viewer": "^1.33.0",
+    "socket.io": "^4.8.3",
+    "socks": "^2.8.9"
+  }
 }
