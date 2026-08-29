@@ -12,6 +12,7 @@ let client = null;
 let status = 'offline';
 let lastError = '';
 const logs = [];
+function statePayload() { return { status, logs, lastError, proxyOnly: true, engine: 'mcc', canSend: status === 'online', world: null }; }
 const addLog = (text, tone) => {
   const clean = String(text).replace(/\x1b\[[0-9;]*m/g, '').replace(/§[0-9a-fk-or]/gi, '').trim();
   if (!clean) return;
@@ -155,7 +156,15 @@ const server = createServer(async (request, response) => {
   if (request.method === 'GET' && request.url === '/healthz') return response.end(JSON.stringify({ ok: true, service: 'hushcraft-worker', release: '0.3', engine: 'mcc', protocol: 775, proxyOnly: true, controls: ['join', 'disconnect', 'restart', 'chat'] }));
   if (!authorized(request)) { response.writeHead(401); return response.end(JSON.stringify({ error: 'Unauthorized' })); }
   try {
-    if (request.method === 'GET' && request.url === '/v1/status') return response.end(JSON.stringify({ status, logs, lastError, proxyOnly: true, engine: 'mcc', canSend: status === 'online', world: null }));
+    if (request.method === 'GET' && request.url === '/v1/events') {
+      response.writeHead(200, { 'content-type': 'text/event-stream; charset=utf-8', 'cache-control': 'no-cache, no-transform', connection: 'keep-alive', 'x-accel-buffering': 'no' });
+      const publish = () => response.write(`data: ${JSON.stringify(statePayload())}\n\n`);
+      publish();
+      const timer = setInterval(publish, 250);
+      request.on('close', () => clearInterval(timer));
+      return;
+    }
+    if (request.method === 'GET' && request.url === '/v1/status') return response.end(JSON.stringify(statePayload()));
     if (request.method === 'POST' && request.url === '/v1/connect') { await connect(); response.writeHead(202); return response.end(JSON.stringify({ status })); }
     if (request.method === 'POST' && request.url === '/v1/join') { await connect(); response.writeHead(202); return response.end(JSON.stringify({ status })); }
     if (request.method === 'POST' && request.url === '/v1/disconnect') { disconnect(); return response.end(JSON.stringify({ status })); }

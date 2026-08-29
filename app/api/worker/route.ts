@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 
-const allowedActions = new Set(['status', 'connect', 'join', 'disconnect', 'restart', 'chat', 'control']);
+const allowedActions = new Set(['status', 'events', 'connect', 'join', 'disconnect', 'restart', 'chat', 'control']);
 
 async function relay(request: NextRequest, action: string) {
   const workerUrl = process.env.WORKER_URL?.replace(/\/$/, '');
@@ -13,12 +13,12 @@ async function relay(request: NextRequest, action: string) {
     method: request.method,
     headers: { authorization: `Bearer ${token}`, 'content-type': 'application/json' },
     body: request.method === 'POST' ? await request.text() : undefined,
-    signal: AbortSignal.timeout(10_000),
+    signal: action === 'events' ? undefined : AbortSignal.timeout(10_000),
   });
   return new NextResponse(upstream.body, { status: upstream.status, headers: { 'content-type': upstream.headers.get('content-type') ?? 'application/json' } });
 }
 
-export async function GET(request: NextRequest) { return relay(request, 'status'); }
+export async function GET(request: NextRequest) { return relay(request, request.nextUrl.searchParams.get('action') === 'events' ? 'events' : 'status'); }
 export async function POST(request: NextRequest) {
   const action = request.nextUrl.searchParams.get('action') ?? '';
   return relay(request, action);
