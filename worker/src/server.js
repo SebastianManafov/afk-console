@@ -10,6 +10,7 @@ if (apiToken.length < 32) throw new Error('API_TOKEN must contain at least 32 ch
 
 let client = null;
 let status = 'offline';
+let lastError = '';
 const logs = [];
 const addLog = (text, tone) => {
   const clean = String(text).replace(/\x1b\[[0-9;]*m/g, '').replace(/§[0-9a-fk-or]/gi, '').trim();
@@ -95,8 +96,11 @@ function handleOutput(chunk) {
   for (const rawLine of String(chunk).split(/\r?\n/)) {
     const line = rawLine.replace(/\x1b\[[0-9;]*m/g, '').replace(/§[0-9a-fk-or]/gi, '').trim();
     if (!line) continue;
-    if (/Server was successfully joined|Type '\/quit' to leave the server/i.test(line)) status = 'online';
-    if (/Disconnected by Server|Login failed|Failed to login|Not connected to any server/i.test(line)) status = 'offline';
+    if (/Server was successfully joined|Type '\/quit' to leave the server/i.test(line)) { status = 'online'; lastError = ''; }
+    if (/Disconnected by Server|Login failed|Failed to login|Not connected to any server|Connection has been lost|SocketException/i.test(line)) {
+      status = 'offline';
+      if (/Connection has been lost|SocketException|aborted|failed/i.test(line)) lastError = line;
+    }
     const device = line.match(/(?:code|Code)[: ]+([A-Z0-9]{6,12})/);
     const link = line.match(/https:\/\/www\.microsoft\.com\/link/i);
     if (device || link || /device code|authentication/i.test(line)) addLog(line, 'ok'); else addLog(line);
@@ -110,6 +114,7 @@ async function connect() {
   mkdirSync(directory, { recursive: true });
   const configPath = createMccConfig(cfg, directory);
   status = 'connecting';
+  lastError = '';
   addLog(`MCC 26.1 startet · SOCKS5-Tunnel zu ${cfg.host}:${cfg.serverPort}`, 'ok');
   const executable = process.env.MCC_EXECUTABLE ?? '/opt/mcc/MinecraftClient';
   const processHandle = spawn(executable, [configPath, 'BasicIO-NoColor'], { cwd: directory, env: { ...process.env, HOME: directory }, stdio: ['pipe', 'pipe', 'pipe'] });
@@ -133,14 +138,28 @@ function disconnect() {
   setTimeout(() => { if (client === active && !active.killed) active.kill('SIGTERM'); }, 5000);
 }
 
+async function restart() {
+  const active = client;
+  if (active) {
+    try { if (active.stdin?.writable) active.stdin.write('/quit\n'); } catch { /* force-stop below */ }
+    active.kill('SIGTERM');
+    if (client === active) client = null;
+  }
+  status = 'offline';
+  await new Promise((resolve) => setTimeout(resolve, 600));
+  await connect();
+}
+
 const server = createServer(async (request, response) => {
   response.setHeader('content-type', 'application/json; charset=utf-8');
   if (request.method === 'GET' && request.url === '/healthz') return response.end(JSON.stringify({ ok: true, service: 'hushcraft-worker', engine: 'mcc', protocol: 775, proxyOnly: true }));
   if (!authorized(request)) { response.writeHead(401); return response.end(JSON.stringify({ error: 'Unauthorized' })); }
   try {
-    if (request.method === 'GET' && request.url === '/v1/status') return response.end(JSON.stringify({ status, logs, proxyOnly: true, engine: 'mcc', canSend: status === 'online', world: null }));
+    if (request.method === 'GET' && request.url === '/v1/status') return response.end(JSON.stringify({ status, logs, lastError, proxyOnly: true, engine: 'mcc', canSend: status === 'online', world: null }));
     if (request.method === 'POST' && request.url === '/v1/connect') { await connect(); response.writeHead(202); return response.end(JSON.stringify({ status })); }
+    if (request.method === 'POST' && request.url === '/v1/join') { await connect(); response.writeHead(202); return response.end(JSON.stringify({ status })); }
     if (request.method === 'POST' && request.url === '/v1/disconnect') { disconnect(); return response.end(JSON.stringify({ status })); }
+    if (request.method === 'POST' && request.url === '/v1/restart') { await restart(); response.writeHead(202); return response.end(JSON.stringify({ status })); }
     if (request.method === 'POST' && request.url === '/v1/chat') { const { message } = await body(request); if (status !== 'online') throw new Error('Client ist noch nicht mit Minecraft verbunden'); sendLine(message); return response.end(JSON.stringify({ sent: true })); }
     if (request.method === 'POST' && request.url === '/v1/control') { throw new Error('Bewegungssteuerung ist mit MCC 26.1 noch nicht verfügbar'); }
     response.writeHead(404); return response.end(JSON.stringify({ error: 'Not found' }));
