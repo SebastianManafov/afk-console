@@ -12,3 +12,19 @@ index 5b1f6a1..a14f779 100644
              }
              catch (ProxyException e)
              {
+diff --git a/MinecraftClient/Protocol/MicrosoftAuthentication.cs b/MinecraftClient/Protocol/MicrosoftAuthentication.cs
+index 6e719b1..4e524c1 100644
+--- a/MinecraftClient/Protocol/MicrosoftAuthentication.cs
++++ b/MinecraftClient/Protocol/MicrosoftAuthentication.cs
+@@ -210,5 +210,11 @@ namespace MinecraftClient.Protocol
+         public static void OpenBrowser(string link)
+         {
++            // Railway is intentionally headless. The device link and code are already
++            // printed to the secured dashboard, so never attempt to launch xdg-open.
++            if (Environment.GetEnvironmentVariable("MCC_HEADLESS") == "1")
++            {
++                return;
++            }
+             try
+             {
+                 if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
