@@ -1,116 +1,44 @@
 'use client';
 
-import { FormEvent, useEffect, useState } from 'react';
+import { FormEvent, useEffect, useMemo, useState } from 'react';
 
 type LogEntry = { time: string; tone?: 'ok' | 'warn'; text: string };
-const initialLogs: LogEntry[] = [
-  { time: '21:03:18', tone: 'ok', text: 'Proxy-Guard aktiv · Direktverbindungen blockiert' },
-  { time: '21:03:19', text: 'Externer Worker ist noch nicht verbunden' },
-];
+type World = { position: { x: number; y: number; z: number }; health: number; food: number; yaw: number; dimension: string; players: string[]; blocks: string[][] };
+type View = 'console' | 'world' | 'security';
+const initialLogs: LogEntry[] = [{ time: '21:03:18', tone: 'ok', text: 'Proxy-Guard aktiv · Direktverbindungen blockiert' }, { time: '21:03:19', text: 'Externer Worker ist bereit' }];
+
+function blockKind(name: string) {
+  if (/water|ice/.test(name)) return 'water'; if (/lava|fire/.test(name)) return 'lava'; if (/grass|leaves|moss|vine|fern/.test(name)) return 'grass';
+  if (/sand|gravel|terracotta/.test(name)) return 'sand'; if (/wood|log|planks/.test(name)) return 'wood'; if (/snow/.test(name)) return 'snow';
+  if (/stone|ore|deepslate|brick/.test(name)) return 'stone'; return name === 'unknown' ? 'unknown' : 'earth';
+}
 
 export default function Home() {
-  const [connected, setConnected] = useState(false);
-  const [logs, setLogs] = useState<LogEntry[]>(initialLogs);
-  const [command, setCommand] = useState('');
-  const now = () => new Date().toLocaleTimeString('de-DE', { hour12: false });
+  const [status, setStatus] = useState('offline'); const [logs, setLogs] = useState<LogEntry[]>(initialLogs); const [world, setWorld] = useState<World | null>(null);
+  const [view, setView] = useState<View>('console'); const [command, setCommand] = useState(''); const [busy, setBusy] = useState(false);
+  const connected = ['online', 'connecting', 'disconnecting'].includes(status); const now = () => new Date().toLocaleTimeString('de-DE', { hour12: false });
+  const heading = useMemo(() => ({ console: 'Konsole', world: 'Live-Welt', security: 'Sicherheit' }[view]), [view]);
 
-  useEffect(() => {
-    let active = true;
-    async function refresh() {
-      try {
-        const response = await fetch('/api/worker', { cache: 'no-store' });
-        if (!response.ok) return;
-        const result = await response.json() as { status?: string; logs?: Array<{ time: string; text: string; tone?: 'ok' | 'warn' }> };
-        if (!active) return;
-        setConnected(result.status === 'online' || result.status === 'connecting');
-        if (result.logs?.length) setLogs(result.logs.map((entry) => ({ ...entry, time: new Date(entry.time).toLocaleTimeString('de-DE', { hour12: false }) })));
-      } catch { /* A temporary private-network failure is shown by the next explicit action. */ }
-    }
-    void refresh();
-    const timer = window.setInterval(refresh, 2500);
-    return () => { active = false; window.clearInterval(timer); };
-  }, []);
+  useEffect(() => { let active = true; async function refresh() { try { const response = await fetch('/api/worker', { cache: 'no-store' }); if (!response.ok) return; const result = await response.json() as { status?: string; logs?: LogEntry[]; world?: World | null }; if (!active) return; setStatus(result.status ?? 'offline'); setWorld(result.world ?? null); if (result.logs?.length) setLogs(result.logs.map((entry) => ({ ...entry, time: new Date(entry.time).toLocaleTimeString('de-DE', { hour12: false }) }))); } catch { /* explicit actions report connectivity errors */ } } void refresh(); const timer = window.setInterval(refresh, 2000); return () => { active = false; window.clearInterval(timer); }; }, []);
+  async function call(action: string, payload: object = {}) { const response = await fetch(`/api/worker?action=${action}`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(payload) }); const result = await response.json() as { error?: string }; if (!response.ok) throw new Error(result.error ?? 'Aktion fehlgeschlagen'); }
+  async function toggleConnection() { if (busy) return; setBusy(true); try { await call(connected ? 'disconnect' : 'connect'); setStatus(connected ? 'disconnecting' : 'connecting'); setLogs((items) => [...items, { time: now(), tone: connected ? undefined : 'ok', text: connected ? 'Verbindung wird getrennt' : 'Sichere Worker-Verbindung angefordert' }]); } catch (error) { setLogs((items) => [...items, { time: now(), tone: 'warn', text: error instanceof Error ? error.message : 'Worker nicht erreichbar' }]); } finally { setBusy(false); } }
+  async function sendCommand(event: FormEvent) { event.preventDefault(); if (status !== 'online' || !command.trim()) return; const message = command.trim(); try { await call('chat', { message }); setLogs((items) => [...items, { time: now(), text: `> ${message}` }]); setCommand(''); } catch (error) { setLogs((items) => [...items, { time: now(), tone: 'warn', text: error instanceof Error ? error.message : 'Senden fehlgeschlagen' }]); } }
+  async function move(action: string) { try { await call('control', { action }); } catch (error) { setLogs((items) => [...items, { time: now(), tone: 'warn', text: error instanceof Error ? error.message : 'Steuerung fehlgeschlagen' }]); setView('console'); } }
 
-  async function toggleConnection() {
-    const next = !connected;
-    try {
-      const response = await fetch(`/api/worker?action=${next ? 'connect' : 'disconnect'}`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: '{}' });
-      const result = await response.json() as { error?: string };
-      if (!response.ok) throw new Error(result.error ?? 'Worker nicht erreichbar');
-      setConnected(next);
-      setLogs((items) => [...items, { time: now(), tone: next ? 'ok' : undefined, text: next ? 'Sichere Worker-Verbindung angefordert' : 'Verbindung getrennt' }]);
-    } catch (error) {
-      setLogs((items) => [...items, { time: now(), tone: 'warn', text: error instanceof Error ? error.message : 'Worker nicht erreichbar' }]);
-    }
-  }
+  return <main className="shell"><aside className="rail"><div className="brand-mark" aria-label="HushCraft">H</div><nav aria-label="Hauptnavigation">
+    <button className={`rail-button ${view === 'console' ? 'active' : ''}`} onClick={() => setView('console')} aria-label="Konsole">⌘</button>
+    <button className={`rail-button ${view === 'world' ? 'active' : ''}`} onClick={() => setView('world')} aria-label="Live-Welt">▦</button>
+    <button className={`rail-button ${view === 'security' ? 'active' : ''}`} onClick={() => setView('security')} aria-label="Sicherheit">◇</button>
+  </nav><div className="avatar" aria-label="Sicher angemeldet">✓</div></aside>
+  <section className="workspace"><header className="topbar"><div><p className="eyebrow">AFK CONSOLE / {heading.toUpperCase()}</p><h1>{view === 'world' ? 'Sieh, was dein Bot sieht.' : view === 'security' ? 'Deine Verbindung bleibt privat.' : 'Deine Welt bleibt online.'}</h1></div><div className="top-actions"><div className="login-pill">✓ Sicher angemeldet</div><div className="safety-pill"><span /> PROXY-ONLY</div></div></header>
+  <div className="status-strip"><div className={`pulse ${status === 'online' ? 'live' : ''}`} /><div><strong>{status === 'online' ? 'Online' : status === 'connecting' ? 'Verbindet…' : status === 'disconnecting' ? 'Trennt…' : 'Bereit zum Start'}</strong><small>{status === 'online' ? 'Serverseitige Instanz läuft' : 'Worker läuft unabhängig von deinem Laptop'}</small></div><div className="status-metric"><small>Eigene IP</small><strong>Niemals genutzt</strong></div><button className={connected ? 'danger-button' : 'primary-button'} onClick={toggleConnection} disabled={busy}>{connected ? 'Verbindung trennen' : 'Sicher verbinden'}</button></div>
 
-  async function sendCommand(event: FormEvent) {
-    event.preventDefault();
-    if (!connected || !command.trim()) return;
-    const message = command.trim();
-    try {
-      const response = await fetch('/api/worker?action=chat', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ message }) });
-      const result = await response.json() as { error?: string };
-      if (!response.ok) throw new Error(result.error ?? 'Senden fehlgeschlagen');
-      setLogs((items) => [...items, { time: now(), text: `> ${message}` }]);
-      setCommand('');
-    } catch (error) {
-      setLogs((items) => [...items, { time: now(), tone: 'warn', text: error instanceof Error ? error.message : 'Senden fehlgeschlagen' }]);
-    }
-  }
+  {view === 'console' && <div className="content-grid"><section className="console-card"><div className="card-head"><div><p className="eyebrow">LIVE SESSION</p><h2>Konsole</h2></div><span className="latency">{status === 'online' ? 'LIVE' : '—'}</span></div><div className="terminal" role="log" aria-live="polite">{logs.map((entry, index) => <p key={`${entry.time}-${index}`} className={entry.tone}><time>{entry.time}</time><span>{entry.text}</span></p>)}{!connected && <div className="terminal-empty"><span>⌁</span><strong>Noch offline</strong><small>Klicke oben auf „Sicher verbinden“.</small></div>}</div><form className="commandbar" onSubmit={sendCommand}><span>›</span><input value={command} onChange={(event) => setCommand(event.target.value)} placeholder="Chat oder /command" disabled={status !== 'online'} aria-label="Chat oder Befehl" /><button disabled={status !== 'online' || !command.trim()}>Senden</button></form></section><ConfigCard /></div>}
 
-  return (
-    <main className="shell">
-      <aside className="rail">
-        <div className="brand-mark" aria-label="HushCraft">H</div>
-        <nav aria-label="Hauptnavigation">
-          <button className="rail-button active" aria-label="Konsole">⌘</button>
-          <button className="rail-button" aria-label="Instanzen">▦</button>
-          <button className="rail-button" aria-label="Sicherheit">◇</button>
-        </nav>
-        <div className="avatar" aria-label="Sicher angemeldet">✓</div>
-      </aside>
+  {view === 'world' && <div className="world-layout"><section className="world-card"><div className="card-head"><div><p className="eyebrow">ECHTE SPIELDATEN</p><h2>Umgebungskarte</h2></div><span className="latency">15 × 15 Blöcke</span></div>{world ? <><div className="world-map" aria-label="Draufsicht der Minecraft-Umgebung">{world.blocks.flatMap((row, z) => row.map((name, x) => <div key={`${x}-${z}`} className={`block ${blockKind(name)} ${x === 7 && z === 7 ? 'bot-block' : ''}`} title={name}>{x === 7 && z === 7 ? '▲' : ''}</div>))}</div><div className="world-legend"><span><i className="grass" />Natur</span><span><i className="water" />Wasser</span><span><i className="stone" />Stein</span><span>▲ Dein Bot</span></div></> : <div className="world-offline"><strong>Weltansicht wartet auf Minecraft</strong><span>Starte zuerst die sichere Verbindung. Sobald der Bot gespawnt ist, erscheint hier seine echte Umgebung.</span></div>}</section><aside className="telemetry-card"><p className="eyebrow">SPIELSTATUS</p><h2>Bot-Steuerung</h2><div className="stats"><div><span>Position</span><strong>{world ? `${world.position.x} / ${world.position.y} / ${world.position.z}` : '—'}</strong></div><div><span>Leben</span><strong>{world ? `${world.health} / 20` : '—'}</strong></div><div><span>Hunger</span><strong>{world ? `${world.food} / 20` : '—'}</strong></div><div><span>Dimension</span><strong>{world?.dimension ?? '—'}</strong></div></div><div className="movement" aria-label="Bot bewegen"><button onClick={() => move('forward')} disabled={!world}>W</button><button onClick={() => move('left')} disabled={!world}>A</button><button onClick={() => move('back')} disabled={!world}>S</button><button onClick={() => move('right')} disabled={!world}>D</button><button className="jump" onClick={() => move('jump')} disabled={!world}>Springen</button></div><div className="players"><span>Spieler online</span><strong>{world?.players.length ?? 0}</strong>{world?.players.length ? <p>{world.players.join(', ')}</p> : null}</div></aside></div>}
 
-      <section className="workspace">
-        <header className="topbar">
-          <div><p className="eyebrow">AFK CONSOLE / JAVA</p><h1>Deine Welt bleibt online.</h1></div>
-          <div className="top-actions"><div className="login-pill">✓ Sicher angemeldet</div><div className="safety-pill"><span /> PROXY-ONLY</div></div>
-        </header>
-
-        <div className="status-strip">
-          <div className={`pulse ${connected ? 'live' : ''}`} />
-          <div><strong>{connected ? 'Online' : 'Bereit zum Start'}</strong><small>{connected ? 'Serverseitige Instanz läuft' : 'Worker läuft unabhängig von deinem Laptop'}</small></div>
-          <div className="status-metric"><small>Eigene IP</small><strong>Niemals genutzt</strong></div>
-          <button className={connected ? 'danger-button' : 'primary-button'} onClick={toggleConnection}>{connected ? 'Verbindung trennen' : 'Sicher verbinden'}</button>
-        </div>
-
-        <div className="content-grid">
-          <section className="console-card">
-            <div className="card-head"><div><p className="eyebrow">LIVE SESSION</p><h2>Konsole</h2></div><span className="latency">{connected ? '42 ms' : '— ms'}</span></div>
-            <div className="terminal" role="log" aria-live="polite">
-              {logs.map((entry, index) => <p key={`${entry.time}-${index}`} className={entry.tone}><time>{entry.time}</time><span>{entry.text}</span></p>)}
-              {!connected && <div className="terminal-empty"><span>⌁</span><strong>Noch offline</strong><small>Vervollständige rechts die Proxy-Konfiguration.</small></div>}
-            </div>
-            <form className="commandbar" onSubmit={sendCommand}>
-              <span>›</span><input value={command} onChange={(event) => setCommand(event.target.value)} placeholder="Chat oder /command" disabled={!connected} aria-label="Chat oder Befehl" /><button disabled={!connected || !command.trim()}>Senden</button>
-            </form>
-          </section>
-
-          <aside className="config-card">
-            <div className="card-head"><div><p className="eyebrow">VERBINDUNG</p><h2>Instanz</h2></div><span className="lock">●</span></div>
-            <label>Server-Adresse<input value="Im Worker konfiguriert" disabled /></label>
-            <div className="split"><label>Port<input value="Worker" disabled /></label><label>Edition<select aria-label="Edition" defaultValue="java" disabled><option value="java">Java</option></select></label></div>
-            <label>Minecraft-Konto<input value="Microsoft-Geräteanmeldung" disabled /></label>
-            <div className="proxy-box">
-              <div className="proxy-title"><span className="shield">◆</span><div><strong>Proxy-Zwang aktiv</strong><small>Kein automatischer Direkt-Fallback</small></div></div>
-              <label>SOCKS5 Proxy<input value="Sicher im Worker hinterlegt" disabled /></label>
-              <div className="guard-row"><span>Kill-Switch</span><strong>AN</strong></div>
-            </div>
-            <p className="privacy-note">Codex Sites hostet dieses private Dashboard. Server- und Proxy-Daten liegen nur im getrennten AFK-Worker. Den Microsoft-Login bestätigst du einmalig per offiziellem Gerätecode.</p>
-          </aside>
-        </div>
-        <footer><span>HUSHCRAFT</span><p>Mineflayer worker · SOCKS5 egress · serverseitig</p><span>v0.1</span></footer>
-      </section>
-    </main>
-  );
+  {view === 'security' && <div className="security-grid"><section><span className="security-icon">◆</span><p className="eyebrow">KILL-SWITCH</p><h2>Direktverbindung ausgeschlossen</h2><p>Der Worker besitzt keinen direkten Socket-Pfad. Scheitert der SOCKS5-Tunnel, bleibt der Minecraft-Client offline.</p></section><section><span className="security-icon">●</span><p className="eyebrow">SECRETS</p><h2>Daten bleiben serverseitig</h2><p>Minecraft-, Proxy- und API-Zugangsdaten werden nicht an deinen Browser übertragen.</p></section><section><span className="security-icon">✓</span><p className="eyebrow">PRIVATE SITE</p><h2>Nur dein Login</h2><p>Das Dashboard bleibt durch die private Codex-Sites-Anmeldung geschützt.</p></section></div>}
+  <footer><span>HUSHCRAFT</span><p>Mineflayer worker · SOCKS5 egress · serverseitig</p><span>v0.2</span></footer></section></main>;
 }
+
+function ConfigCard() { return <aside className="config-card"><div className="card-head"><div><p className="eyebrow">VERBINDUNG</p><h2>Instanz</h2></div><span className="lock">●</span></div><label>Server-Adresse<input value="Im Worker konfiguriert" disabled /></label><div className="split"><label>Port<input value="Worker" disabled /></label><label>Edition<select aria-label="Edition" defaultValue="java" disabled><option value="java">Java</option></select></label></div><label>Minecraft-Konto<input value="Microsoft-Geräteanmeldung" disabled /></label><div className="proxy-box"><div className="proxy-title"><span className="shield">◆</span><div><strong>Proxy-Zwang aktiv</strong><small>Kein automatischer Direkt-Fallback</small></div></div><label>SOCKS5 Proxy<input value="Sicher im Worker hinterlegt" disabled /></label><div className="guard-row"><span>Kill-Switch</span><strong>AN</strong></div></div><p className="privacy-note">Server- und Proxy-Daten liegen nur im getrennten AFK-Worker. Den Microsoft-Login bestätigst du einmalig per offiziellem Gerätecode.</p></aside>; }

@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 
-const allowedActions = new Set(['status', 'connect', 'disconnect', 'chat']);
+const allowedActions = new Set(['status', 'connect', 'disconnect', 'chat', 'control']);
 
 async function relay(request: NextRequest, action: string) {
   const workerUrl = process.env.WORKER_URL?.replace(/\/$/, '');
