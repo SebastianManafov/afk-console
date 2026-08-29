@@ -1,5 +1,7 @@
 import { timingSafeEqual, randomBytes } from 'node:crypto';
 import { createRequire } from 'node:module';
+import { resolveSrv } from 'node:dns/promises';
+import net from 'node:net';
 import { dirname, join } from 'node:path';
 import { mkdirSync } from 'node:fs';
 import express from 'express';
@@ -50,6 +52,18 @@ function safeConfig() {
   if (!Number.isInteger(serverPort) || serverPort < 1 || serverPort > 65535 || !Number.isInteger(proxyPort) || proxyPort < 1 || proxyPort > 65535) throw new Error('Ungültiger Server- oder Proxy-Port');
   if (proxyHost === host && proxyPort === serverPort) throw new Error('Proxy und Spielserver dürfen nicht identisch sein');
   return { host, serverPort, username, proxyHost, proxyPort, proxyUsername: String(process.env.SOCKS5_USERNAME ?? ''), proxyPassword: String(process.env.SOCKS5_PASSWORD ?? '') };
+}
+
+async function resolveMinecraftDestination(host, serverPort) {
+  if (serverPort !== 25565 || net.isIP(host) !== 0 || host === 'localhost') return { host, port: serverPort, source: 'configured' };
+  try {
+    const records = await resolveSrv(`_minecraft._tcp.${host}`);
+    const record = records.find((entry) => Number.isInteger(entry.port) && entry.port > 0 && entry.port <= 65535 && entry.name);
+    if (record) return { host: record.name.replace(/\.$/, ''), port: record.port, source: 'srv' };
+  } catch {
+    // No SRV record: use the configured hostname through SOCKS5.
+  }
+  return { host, port: serverPort, source: 'configured' };
 }
 
 function parseServerTarget(input) {
@@ -117,21 +131,22 @@ function stopBot({ reconnect = false } = {}) {
 async function connect() {
   if (bot) throw new Error('Eine Instanz läuft bereits');
   const cfg = safeConfig();
+  const destination = await resolveMinecraftDestination(cfg.host, cfg.serverPort);
   intentionalStop = false;
   clearRuntimeTimers();
   status = 'connecting';
   lastError = '';
   const profilesFolder = process.env.AUTH_CACHE_DIR ?? '/home/node/.minecraft';
   mkdirSync(profilesFolder, { recursive: true });
-  addLog(`Mineflayer ${process.env.MINECRAFT_VERSION?.trim() || '26.1'} startet · SOCKS5-Tunnel zu ${cfg.host}:${cfg.serverPort}`, 'ok');
+  addLog(`Mineflayer ${process.env.MINECRAFT_VERSION?.trim() || '26.1'} startet · SOCKS5-Tunnel zu ${cfg.host}:${cfg.serverPort}${destination.source === 'srv' ? ` (SRV → ${destination.host}:${destination.port})` : ''}`, 'ok');
   const instance = mineflayer.createBot({
-    host: cfg.host, port: cfg.serverPort, username: cfg.username, auth: 'microsoft',
+    host: destination.host, port: destination.port, username: cfg.username, auth: 'microsoft',
     version: process.env.MINECRAFT_VERSION?.trim() || '26.1', profilesFolder, viewDistance: 'tiny',
     onMsaCode: (data) => addLog(`Microsoft-Gerätecode: ${data.user_code} · ${data.verification_uri}`, 'ok'),
     connect: (client) => {
       SocksClient.createConnection({
         proxy: { host: cfg.proxyHost, port: cfg.proxyPort, type: 5, userId: cfg.proxyUsername || undefined, password: cfg.proxyPassword || undefined },
-        command: 'connect', destination: { host: cfg.host, port: cfg.serverPort }, timeout: 20_000,
+        command: 'connect', destination: { host: destination.host, port: destination.port }, timeout: 20_000,
       }).then(({ socket }) => {
         socket.setNoDelay(true); socket.setKeepAlive(true, 10_000); client.setSocket(socket); client.emit('connect');
       }).catch((error) => {
