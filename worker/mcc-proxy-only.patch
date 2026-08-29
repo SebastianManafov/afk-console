@@ -1,0 +1,14 @@
+diff --git a/MinecraftClient/Proxy/ProxyHandler.cs b/MinecraftClient/Proxy/ProxyHandler.cs
+index 5b1f6a1..a14f779 100644
+--- a/MinecraftClient/Proxy/ProxyHandler.cs
++++ b/MinecraftClient/Proxy/ProxyHandler.cs
+@@ -91,7 +91,8 @@ namespace MinecraftClient.Proxy
+ 
+                     return proxy.CreateConnection(host, port);
+                 }
+-                else return new TcpClient(host, port);
++                else throw new InvalidOperationException(
++                    "Proxy-only policy: direct TCP connections are disabled.");
+             }
+             catch (ProxyException e)
+             {

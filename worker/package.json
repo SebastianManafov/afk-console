@@ -5,5 +5,5 @@
   "type": "module",
   "engines": { "node": ">=22.13.0" },
   "scripts": { "start": "node src/server.js", "check": "node --check src/server.js" },
-  "dependencies": { "mineflayer": "4.37.1", "socks": "2.8.7" }
+  "dependencies": {}
 }
