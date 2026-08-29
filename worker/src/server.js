@@ -152,7 +152,7 @@ async function restart() {
 
 const server = createServer(async (request, response) => {
   response.setHeader('content-type', 'application/json; charset=utf-8');
-  if (request.method === 'GET' && request.url === '/healthz') return response.end(JSON.stringify({ ok: true, service: 'hushcraft-worker', engine: 'mcc', protocol: 775, proxyOnly: true }));
+  if (request.method === 'GET' && request.url === '/healthz') return response.end(JSON.stringify({ ok: true, service: 'hushcraft-worker', release: '0.3', engine: 'mcc', protocol: 775, proxyOnly: true, controls: ['join', 'disconnect', 'restart', 'chat'] }));
   if (!authorized(request)) { response.writeHead(401); return response.end(JSON.stringify({ error: 'Unauthorized' })); }
   try {
     if (request.method === 'GET' && request.url === '/v1/status') return response.end(JSON.stringify({ status, logs, lastError, proxyOnly: true, engine: 'mcc', canSend: status === 'online', world: null }));
