@@ -33,7 +33,7 @@ export async function POST(request: NextRequest) {
   const payload = `v1.${expires}`;
   const signature = createHmac('sha256', secret).update(payload).digest('base64url');
   const response = NextResponse.json({ authenticated: true });
-  response.cookies.set('hushcraft_session', `${payload}.${signature}`, {
+  response.cookies.set('rcc_session', `${payload}.${signature}`, {
     httpOnly: true, secure: process.env.NODE_ENV === 'production', sameSite: 'strict', path: '/', maxAge: 12 * 60 * 60,
   });
   return response;

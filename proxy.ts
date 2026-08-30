@@ -35,7 +35,7 @@ export async function proxy(request: NextRequest) {
   if (PUBLIC_PATHS.has(path) || path.startsWith('/_next/') || path === '/favicon.svg' || path === '/og.png') return secure(NextResponse.next());
   // Private Codex Sites authenticates visitors before forwarding the request.
   if (request.headers.get('oai-authenticated-user-id')) return secure(NextResponse.next());
-  if (await validSession(request.cookies.get('hushcraft_session')?.value)) return secure(NextResponse.next());
+  if (await validSession(request.cookies.get('rcc_session')?.value)) return secure(NextResponse.next());
   if (path.startsWith('/api/')) return secure(NextResponse.json({ error: 'Anmeldung erforderlich' }, { status: 401 }));
   return secure(NextResponse.redirect(new URL('/login', request.url)));
 }

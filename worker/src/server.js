@@ -238,7 +238,7 @@ viewerIo.on('connection', (socket) => {
   socket.on('disconnect', () => { active.removeListener('move', position); worldView.removeListenersFromBot(active); });
 });
 
-app.get('/healthz', (_request, response) => response.json({ ok: true, service: 'hushcraft-worker', release: '1.0', engine: 'mineflayer', minecraft: process.env.MINECRAFT_VERSION?.trim() || '26.1', proxyOnly: true, liveViewer: true, controls: ['join', 'joinserver', 'disconnect', 'restart', 'chat', 'movement', 'inventory', 'viewer'] }));
+app.get('/healthz', (_request, response) => response.json({ ok: true, service: 'rcc-worker', release: '1.0', engine: 'mineflayer', minecraft: process.env.MINECRAFT_VERSION?.trim() || '26.1', proxyOnly: true, liveViewer: true, controls: ['join', 'joinserver', 'disconnect', 'restart', 'chat', 'movement', 'inventory', 'viewer'] }));
 app.use('/v1', (request, response, next) => authorized(request) ? next() : response.status(401).json({ error: 'Unauthorized' }));
 app.get('/v1/status', (_request, response) => response.json(statePayload()));
 app.get('/v1/events', (request, response) => {

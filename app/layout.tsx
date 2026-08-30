@@ -14,16 +14,16 @@ const geistMono = Geist_Mono({
 
 export const metadata: Metadata = {
   metadataBase: new URL(process.env.SITE_URL ?? 'http://localhost:3000'),
-  title: 'HushCraft — AFK Console',
+  title: 'Remote Console Client (RCC)',
   description: 'Sicherer, proxy-erzwungener Minecraft AFK-Client mit Web-Konsole.',
   openGraph: {
-    title: 'HushCraft — AFK Console',
+    title: 'Remote Console Client (RCC)',
     description: 'Deine Welt bleibt online — mit erzwungenem SOCKS5-Proxy.',
     images: ['/og.png'],
   },
   twitter: {
     card: 'summary_large_image',
-    title: 'HushCraft — AFK Console',
+    title: 'Remote Console Client (RCC)',
     description: 'Deine Welt bleibt online — mit erzwungenem SOCKS5-Proxy.',
     images: ['/og.png'],
   },

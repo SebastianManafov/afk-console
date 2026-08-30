@@ -1,5 +1,5 @@
 {
-  "name": "hushcraft-worker",
+  "name": "rcc-worker",
   "version": "0.1.0",
   "private": true,
   "type": "module",

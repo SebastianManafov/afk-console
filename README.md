@@ -1,4 +1,4 @@
-# HushCraft AFK Console
+# Remote Console Client (RCC)
 
 Private-login web console plus a persistent Minecraft Java worker, prepared as two Railway services. Both run server-side when the user's computer is off. The worker has no public domain and is called by the web service over Railway private networking.
 
