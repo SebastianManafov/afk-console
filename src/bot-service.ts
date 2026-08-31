@@ -64,7 +64,7 @@ export class BotService {
     this.sell = new SellMacro(events, config, webhook);
     this.spawner = new SpawnerMacro(events, config, webhook);
     events.on("macroState", () => this.publish());
-    this.pulseTimer = setInterval(() => this.publish(), 750);
+    this.pulseTimer = setInterval(() => this.publish(), 5_000);
     this.pulseTimer.unref();
   }
 
@@ -579,6 +579,10 @@ export class BotService {
     this.publish();
   }
 
+  viewerBot(): Bot | null {
+    return this.connection === "online" ? this.bot : null;
+  }
+
   applyConfig(): void {
     const config = this.config.get();
     this.sell.setEnabled(config.sell.enabled);
@@ -623,7 +627,6 @@ export class BotService {
       food: this.bot?.food ?? null,
       experienceLevel: this.bot?.experience?.level ?? null,
       position: position ? { x: Math.round(position.x * 10) / 10, y: Math.round(position.y * 10) / 10, z: Math.round(position.z * 10) / 10 } : null,
-      pov: this.povSnapshot(),
       inventory: this.bot?.inventory?.items().map((item) => ({
         slot: item.slot,
         name: item.name,
@@ -637,37 +640,6 @@ export class BotService {
       } : null,
       sell: this.sell.snapshot(),
       spawner: this.spawner.snapshot()
-    };
-  }
-
-  private povSnapshot(): BotSnapshot["pov"] {
-    const bot = this.bot;
-    const origin = bot?.entity?.position;
-    if (!bot || !origin || this.connection !== "online") return null;
-    const blocks: NonNullable<BotSnapshot["pov"]>["blocks"] = [];
-    const radius = 9;
-    const baseX = Math.floor(origin.x);
-    const baseY = Math.floor(origin.y);
-    const baseZ = Math.floor(origin.z);
-    for (let y = -4; y <= 6; y += 1) {
-      for (let x = -radius; x <= radius; x += 1) {
-        for (let z = -radius; z <= radius; z += 1) {
-          const block = bot.blockAt(origin.offset(x, y, z), false);
-          if (!block || block.boundingBox === "empty") continue;
-          const exposed = [[1, 0, 0], [-1, 0, 0], [0, 1, 0], [0, -1, 0], [0, 0, 1], [0, 0, -1]].some(([ox, oy, oz]) => {
-            const neighbor = bot.blockAt(block.position.offset(ox!, oy!, oz!), false);
-            return !neighbor || neighbor.boundingBox === "empty";
-          });
-          if (exposed) blocks.push({ x: block.position.x - baseX, y: block.position.y - baseY, z: block.position.z - baseZ, name: block.name });
-        }
-      }
-    }
-    blocks.sort((a, b) => (a.x * a.x + a.y * a.y + a.z * a.z) - (b.x * b.x + b.y * b.y + b.z * b.z));
-    return {
-      yaw: bot.entity.yaw,
-      pitch: bot.entity.pitch,
-      eye: { x: origin.x - baseX, y: origin.y - baseY + 1.62, z: origin.z - baseZ },
-      blocks: blocks.slice(0, 1200)
     };
   }
 

@@ -145,12 +145,6 @@ export interface BotSnapshot {
   food: number | null;
   experienceLevel: number | null;
   position: { x: number; y: number; z: number } | null;
-  pov: {
-    yaw: number;
-    pitch: number;
-    eye: { x: number; y: number; z: number };
-    blocks: Array<{ x: number; y: number; z: number; name: string }>;
-  } | null;
   inventory: Array<{ slot: number; name: string; displayName: string; count: number }>;
   window: { title: string; inventoryStart: number; slots: Array<{ slot: number; name: string; displayName: string; count: number }> } | null;
   sell: MacroRuntime;

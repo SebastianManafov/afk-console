@@ -23,6 +23,14 @@ export class MultiBotManager {
   get sell() { return this.primary().sell; }
   get spawner() { return this.primary().spawner; }
 
+  viewerBot(): import("mineflayer").Bot | null {
+    for (const bot of this.bots.values()) {
+      const target = bot.viewerBot();
+      if (target) return target;
+    }
+    return null;
+  }
+
   sync(): void {
     const root = this.config.get();
     const configured = new Set(root.accounts.map((account) => account.id));

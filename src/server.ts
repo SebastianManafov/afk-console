@@ -1,10 +1,13 @@
 import { createReadStream } from "node:fs";
+import { createRequire } from "node:module";
 import { access, mkdir, stat } from "node:fs/promises";
 import { constants as fsConstants } from "node:fs";
 import { createServer, request as httpRequest, type IncomingMessage, type Server, type ServerResponse } from "node:http";
 import { createConnection } from "node:net";
+import { createGzip } from "node:zlib";
 import { extname, join, normalize } from "node:path";
 import { WebSocketServer } from "ws";
+import { Server as SocketIOServer } from "socket.io";
 import { DashboardAuth } from "./auth.js";
 import type { MultiBotManager } from "./multi-bot-manager.js";
 import type { ConfigStore } from "./config.js";
@@ -16,13 +19,18 @@ const contentTypes: Record<string, string> = {
   ".css": "text/css; charset=utf-8",
   ".js": "text/javascript; charset=utf-8",
   ".json": "application/json; charset=utf-8",
-  ".svg": "image/svg+xml"
+  ".svg": "image/svg+xml",
+  ".png": "image/png"
 };
+
+const require = createRequire(import.meta.url);
+const { WorldView } = require("prismarine-viewer/viewer/lib/worldView") as { WorldView: new (world: unknown, viewDistance: number, position: unknown, emitter: unknown) => any };
 
 export function startServer(config: ConfigStore, events: AppEvents, bot: MultiBotManager, webhook: WebhookNotifier, options: { port?: number; host?: string } = {}): Server {
   const auth = new DashboardAuth();
   const loginAttempts = new Map<string, { count: number; resetAt: number }>();
   const publicDir = join(process.cwd(), "public");
+  const viewerAssetsDir = join(process.cwd(), "node_modules", "prismarine-viewer", "public");
   const server = createServer(async (request, response) => {
     try {
       setSecurityHeaders(response);
@@ -51,6 +59,12 @@ export function startServer(config: ConfigStore, events: AppEvents, bot: MultiBo
         if (!role) return json(response, 401, { error: "Nicht angemeldet" });
         return await handleApi(request, response, config, events, bot, webhook);
       }
+      if (request.url?.startsWith("/pov-viewer/textures/") || request.url?.startsWith("/pov-viewer/blocksStates/") || request.url === "/pov-viewer/worker.js") {
+        if (!auth.isAuthenticated(request)) return json(response, 401, { error: "Nicht angemeldet" });
+        const relative = request.url.replace(/^\/pov-viewer\//, "");
+        return await serveStaticPath(request, response, viewerAssetsDir, relative);
+      }
+      if (request.url?.startsWith("/pov-viewer/") && !auth.isAuthenticated(request)) return json(response, 401, { error: "Nicht angemeldet" });
       await serveStatic(request, response, publicDir);
     } catch (error) {
       events.log("error", "server", (error as Error).message);
@@ -60,7 +74,8 @@ export function startServer(config: ConfigStore, events: AppEvents, bot: MultiBo
 
   const sockets = new WebSocketServer({ noServer: true });
   server.on("upgrade", (request, socket, head) => {
-    if (request.url !== "/ws" || !auth.isAuthenticated(request)) return socket.destroy();
+    if (!request.url?.startsWith("/ws")) return;
+    if (!auth.isAuthenticated(request)) return socket.destroy();
     sockets.handleUpgrade(request, socket, head, (client) => sockets.emit("connection", client));
   });
   sockets.on("connection", (socket) => {
@@ -73,6 +88,30 @@ export function startServer(config: ConfigStore, events: AppEvents, bot: MultiBo
   events.on("state", (state) => broadcast({ type: "state", state }));
   events.on("log", (entry) => broadcast({ type: "log", entry }));
   events.on("chat", (entry) => broadcast({ type: "chat", entry }));
+
+  const viewerSockets = new SocketIOServer(server, {
+    path: "/pov-viewer/socket.io",
+    allowRequest: (request, callback) => callback(null, auth.isAuthenticated(request))
+  });
+  viewerSockets.use((socket, next) => auth.isAuthenticated(socket.request) ? next() : next(new Error("Nicht angemeldet")));
+  viewerSockets.on("connection", async (socket) => {
+    const target = bot.viewerBot();
+    if (!target?.entity?.position) { socket.emit("viewerUnavailable", "Kein Bot ist online"); return; }
+    // Prismarine Viewer currently ships its newest complete model/texture
+    // atlas for 1.21.4. The live chunk stream still comes from the bot.
+    socket.emit("version", "1.21.4");
+    const worldView = new WorldView(target.world, 4, target.entity.position, socket);
+    const sendPosition = () => {
+      if (!target.entity?.position) return;
+      socket.emit("position", { pos: target.entity.position, yaw: target.entity.yaw, pitch: target.entity.pitch });
+      void worldView.updatePosition(target.entity.position);
+    };
+    worldView.listenToBot(target);
+    await worldView.init(target.entity.position);
+    sendPosition();
+    target.on("move", sendPosition);
+    socket.on("disconnect", () => { target.removeListener("move", sendPosition); worldView.removeListenersFromBot(target); });
+  });
 
   const port = options.port ?? Number(process.env.PORT || 3000);
   server.listen(port, options.host ?? "0.0.0.0", () => {
@@ -225,7 +264,7 @@ async function readJson(request: IncomingMessage): Promise<Record<string, any>> 
 
 async function serveStatic(request: IncomingMessage, response: ServerResponse, publicDir: string): Promise<void> {
   const pathname = new URL(request.url || "/", "http://localhost").pathname;
-  const relative = pathname === "/" ? "index.html" : pathname.slice(1);
+  const relative = pathname === "/" ? "index.html" : pathname.endsWith("/") ? `${pathname.slice(1)}index.html` : pathname.slice(1);
   const file = normalize(join(publicDir, relative));
   if (!file.startsWith(normalize(publicDir))) return json(response, 403, { error: "Verboten" });
   try {
@@ -238,9 +277,23 @@ async function serveStatic(request: IncomingMessage, response: ServerResponse, p
   }
 }
 
+async function serveStaticPath(request: IncomingMessage, response: ServerResponse, root: string, relative: string): Promise<void> {
+  const file = normalize(join(root, relative));
+  if (!file.startsWith(normalize(root))) return json(response, 403, { error: "Verboten" });
+  const info = await stat(file).catch(() => null);
+  if (!info?.isFile()) return json(response, 404, { error: "Nicht gefunden" });
+  response.statusCode = 200;
+  response.setHeader("content-type", contentTypes[extname(file)] ?? "application/octet-stream");
+  response.setHeader("vary", "Accept-Encoding");
+  if (/\bgzip\b/.test(request.headers["accept-encoding"] ?? "") && [".js", ".json"].includes(extname(file))) {
+    response.setHeader("content-encoding", "gzip");
+    createReadStream(file).pipe(createGzip({ level: 6 })).pipe(response);
+  } else createReadStream(file).pipe(response);
+}
+
 function setSecurityHeaders(response: ServerResponse): void {
   response.setHeader("X-Content-Type-Options", "nosniff");
-  response.setHeader("X-Frame-Options", "DENY");
+  response.setHeader("X-Frame-Options", "SAMEORIGIN");
   response.setHeader("Referrer-Policy", "no-referrer");
   response.setHeader("Content-Security-Policy", "default-src 'self'; connect-src 'self' wss: ws:; style-src 'self'; script-src 'self'");
 }
