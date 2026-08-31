@@ -1,10 +1,10 @@
 # Remote Console Client (RCC)
 
-Railway-fähige Grundlage für einen privaten Mineflayer-Client mit getrennten Sell- und Spawner-Makros, mobilem Dashboard und Discord-Webhooks.
+Privater Mineflayer-Client mit Web-Dashboard, Live-POV, getrennten Sell- und Spawner-Makros sowie Discord-Webhooks.
 
 Das Dashboard besitzt eine dichte AFK-Console-Navigation mit Servers, Accounts und Proxies sowie Connect, Chat, Movement, Inventory, POV, Server-Proxies, Macros, Webhooks und Settings. Gestaltung, Marke und Implementierung sind eigenständig; fremde Logos und Quelltexte werden nicht übernommen.
 
-Serverprofil, Adresse, Port, Minecraft-Version, Microsoft-Konto und Auto-Connect können direkt in der Settings-Seite geändert werden und bleiben auf dem Railway-Volume persistent.
+Serverprofil, Adresse, Port, Minecraft-Version, Microsoft-Konto und Auto-Connect können direkt in der Settings-Seite geändert werden und bleiben im konfigurierten Datenordner persistent.
 
 ## Aktueller Funktionsumfang
 
@@ -92,30 +92,45 @@ Die Werte aus `.env` müssen als echte Umgebungsvariablen geladen werden. Besond
 Microsoft-Tokens speichert Mineflayer je Account unter `DATA_DIR/accounts/<account-id>/auth`. Der Client stellt die Dateien nur für den laufenden Login beziehungsweise die aktive Verbindung wieder her und verschlüsselt sie anschließend als `.vault`-Dateien mit AES-256-GCM. Dieser Ordner darf trotzdem niemals in Git committed werden. Ein Wechsel von `CONFIG_ENCRYPTION_KEY` oder `SESSION_SECRET` macht vorhandene Vault-Dateien ohne den alten Schlüssel unlesbar.
 Die Discord-Webhook-URL wird mit AES-256-GCM im Volume verschlüsselt und in der Dashboard-API nur als `configured` ausgegeben.
 
-## Railway
+## GitHub Codespaces verwenden
 
-Das Projekt enthält keine feste Dashboard-URL. Railway, ein anderer Node.js-Host oder eine von Codex eingerichtete Deployment-Umgebung vergibt die öffentliche Domain beim Bereitstellen. Frontend, API und WebSocket verwenden ausschließlich relative Pfade beziehungsweise die jeweils aktuelle Domain.
+1. Im GitHub-Repository **Code → Codespaces → Create codespace on main** auswählen.
+2. Im Codespaces-Terminal einmalig installieren und bauen:
 
-1. Projekt in ein privates GitHub-Repository pushen.
-2. In Railway einen Service aus dem Repository erstellen.
-3. Volume am Service mit Mount Path `/data` anlegen.
-4. Variablen aus `.env.example` in Railway eintragen; `DATA_DIR=/data` und `AUTO_CONNECT=true` setzen.
-5. Öffentliche Domain erzeugen und Healthcheck `/health` verwenden.
-6. Serverless deaktivieren und genau eine Replica verwenden.
-
-Benötigte Railway-Variablen:
-
-```text
-DASHBOARD_PASSWORD=<mindestens 12 Zeichen>
-SESSION_SECRET=<mindestens 32 zufällige Zeichen>
-CONFIG_ENCRYPTION_KEY=<mindestens 32 zufällige Zeichen>
-DATA_DIR=/data
-AUTO_CONNECT=false
+```bash
+npm install
+npm run build
 ```
 
-Beim ersten Start zunächst `AUTO_CONNECT=false` verwenden, Konto und Server im Dashboard speichern und einmal manuell verbinden. Nach abgeschlossener Microsoft-Gerätecode-Anmeldung kann `AUTO_CONNECT=true` gesetzt werden. Das Volume unter `/data` ist zwingend erforderlich, damit OAuth-Tokens, Webhook und Einstellungen Deployments überleben.
+3. Für jeden neuen Codespace sichere Laufzeitvariablen setzen. Das Dashboard-Passwort muss mindestens acht Zeichen lang sein:
 
-Der HTTP-Server bindet an `0.0.0.0:$PORT`. Dashboard und WebSocket laufen über dieselbe Railway-Domain. Mineflayer baut nur eine ausgehende TCP-Verbindung zu HugoSMP auf.
+```bash
+export DASHBOARD_PASSWORD='DEIN-SICHERES-PASSWORT'
+export SESSION_SECRET="$(openssl rand -hex 32)"
+export CONFIG_ENCRYPTION_KEY="$(openssl rand -hex 32)"
+export DATA_DIR="$PWD/data"
+export AUTO_CONNECT=false
+npm start
+```
+
+4. Wenn im Terminal `Dashboard läuft auf Port 3000` erscheint, im Codespaces-Dialog **Open in Browser** anklicken. Falls kein Dialog erscheint: unten **Ports** öffnen, Port `3000` suchen und auf die URL klicken. Die Port-Sichtbarkeit auf **Private** lassen.
+5. Mit `DASHBOARD_PASSWORD` anmelden. Unter **Servers** die Minecraft-Adresse und Version speichern, unter **Accounts** das Microsoft-Konto anlegen und anschließend auf **Microsoft-Login** klicken.
+6. Den angezeigten Gerätecode ausschließlich auf `https://www.microsoft.com/link` eingeben. Danach im Dashboard das Konto auswählen und **Connect** drücken. RCC speichert die Sitzung verschlüsselt unter `DATA_DIR`; solange derselbe Codespace und dieselben Schlüssel verwendet werden, ist keine erneute Anmeldung nötig.
+
+Codespaces wird bei Inaktivität gestoppt und eignet sich deshalb zum Testen, nicht als garantierter 24/7-Host. Die Minecraft-Verbindung verwendet die öffentliche Ausgangs-IP des laufenden Codespace, niemals die IP des ausgeschalteten Macs.
+
+## Live-POV und Steuerung
+
+Nach einem erfolgreichen Serverbeitritt im Dashboard **POV** öffnen. `Live verbunden` bestätigt, dass Welt- und Entitätsdaten ankommen.
+
+- **Bot POV**: echte Sicht des Bots; klicken, dann mit Maus umsehen und mit `W`, `A`, `S`, `D` laufen
+- `Leertaste`: springen, linke Umschalttaste: schleichen, linke Strg-Taste: sprinten
+- Linksklick: Block abbauen oder Entity angreifen; Rechtsklick: benutzen
+- Mausrad oder `1`–`9`: Hotbar auswählen; `Esc`: Maus freigeben
+- **Freecam** oder `F`: unabhängige Kamera; `WASD`, Maus, Leertaste/Umschalt bewegen die Kamera, nicht den Bot
+- `Tab`: Spielerliste einblenden; `M`: Minimap ein-/ausblenden
+
+Wenn Spieler sichtbar sind, aber Blöcke fehlen, zuerst die im Serverprofil eingetragene Minecraft-Version prüfen. RCC enthält die Viewer-Daten für `26.1.2`; eine abweichende Server-/Protokollversion kann das Welt-Rendering verhindern.
 
 ## Vor dem echten automatischen Betrieb noch zu verifizieren
 
