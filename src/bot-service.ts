@@ -262,7 +262,7 @@ export class BotService {
       catch { this.handleEnd(bot, "Connection timeout"); }
       setTimeout(() => { if (this.bot === bot) this.handleEnd(bot, "Connection timeout"); }, 250).unref();
       this.publish();
-    }, 300_000);
+    }, 90_000);
     this.connectTimer.unref();
     bot.on("resourcePack", async (url, packId) => {
       if (this.bot !== bot) return;
