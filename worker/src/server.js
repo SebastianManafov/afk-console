@@ -24,6 +24,7 @@ let connectionMode = 'proxy';
 let intentionalStop = false;
 let reconnectTimer = null;
 let antiAfkTimer = null;
+let diagnostic = { phase: 'offline', updatedAt: new Date().toISOString(), route: 'SOCKS5', destination: null, account: null, protocol: null, ping: null, players: 0, detail: 'Noch keine Verbindung gestartet' };
 const logs = [];
 const viewerTickets = new Map();
 const viewerSessions = new Map();
@@ -36,6 +37,9 @@ function addLog(text, tone) {
   if (!clean) return;
   logs.push({ time: new Date().toISOString(), text: clean.slice(0, 1000), tone });
   if (logs.length > 400) logs.shift();
+}
+function setDiagnostic(patch) {
+  diagnostic = { ...diagnostic, ...patch, updatedAt: new Date().toISOString() };
 }
 addLog('Proxy-Guard aktiv · Mineflayer besitzt ausschließlich einen SOCKS5-Verbindungspfad', 'ok');
 
@@ -123,7 +127,7 @@ function statePayload() {
   return {
     status, logs, lastError, proxyOnly: connectionMode === 'proxy', connectionMode,
     railwayDirectAvailable: railwayDirectAllowed && runningOnRailway,
-    engine: 'mineflayer', canSend: status === 'online', world: worldPayload(),
+    engine: 'mineflayer', canSend: status === 'online', world: worldPayload(), diagnostic,
   };
 }
 function clearRuntimeTimers() { clearTimeout(reconnectTimer); clearInterval(antiAfkTimer); reconnectTimer = null; antiAfkTimer = null; }
@@ -153,6 +157,7 @@ async function connect() {
   const profilesFolder = process.env.AUTH_CACHE_DIR ?? '/home/node/.minecraft';
   mkdirSync(profilesFolder, { recursive: true });
   const routeLabel = connectionMode === 'proxy' ? `SOCKS5-Tunnel zu ${cfg.host}:${cfg.serverPort}` : `Railway-Ausgangs-IP zu ${cfg.host}:${cfg.serverPort}`;
+  setDiagnostic({ phase: 'connecting', route: connectionMode === 'proxy' ? 'SOCKS5' : 'RAILWAY-IP', destination: `${destination.host}:${destination.port}`, account: cfg.username, protocol: null, ping: null, players: 0, detail: 'Verbindung wird aufgebaut' });
   addLog(`Mineflayer ${process.env.MINECRAFT_VERSION?.trim() || '26.1'} startet · ${routeLabel}${destination.source === 'srv' ? ` (SRV → ${destination.host}:${destination.port})` : ''}`, 'ok');
   const botOptions = {
     host: destination.host, port: destination.port, username: cfg.username, auth: 'microsoft',
@@ -166,6 +171,7 @@ async function connect() {
         command: 'connect', destination: { host: destination.host, port: destination.port }, timeout: 20_000,
       }).then(({ socket }) => {
         socket.setNoDelay(true); socket.setKeepAlive(true, 10_000); client.setSocket(socket); client.emit('connect');
+        setDiagnostic({ phase: 'transport-connected', detail: 'SOCKS5-Tunnel steht · Minecraft-Handshake folgt' });
       }).catch((error) => {
         lastError = `SOCKS5 fehlgeschlagen: ${error.message}`;
         addLog(`${lastError} · Direktverbindung blockiert`, 'warn');
@@ -175,18 +181,20 @@ async function connect() {
   }
   const instance = mineflayer.createBot(botOptions);
   bot = instance;
+  instance.once('login', () => { setDiagnostic({ phase: 'minecraft-login', protocol: instance.protocolVersion ?? null, detail: 'Minecraft-Login bestätigt · Server-Spawn wird erwartet' }); addLog(`Minecraft-Login bestätigt · Protokoll ${instance.protocolVersion ?? 'unbekannt'}`, 'ok'); });
   instance.once('spawn', () => {
     if (bot !== instance) return;
-    status = 'online'; lastError = ''; addLog(`Server erfolgreich betreten als ${instance.username}`, 'ok');
+    status = 'online'; lastError = ''; setDiagnostic({ phase: 'spawned-online', account: instance.username, protocol: instance.protocolVersion ?? null, ping: instance.player?.ping ?? null, players: Object.keys(instance.players ?? {}).length, detail: 'Spawn im Spiel bestätigt · Bot ist sichtbar' }); addLog(`Server erfolgreich betreten als ${instance.username} · Spawn bestätigt · ${Object.keys(instance.players ?? {}).length} Spieler im Tab`, 'ok');
     antiAfkTimer = setInterval(() => { if (bot === instance && status === 'online') { try { instance.swingArm('right'); } catch { /* retry */ } } }, 30_000);
   });
-  instance.on('messagestr', (message) => addLog(message));
-  instance.on('kicked', (reason) => { lastError = cleanText(reason); addLog(`Vom Server getrennt: ${lastError}`, 'warn'); });
-  instance.on('error', (error) => { lastError = cleanText(error.message); addLog(`Clientfehler: ${lastError}`, 'warn'); });
+  instance.on('messagestr', (message) => { addLog(`Server: ${message}`); setDiagnostic({ detail: `Letzte Servermeldung: ${cleanText(message).slice(0, 180)}` }); });
+  instance.on('health', () => { if (bot === instance) setDiagnostic({ ping: instance.player?.ping ?? null, players: Object.keys(instance.players ?? {}).length }); });
+  instance.on('kicked', (reason) => { lastError = cleanText(reason); setDiagnostic({ phase: 'kicked', detail: `Server hat den Client getrennt: ${lastError}` }); addLog(`Vom Server getrennt · Grund: ${lastError}`, 'warn'); });
+  instance.on('error', (error) => { lastError = cleanText(error.message); setDiagnostic({ phase: 'error', detail: lastError }); addLog(`Clientfehler · ${lastError}`, 'warn'); });
   instance.once('end', (reason) => {
     if (bot === instance) bot = null;
     clearInterval(antiAfkTimer); antiAfkTimer = null; status = 'offline';
-    addLog(`Mineflayer beendet${reason ? ` · ${cleanText(reason)}` : ''}`); scheduleReconnect(reason);
+    setDiagnostic({ phase: 'offline', detail: reason ? `Verbindung beendet: ${cleanText(reason)}` : 'Verbindung beendet' }); addLog(`Mineflayer beendet${reason ? ` · ${cleanText(reason)}` : ''}`); scheduleReconnect(reason);
   });
 }
 
