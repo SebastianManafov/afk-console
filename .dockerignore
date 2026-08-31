@@ -1,9 +1,6 @@
 node_modules
-worker
 dist
-.next
-.vinext
-.wrangler
 .git
-.env*
-npm-debug.log
+.env
+data
+test

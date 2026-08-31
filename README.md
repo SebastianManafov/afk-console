@@ -1,55 +1,132 @@
 # Remote Console Client (RCC)
 
-Private-login web console plus a persistent Minecraft Java worker, prepared as two Railway services. Both run server-side when the user's computer is off. The worker has no public domain and is called by the web service over Railway private networking.
+Railway-fähige Grundlage für einen privaten Mineflayer-Client mit getrennten Sell- und Spawner-Makros, mobilem Dashboard und Discord-Webhooks.
 
-The dashboard is also compatible with a private Codex Sites deployment. On Sites, the platform-provided OpenAI identity header grants access and the custom Railway login is bypassed. Sites cannot host the persistent raw-TCP Minecraft worker; set `WORKER_URL` and `WORKER_API_TOKEN` as Sites secrets pointing to the external worker.
+Das Dashboard besitzt eine dichte AFK-Console-Navigation mit Servers, Accounts und Proxies sowie Connect, Chat, Movement, Inventory, POV, Server-Proxies, Macros, Webhooks und Settings. Gestaltung, Marke und Implementierung sind eigenständig; fremde Logos und Quelltexte werden nicht übernommen.
 
-## Security invariants
+Serverprofil, Adresse, Port, Minecraft-Version, Microsoft-Konto und Auto-Connect können direkt in der Settings-Seite geändert werden und bleiben auf dem Railway-Volume persistent.
 
-- Minecraft and Microsoft cache values are worker environment variables only.
-- The browser never receives proxy credentials, the worker API token, or Microsoft tokens.
-- RCC uses the Railway worker's egress IP exclusively. Local-machine connections are rejected.
-- The public website is protected by a signed, 12-hour `HttpOnly`, `Secure`, `SameSite=Strict` session.
-- The worker API requires a 32+ character bearer token. Only `/healthz` is unauthenticated.
+## Aktueller Funktionsumfang
 
-For defense in depth, restrict the worker's egress at the infrastructure/proxy layer to the SOCKS5 proxy. Respect the Minecraft server's bot, AFK, proxy and VPN rules.
+- Microsoft OAuth mit Gerätecode, Link und Kopierbutton direkt im Dashboard
+- getrennte Aktionen für Speichern, Microsoft-Login, Connect und Reconnect; dadurch entstehen keine unbeabsichtigten mehrfachen Gerätecodes
+- individuelle Reconnect-Regeln pro Account mit frei wählbarer Verzögerungsfolge, sichtbarem Countdown und Abbruch
+- Join- und World-Change-Befehle pro Serverprofil
+- zufällige Anti-AFK-Aktivität mit einstellbarem Mindest- und Höchstintervall
+- wiederholte Chatnachrichten oder Befehle mit sicherem Timer
+- Schutz vor parallelen Direktverbindungen derselben Serveradresse über unterschiedliche Profile
+- Accounts pausieren und später fortsetzen, ohne ihre Microsoft-Anmeldung zu löschen
+- Live-Konsole für Chat, Warnungen, Kicks und Verbindungsfehler
+- Discord-Ereignisse für Join, Disconnect, Kick, Makro-Erfolg, Makro-Fehler und Arrow-Abbruch
+- Sell-Zeitfenster, frei wählbare Pausen und konfigurierbare Befehls-/Klickzeiten
+- Spawner-Zeitfenster, automatische GUI-Slot-Erkennung und frei konfigurierbare Fallback-Slots
+- vollständige Spawner-Anlaufsequenz: `/home oben`, `/home unten`, W/S/D, Spawner-Rechtsklick, Makro, `/home afk`
+- optionaler Bone-Order-Ablauf nach erfolgreichem Spawner-Lauf: `/home oben`, `/order bone`, höchste Order erkennen, alle Bones mit zufälligen einstellbaren Pausen liefern, `/home afk`
+- sichtbarer Arrow-Guard, Makro-Durchläufe, Erfolge und aktuelle Laufzeit
+- Statusleiste für Ping, RAM, Prozesslaufzeit und Railway-Bereitschaft
+- Live-Positionsansicht, Inventar/Hotbar, Light/Dark Mode und mobile Navigation
+- JSON-Backup/Import sowie Not-Aus für Verbindung und beide Makros
+- AES-256-GCM-Verschlüsselung der Discord-Webhook-URL und aller Dateien im Microsoft-Token-Verzeichnis
+- parallele Mineflayer-Instanzen für mehrere aktivierte Accounts mit getrennten OAuth-Verzeichnissen
+- mehrere Serverprofile und HTTP-CONNECT-Proxies mit Account-Zuordnung und Latenztest
+- globale oder pro Account getrennte Sell-/Spawner-Konfigurationen
+- optionaler TOTP-Zweifaktor-Login über `DASHBOARD_TOTP_SECRET`
+- Erkennung typischer Wartungs- und Serverneustart-Kickmeldungen
+- lesbarer letzter Kick-/Verbindungsfehler direkt am betroffenen Account
+- klickfreie Makro-Vorschau sowie Übernahme der Makro-Konfiguration auf mehrere ausgewählte Accounts
+- Bearbeiten und Löschen gespeicherter Server- und Proxyprofile
+- sichtbare Warnung, wenn ein erkennbares OAuth-Ablaufdatum weniger als 15 Minuten entfernt ist
 
-## Railway layout
+Die Connect-Seite kann mehrere Accounts auswählen und gleichzeitig starten, stoppen oder neu verbinden. Jeder Account erhält einen getrennten Token-Ordner und kann einem eigenen Server sowie HTTP-CONNECT-Proxy zugewiesen werden. SOCKS5 ist noch nicht integriert.
 
-Create two services from the same GitHub repository:
+Eine leere Auswahl führt niemals mehr eine Aktion für alle Accounts aus. Der Not-Aus deaktiviert neben den globalen Makros auch alle individuellen Account-Makros. Konfigurationsänderungen werden transaktional validiert: Ein ungültiges Server-, E-Mail- oder Reconnect-Profil verändert weder die laufende noch die gespeicherte Konfiguration.
 
-1. `afk-web`: root directory `/`, config file `/railway.toml`, public domain enabled.
-2. `afk-worker`: root directory `/worker`, config file `/worker/railway.toml`, no public domain.
+## Stand der Makroanalyse
 
-Attach a Railway Volume to `afk-worker` at `/home/node/.minecraft` so Microsoft device-auth refresh tokens survive redeployments. On first connection, read the device code from the dashboard logs or worker deployment logs and complete it at the displayed Microsoft URL.
+Die bereitgestellte Mod-JAR `hugosmp-macro-0.2.3+mc1.21.11.jar` wurde nur zur Verhaltensanalyse verwendet. Die Implementierung in diesem Projekt ist eigenständig.
 
-## Web variables
+Festgestellte Spawner-Struktur:
 
-```text
-DASHBOARD_USERNAME=<private login name>
-DASHBOARD_PASSWORD=<strong unique password, at least 14 characters>
-SESSION_SECRET=<random value, at least 32 characters>
-WORKER_API_TOKEN=<same random value as worker API_TOKEN>
-WORKER_URL=http://${{afk-worker.RAILWAY_PRIVATE_DOMAIN}}:${{afk-worker.PORT}}
-SITE_URL=https://${{RAILWAY_PUBLIC_DOMAIN}}
+- 6-reihiges Container-GUI
+- Inhalt: Slots `0–44`
+- `Sell All`: Slot `45`
+- Seite links/rechts: Slots `48` und `50`
+- `Drop All`: Slot `53`
+- Synchronisationswartezeit der Referenz: bis zu 3 Sekunden
+- maximal 30 Seiten
+- Mod-Standardwerte: Sell `150/400 ms`, Shift-Click aktiv; Spawner `250 ms`, Modus `ALWAYS`, Drop-Item `minecraft:bone`
+
+Das Screenshotbild bestätigt das 6-reihige GUI mit Titel `SPAWNER`, Knochen im Inhaltsbereich und dem Drop-All-Element unten rechts. Der echte Mineflayer-Lauf schreibt Titel, Slotnummern und Item-IDs der Steuerungselemente ins Log. Damit können Namen/Lore später verifiziert werden, ohne sie aus Pixeln zu raten.
+
+Mit aktivem Skeleton-Filter entspricht der rekonstruierte Ablauf dem beobachteten Mod-Verhalten: reine Bone-Seiten verwenden Drop All, gemischte Seiten entfernen das konfigurierte Drop-Item einzeln, Restinhalte werden über Sell All verarbeitet und anschließend wird über Slot 48 zurückgeblättert. Der Arrow Guard läuft als zusätzliche Sicherheitsprüfung davor.
+
+### Arrow Guard
+
+Vor `Drop All` prüft der Client alle erreichbaren vollen Seiten in einem zerstörungsfreien Preflight. Sobald `arrow` beziehungsweise `minecraft:arrow` in Slot `0–44` gefunden wird:
+
+1. kein Drop-All-Klick,
+2. Makrostatus `ARROW_FILTER_ABORT`,
+3. Spawner-GUI wird geschlossen,
+4. Bot und Sell-Makro bleiben online,
+5. optionaler Discord-Webhook wird gesendet.
+
+## Lokal starten
+
+Node.js 22 oder neuer wird benötigt.
+
+```bash
+cp .env.example .env
+npm install
+npm run build
+npm start
 ```
 
-## Worker variables
+Die Werte aus `.env` müssen als echte Umgebungsvariablen geladen werden. Besonders wichtig:
+
+- `MC_USERNAME`: Microsoft-Konto des Minecraft-Accounts
+- `DASHBOARD_PASSWORD`: lokal mindestens 8 Zeichen, in Produktion mindestens 12 Zeichen
+- `SESSION_SECRET`: mindestens 32 zufällige Zeichen
+- `CONFIG_ENCRYPTION_KEY`: optionaler separater Schlüssel für die Webhook-Verschlüsselung; andernfalls wird `SESSION_SECRET` verwendet
+- `AUTO_CONNECT=true`: optionaler automatischer Start
+
+Microsoft-Tokens speichert Mineflayer je Account unter `DATA_DIR/accounts/<account-id>/auth`. Der Client stellt die Dateien nur für den laufenden Login beziehungsweise die aktive Verbindung wieder her und verschlüsselt sie anschließend als `.vault`-Dateien mit AES-256-GCM. Dieser Ordner darf trotzdem niemals in Git committed werden. Ein Wechsel von `CONFIG_ENCRYPTION_KEY` oder `SESSION_SECRET` macht vorhandene Vault-Dateien ohne den alten Schlüssel unlesbar.
+Die Discord-Webhook-URL wird mit AES-256-GCM im Volume verschlüsselt und in der Dashboard-API nur als `configured` ausgegeben.
+
+## Railway
+
+Das Projekt enthält keine feste Dashboard-URL. Railway, ein anderer Node.js-Host oder eine von Codex eingerichtete Deployment-Umgebung vergibt die öffentliche Domain beim Bereitstellen. Frontend, API und WebSocket verwenden ausschließlich relative Pfade beziehungsweise die jeweils aktuelle Domain.
+
+1. Projekt in ein privates GitHub-Repository pushen.
+2. In Railway einen Service aus dem Repository erstellen.
+3. Volume am Service mit Mount Path `/data` anlegen.
+4. Variablen aus `.env.example` in Railway eintragen; `DATA_DIR=/data` und `AUTO_CONNECT=true` setzen.
+5. Öffentliche Domain erzeugen und Healthcheck `/health` verwenden.
+6. Serverless deaktivieren und genau eine Replica verwenden.
+
+Benötigte Railway-Variablen:
 
 ```text
-API_TOKEN=<same random value as web WORKER_API_TOKEN, at least 32 characters>
-MINECRAFT_HOST=play.example.net
-MINECRAFT_PORT=25565
-MINECRAFT_USERNAME=<stable account/cache identifier, normally Microsoft email>
-AUTH_CACHE_DIR=/home/node/.minecraft
+DASHBOARD_PASSWORD=<mindestens 12 Zeichen>
+SESSION_SECRET=<mindestens 32 zufällige Zeichen>
+CONFIG_ENCRYPTION_KEY=<mindestens 32 zufällige Zeichen>
+DATA_DIR=/data
+AUTO_CONNECT=false
 ```
 
-Railway supplies `PORT`; neither service needs a manual `PORT` variable. Both services bind it on `0.0.0.0`.
+Beim ersten Start zunächst `AUTO_CONNECT=false` verwenden, Konto und Server im Dashboard speichern und einmal manuell verbinden. Nach abgeschlossener Microsoft-Gerätecode-Anmeldung kann `AUTO_CONNECT=true` gesetzt werden. Das Volume unter `/data` ist zwingend erforderlich, damit OAuth-Tokens, Webhook und Einstellungen Deployments überleben.
 
-RCC connects directly through Railway's server network. The dashboard device is never used as a Minecraft connection path.
+Der HTTP-Server bindet an `0.0.0.0:$PORT`. Dashboard und WebSocket laufen über dieselbe Railway-Domain. Mineflayer baut nur eine ausgehende TCP-Verbindung zu HugoSMP auf.
 
-## Local checks
+## Vor dem echten automatischen Betrieb noch zu verifizieren
 
-- Website: `npm install && npm run build && npm start`
-- Worker: `cd worker && npm install && API_TOKEN='<32+ chars>' npm start`
-- Health: website `/healthz`, worker `/healthz`
+- exakter Titel und Item-ID/Lore von Slot 53
+- ob `/home oben` und `/home unten` auf HugoSMP zuverlässig teleportieren und die W/S/D-Sequenz den Spawner in Reichweite bringt
+- Verhalten des Page-Right-Buttons auf der letzten Seite
+- echte Erfolgsanzeige beziehungsweise Chatmeldung nach `Drop All`
+- `/sell`-GUI-Titel und Bestätigung in Slot 35
+
+Bis diese Punkte im echten Protokolllog bestätigt sind, sollten manuelle Testläufe mit einem leeren oder unwichtigen Inventar erfolgen. Prüfe außerdem die HugoSMP-Regeln zu automatisierten Clients.
+
+Die Bone-Order-Funktion ist aus Sicherheitsgründen standardmäßig ausgeschaltet. Der Listenaufbau ist durch den Screenshot bekannt; das Detail-GUI nach Auswahl einer Order muss noch per Live-Log bestätigt werden. Deshalb werden erkannte Preis-/Order-Texte bevorzugt und andernfalls die konfigurierten Fallback-Slots verwendet. Vor dem ersten produktiven Lauf sollte die klickfreie Vorschau geprüft und anschließend ein beaufsichtigter Test mit wenigen Bones durchgeführt werden.
+
+Der bereitgestellte `ORDERS`-Screenshot zeigt vier Inhaltsreihen (`0–35`) und die Steuerleiste `36–44`; die Seitennavigation liegt bei `39/41`. Die automatische Suche ignoriert die weißen Platzhalter, berücksichtigt ausschließlich Bone-Items, durchsucht bis zu 30 Seiten und vergleicht Preisangaben aus Name/Lore/NBT. Wenn das Server-GUI keine lesbare Preisangabe übermittelt, wird der erste erkannte Bone-Eintrag verwendet; Slot `2` bleibt der manuell einstellbare letzte Fallback. Nach der Auswahl wartet der Client zwingend auf das Fenster `ORDER BELIEFERN`; dort ist laut Screenshot das orange Symbol in Slot `6` die Aktion für das gesamte Inventar. Erst danach wird Slot `6` betätigt.
