@@ -94,7 +94,7 @@ async function handleApi(
   if (request.url === "/api/system-check" && request.method === "GET") {
     const dataDir = process.env.DATA_DIR || "./data"; let dataWritable = false;
     try { await mkdir(dataDir, { recursive: true }); await access(dataDir, fsConstants.R_OK | fsConstants.W_OK); dataWritable = true; } catch { dataWritable = false; }
-    return json(response, 200, { node: process.version, provider: process.env.RAILWAY_ENVIRONMENT_NAME ? "railway" : "local", dataDirConfigured: Boolean(process.env.DATA_DIR), dataWritable, autoConnectAllowed: process.env.AUTO_CONNECT !== "false", sessionSecretConfigured: Boolean(process.env.SESSION_SECRET), encryptionKeyDedicated: Boolean(process.env.CONFIG_ENCRYPTION_KEY) });
+    return json(response, 200, { node: process.version, provider: "local", dataDirConfigured: Boolean(process.env.DATA_DIR), dataWritable, autoConnectAllowed: process.env.AUTO_CONNECT !== "false", sessionSecretConfigured: Boolean(process.env.SESSION_SECRET), encryptionKeyDedicated: Boolean(process.env.CONFIG_ENCRYPTION_KEY) });
   }
   if (request.url === "/api/settings" && request.method === "PUT") {
     const value = await config.update(await readJson(request));

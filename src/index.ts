@@ -5,7 +5,7 @@ import { AppEvents } from "./events.js";
 import { startServer } from "./server.js";
 import { WebhookNotifier } from "./webhook.js";
 
-const dataDir = resolve(process.env.DATA_DIR || (process.env.RAILWAY_VOLUME_MOUNT_PATH ?? "./data"));
+const dataDir = resolve(process.env.DATA_DIR || "./data");
 const events = new AppEvents();
 const config = new ConfigStore(dataDir);
 await config.load();

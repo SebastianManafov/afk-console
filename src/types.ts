@@ -133,7 +133,7 @@ export interface BotSnapshot {
   diagnostics: Array<{ at: string; stage: string; status: "info" | "ok" | "warn" | "error"; message: string }>;
   uptimeSeconds: number;
   memoryMb: number;
-  deployment: { provider: "railway" | "local"; environment: string; service: string };
+  deployment: { provider: "local"; environment: string; service: string };
   accountId?: string;
   authenticated?: boolean;
   authenticating?: boolean;

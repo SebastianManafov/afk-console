@@ -610,9 +610,9 @@ export class BotService {
       uptimeSeconds: Math.floor((Date.now() - this.startedAt) / 1000),
       memoryMb: Math.round(process.memoryUsage().rss / 1024 / 1024),
       deployment: {
-        provider: process.env.RAILWAY_ENVIRONMENT_NAME ? "railway" : "local",
-        environment: process.env.RAILWAY_ENVIRONMENT_NAME || "development",
-        service: process.env.RAILWAY_SERVICE_NAME || "rcc"
+        provider: "local",
+        environment: process.env.NODE_ENV || "development",
+        service: "rcc"
       },
       accountId: this.accountId,
       authenticated: !this.authPending && this.tokenVault.hasTokens(),
