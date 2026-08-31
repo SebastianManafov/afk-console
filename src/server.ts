@@ -30,6 +30,7 @@ export function startServer(config: ConfigStore, events: AppEvents, bot: MultiBo
   const auth = new DashboardAuth();
   const loginAttempts = new Map<string, { count: number; resetAt: number }>();
   const publicDir = join(process.cwd(), "public");
+  const localViewerAssetsDir = join(publicDir, "pov-viewer");
   const viewerAssetsDir = join(process.cwd(), "node_modules", "prismarine-viewer", "public");
   const server = createServer(async (request, response) => {
     try {
@@ -62,6 +63,8 @@ export function startServer(config: ConfigStore, events: AppEvents, bot: MultiBo
       if (request.url?.startsWith("/pov-viewer/textures/") || request.url?.startsWith("/pov-viewer/blocksStates/") || request.url === "/pov-viewer/worker.js") {
         if (!auth.isAuthenticated(request)) return json(response, 401, { error: "Nicht angemeldet" });
         const relative = request.url.replace(/^\/pov-viewer\//, "");
+        const localAsset = join(localViewerAssetsDir, relative);
+        if ((await stat(localAsset).catch(() => null))?.isFile()) return await serveStaticPath(request, response, localViewerAssetsDir, relative);
         return await serveStaticPath(request, response, viewerAssetsDir, relative);
       }
       if (request.url?.startsWith("/pov-viewer/") && !auth.isAuthenticated(request)) return json(response, 401, { error: "Nicht angemeldet" });
@@ -97,10 +100,24 @@ export function startServer(config: ConfigStore, events: AppEvents, bot: MultiBo
   viewerSockets.on("connection", async (socket) => {
     const target = bot.viewerBot();
     if (!target?.entity?.position) { socket.emit("viewerUnavailable", "Kein Bot ist online"); return; }
-    // Prismarine Viewer currently ships its newest complete model/texture
-    // atlas for 1.21.4. The live chunk stream still comes from the bot.
-    socket.emit("version", "1.21.4");
-    const worldView = new WorldView(target.world, 4, target.entity.position, socket);
+    const viewerVersion = String(target.version).startsWith("26.1") ? "26.1.2" : String(target.version);
+    socket.emit("version", viewerVersion);
+    const worldView = new WorldView(target.world, 6, target.entity.position, socket);
+    const activeControls = new Set<"forward" | "back" | "left" | "right" | "jump" | "sneak" | "sprint">();
+    let lastLookAt = 0;
+    const releaseControls = () => {
+      for (const control of activeControls) target.setControlState(control, false);
+      activeControls.clear();
+    };
+    const sendHud = (): void => {
+      socket.emit("hud", {
+        health: target.health,
+        food: target.food,
+        experience: target.experience?.level ?? 0,
+        username: target.username,
+        players: Object.values(target.players).filter((player) => player?.username).map((player) => ({ username: player.username, ping: player.ping }))
+      });
+    };
     const sendPosition = () => {
       if (!target.entity?.position) return;
       socket.emit("position", { pos: target.entity.position, yaw: target.entity.yaw, pitch: target.entity.pitch });
@@ -109,8 +126,53 @@ export function startServer(config: ConfigStore, events: AppEvents, bot: MultiBo
     worldView.listenToBot(target);
     await worldView.init(target.entity.position);
     sendPosition();
+    sendHud();
     target.on("move", sendPosition);
-    socket.on("disconnect", () => { target.removeListener("move", sendPosition); worldView.removeListenersFromBot(target); });
+    target.on("health", sendHud);
+    target.on("playerJoined", sendHud);
+    target.on("playerLeft", sendHud);
+    socket.on("botControl", (payload: { control?: unknown; enabled?: unknown }) => {
+      const control = String(payload?.control ?? "") as "forward" | "back" | "left" | "right" | "jump" | "sneak" | "sprint";
+      if (!["forward", "back", "left", "right", "jump", "sneak", "sprint"].includes(control)) return;
+      const enabled = payload?.enabled === true;
+      target.setControlState(control, enabled);
+      if (enabled) activeControls.add(control); else activeControls.delete(control);
+    });
+    socket.on("botLook", (payload: { yaw?: unknown; pitch?: unknown }) => {
+      const now = Date.now();
+      if (now - lastLookAt < 25) return;
+      const yaw = Number(payload?.yaw); const pitch = Number(payload?.pitch);
+      if (!Number.isFinite(yaw) || !Number.isFinite(pitch)) return;
+      lastLookAt = now;
+      void target.look(yaw, Math.max(-Math.PI / 2, Math.min(Math.PI / 2, pitch)), true);
+    });
+    socket.on("botAction", async (payload: { action?: unknown; slot?: unknown }) => {
+      const action = String(payload?.action ?? "");
+      try {
+        if (action === "attack") {
+          const entity = target.entityAtCursor(5);
+          if (entity) target.attack(entity); else {
+            const block = target.blockAtCursor(5);
+            if (block && target.canDigBlock(block)) await target.dig(block, "ignore"); else target.swingArm("right");
+          }
+        } else if (action === "use") {
+          const block = target.blockAtCursor(5);
+          if (block) await target.activateBlock(block); else target.activateItem();
+        } else if (action === "hotbar") {
+          const slot = Number(payload?.slot);
+          if (Number.isInteger(slot) && slot >= 0 && slot <= 8) target.setQuickBarSlot(slot);
+        }
+      } catch (error) { socket.emit("controlError", (error as Error).message); }
+    });
+    socket.on("releaseControls", releaseControls);
+    socket.on("disconnect", () => {
+      releaseControls();
+      target.removeListener("move", sendPosition);
+      target.removeListener("health", sendHud);
+      target.removeListener("playerJoined", sendHud);
+      target.removeListener("playerLeft", sendHud);
+      worldView.removeListenersFromBot(target);
+    });
   });
 
   const port = options.port ?? Number(process.env.PORT || 3000);

@@ -7,8 +7,11 @@
   <link rel="stylesheet" href="styles.css">
 </head>
 <body>
-  <div id="hud"><button id="follow" class="active">Bot POV</button><button id="freecam">Freecam</button><span id="status">Verbinde …</span><span id="hint">Freecam: klicken · WASD · Leertaste/Shift · Maus · Esc</span></div>
+  <div id="hud"><button id="follow" class="active">Bot POV</button><button id="freecam">Freecam</button><span id="status">Verbinde …</span><span id="vitals">❤ – · 🍗 – · XP –</span><span id="hint">Klicken · WASD · Maus · Space/Shift · F Freecam · Tab Spieler · M Minimap</span></div>
   <div id="crosshair">+</div>
+  <div id="playerList" class="panel" hidden><strong>Spieler online</strong><div id="players"></div></div>
+  <canvas id="minimap" width="180" height="180" hidden></canvas>
+  <div id="controls">Bot POV: Linksklick abbauen/angreifen · Rechtsklick benutzen · Mausrad/1–9 Hotbar · Esc freigeben</div>
   <script src="index.js"></script>
 </body>
 </html>

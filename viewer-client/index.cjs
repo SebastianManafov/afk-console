@@ -16,26 +16,68 @@ let yaw = 0
 let pitch = 0
 let lastFrame = performance.now()
 let botPosition = null
+let botYaw = 0
+let botPitch = 0
+let selectedSlot = 0
+let hudData = null
+const entities = new Map()
 
 const followButton = document.getElementById('follow')
 const freecamButton = document.getElementById('freecam')
 const status = document.getElementById('status')
+const vitals = document.getElementById('vitals')
+const playerList = document.getElementById('playerList')
+const players = document.getElementById('players')
+const minimap = document.getElementById('minimap')
+const minimapContext = minimap.getContext('2d')
+function lockPointer () {
+  try {
+    const result = renderer.domElement.requestPointerLock?.()
+    if (result?.catch) result.catch(() => {})
+  } catch {}
+}
 function setMode(nextFreecam) {
+  if (nextFreecam && !freecam) socket.emit('releaseControls')
   freecam = nextFreecam
   followButton.classList.toggle('active', !freecam)
   freecamButton.classList.toggle('active', freecam)
   if (freecam && botPosition) viewer.camera.position.set(botPosition.x, botPosition.y + 1.62, botPosition.z)
 }
-followButton.onclick = () => setMode(false)
-freecamButton.onclick = () => { setMode(true); renderer.domElement.requestPointerLock?.() }
-renderer.domElement.addEventListener('click', () => { if (freecam) renderer.domElement.requestPointerLock?.() })
-document.addEventListener('keydown', (event) => { keys.add(event.code); if (event.code === 'KeyF') setMode(!freecam) })
-document.addEventListener('keyup', (event) => keys.delete(event.code))
+followButton.onclick = () => { setMode(false); lockPointer() }
+freecamButton.onclick = () => { setMode(true); lockPointer() }
+renderer.domElement.addEventListener('click', lockPointer)
+const movementControls = { KeyW: 'forward', KeyS: 'back', KeyA: 'left', KeyD: 'right', Space: 'jump', ShiftLeft: 'sneak', ControlLeft: 'sprint' }
+document.addEventListener('keydown', (event) => {
+  keys.add(event.code)
+  if (event.code === 'KeyF' && !event.repeat) setMode(!freecam)
+  if (event.code === 'Tab') { event.preventDefault(); playerList.hidden = false }
+  if (event.code === 'KeyM' && !event.repeat) minimap.hidden = !minimap.hidden
+  if (!freecam && document.pointerLockElement === renderer.domElement && movementControls[event.code] && !event.repeat) socket.emit('botControl', { control: movementControls[event.code], enabled: true })
+  if (!freecam && /^Digit[1-9]$/.test(event.code)) { selectedSlot = Number(event.code.slice(5)) - 1; socket.emit('botAction', { action: 'hotbar', slot: selectedSlot }) }
+})
+document.addEventListener('keyup', (event) => {
+  keys.delete(event.code)
+  if (event.code === 'Tab') playerList.hidden = true
+  if (!freecam && movementControls[event.code]) socket.emit('botControl', { control: movementControls[event.code], enabled: false })
+})
+document.addEventListener('pointerlockchange', () => { if (document.pointerLockElement !== renderer.domElement) socket.emit('releaseControls') })
 document.addEventListener('mousemove', (event) => {
-  if (!freecam || document.pointerLockElement !== renderer.domElement) return
+  if (document.pointerLockElement !== renderer.domElement) return
   yaw -= event.movementX * .0022
   pitch = Math.max(-Math.PI / 2 + .01, Math.min(Math.PI / 2 - .01, pitch - event.movementY * .0022))
+  if (!freecam) { botYaw = yaw; botPitch = pitch; socket.emit('botLook', { yaw: botYaw, pitch: botPitch }) }
 })
+renderer.domElement.addEventListener('mousedown', (event) => {
+  if (freecam || document.pointerLockElement !== renderer.domElement) return
+  if (event.button === 0) socket.emit('botAction', { action: 'attack' })
+  if (event.button === 2) socket.emit('botAction', { action: 'use' })
+})
+renderer.domElement.addEventListener('contextmenu', (event) => event.preventDefault())
+renderer.domElement.addEventListener('wheel', (event) => {
+  if (freecam) return
+  selectedSlot = (selectedSlot + (event.deltaY > 0 ? 1 : 8)) % 9
+  socket.emit('botAction', { action: 'hotbar', slot: selectedSlot })
+}, { passive: true })
 
 socket.on('connect', () => { status.textContent = 'Live verbunden' })
 socket.on('disconnect', () => { status.textContent = 'Verbindung getrennt' })
@@ -49,8 +91,23 @@ socket.on('version', (version) => {
 })
 socket.on('position', ({ pos, yaw: botYaw, pitch: botPitch }) => {
   botPosition = pos
-  if (!freecam) viewer.setFirstPersonCamera(pos, botYaw, botPitch)
+  if (!freecam) {
+    yaw = botYaw; pitch = botPitch
+    viewer.setFirstPersonCamera(pos, botYaw, botPitch)
+  }
 })
+socket.on('entity', (entity) => { if (entity.delete) entities.delete(entity.id); else entities.set(entity.id, { ...(entities.get(entity.id) || {}), ...entity }) })
+socket.on('hud', (nextHud) => {
+  hudData = nextHud
+  vitals.textContent = `❤ ${Math.ceil(nextHud.health ?? 0)} · 🍗 ${Math.ceil(nextHud.food ?? 0)} · XP ${nextHud.experience ?? 0}`
+  players.replaceChildren(...(nextHud.players || []).map((player) => {
+    const row = document.createElement('div'); row.className = 'player'
+    const name = document.createElement('span'); name.textContent = player.username
+    const ping = document.createElement('span'); ping.textContent = `${player.ping ?? '?'} ms`
+    row.append(name, ping); return row
+  }))
+})
+socket.on('controlError', (message) => { status.textContent = `Steuerung: ${message}` })
 
 function updateFreecam(delta) {
   if (!freecam) return
@@ -66,7 +123,21 @@ function updateFreecam(delta) {
 function animate(now) {
   requestAnimationFrame(animate)
   const delta = Math.min(.05, (now - lastFrame) / 1000); lastFrame = now
-  updateFreecam(delta); viewer.update(); renderer.render(viewer.scene, viewer.camera)
+  updateFreecam(delta); drawMinimap(); viewer.update(); renderer.render(viewer.scene, viewer.camera)
+}
+function drawMinimap() {
+  if (minimap.hidden || !botPosition) return
+  const size = minimap.width; minimapContext.clearRect(0, 0, size, size)
+  minimapContext.fillStyle = '#07101a'; minimapContext.fillRect(0, 0, size, size)
+  minimapContext.strokeStyle = '#ffffff22'; minimapContext.beginPath(); minimapContext.arc(size / 2, size / 2, size / 2 - 4, 0, Math.PI * 2); minimapContext.stroke()
+  minimapContext.fillStyle = '#55e6a5'; minimapContext.fillRect(size / 2 - 3, size / 2 - 3, 6, 6)
+  for (const entity of entities.values()) {
+    if (!entity.pos || !entity.username) continue
+    const x = size / 2 + (entity.pos.x - botPosition.x) * 3
+    const y = size / 2 + (entity.pos.z - botPosition.z) * 3
+    if (x < 5 || y < 5 || x > size - 5 || y > size - 5) continue
+    minimapContext.fillStyle = '#ff5f7a'; minimapContext.beginPath(); minimapContext.arc(x, y, 3, 0, Math.PI * 2); minimapContext.fill()
+  }
 }
 requestAnimationFrame(animate)
 window.addEventListener('resize', () => {

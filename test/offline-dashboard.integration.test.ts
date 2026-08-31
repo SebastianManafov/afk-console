@@ -41,13 +41,21 @@ test("Offline-Dashboard: Login, State, Health, Preview und Sicherheitsfehler", {
     assert.equal((await fetch(`${baseUrl}/pov-viewer/`)).status, 401);
     const viewerPage = await fetch(`${baseUrl}/pov-viewer/`, { headers });
     assert.equal(viewerPage.status, 200);
-    assert.match(await viewerPage.text(), /Freecam: klicken · WASD/);
+    assert.match(await viewerPage.text(), /WASD · Maus/);
     const viewerBundle = await fetch(`${baseUrl}/pov-viewer/index.js`, { headers });
     assert.equal(viewerBundle.status, 200);
     assert.ok(Number(viewerBundle.headers.get("content-length") ?? 0) > 0 || (await viewerBundle.arrayBuffer()).byteLength > 1_000_000);
     const textureAtlas = await fetch(`${baseUrl}/pov-viewer/textures/1.21.4.png`, { headers });
     assert.equal(textureAtlas.status, 200);
     assert.equal(textureAtlas.headers.get("content-type"), "image/png");
+    const modernTextureAtlas = await fetch(`${baseUrl}/pov-viewer/textures/26.1.2.png`, { headers });
+    assert.equal(modernTextureAtlas.status, 200);
+    assert.equal(modernTextureAtlas.headers.get("content-type"), "image/png");
+    assert.ok((await modernTextureAtlas.arrayBuffer()).byteLength > 400_000);
+    const modernBlockStates = await fetch(`${baseUrl}/pov-viewer/blocksStates/26.1.2.json`, { headers: { ...headers, "accept-encoding": "gzip" } });
+    assert.equal(modernBlockStates.status, 200);
+    assert.equal(modernBlockStates.headers.get("content-encoding"), "gzip");
+    assert.ok((await modernBlockStates.arrayBuffer()).byteLength > 1_000_000);
     const unauthenticatedViewerSocket = await fetch(`${baseUrl}/pov-viewer/socket.io/?EIO=4&transport=polling`);
     assert.equal(unauthenticatedViewerSocket.status, 403);
 

@@ -9,6 +9,7 @@ module.exports = {
   resolve: {
     alias: {
       canvas: path.resolve(__dirname, 'viewer-client/canvas-shim.cjs'),
+      [require.resolve('prismarine-viewer/viewer/lib/version.js')]: path.resolve(__dirname, 'viewer-client/version.cjs'),
       [require.resolve('prismarine-viewer/viewer/lib/utils.js')]: require.resolve('prismarine-viewer/viewer/lib/utils.web.js'),
       [require.resolve('prismarine-viewer/viewer/lib/utils.electron.js')]: require.resolve('prismarine-viewer/viewer/lib/utils.web.js')
     },
