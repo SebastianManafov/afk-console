@@ -6,13 +6,13 @@
 </head>
 <body>
   <div id="login" class="login-wrap">
-    <form id="loginForm" class="login-box"><div class="login-brand"><div class="brand-mark">D</div><div><span>RCC SYSTEMS</span><h1>Remote Console Client (RCC)</h1></div></div><p>Dein privates Minecraft Control Center.</p><label>Dashboard-Passwort<input id="password" type="password" required autocomplete="current-password" placeholder="Passwort eingeben"></label><label id="totpField" class="hidden">Zwei-Faktor-Code<input id="totp" inputmode="numeric" pattern="[0-9]{6}" maxlength="6" autocomplete="one-time-code"></label><button class="btn green full">Control Center öffnen</button><small id="loginError" class="error"></small><div class="login-security"><span>◆ Local first</span><span>◆ Token vault</span><span>◆ Railway ready</span></div></form>
+    <form id="loginForm" class="login-box"><div class="login-brand"><div class="brand-mark">R</div><div><span>RCC SYSTEMS</span><h1>Remote Console Client (RCC)</h1></div></div><p>Dein privates Minecraft Control Center.</p><label>Dashboard-Passwort<input id="password" type="password" required autocomplete="current-password" placeholder="Passwort eingeben"></label><label id="totpField" class="hidden">Zwei-Faktor-Code<input id="totp" inputmode="numeric" pattern="[0-9]{6}" maxlength="6" autocomplete="one-time-code"></label><button class="btn green full">Control Center öffnen</button><small id="loginError" class="error"></small><div class="login-security"><span>◆ Local first</span><span>◆ Token vault</span><span>◆ Railway ready</span></div></form>
   </div>
 
   <div id="app" class="shell hidden">
     <aside id="sidebar">
       <button id="closeNav" class="mobile-close">×</button>
-      <div class="brand"><div class="brand-mark small">D</div><div><b>RCC</b><small>CONTROL CLIENT</small></div></div>
+      <div class="brand"><div class="brand-mark small">R</div><div><b>RCC</b><small>CONTROL CLIENT</small></div></div>
       <nav class="nav global-nav">
         <button data-page="servers"><span>⌂</span> Servers</button>
         <button data-page="accounts"><span>♙</span> Accounts</button>
@@ -38,7 +38,7 @@
       <header><button id="openNav" class="mobile-menu">☰</button><h1 id="pageTitle">Connect</h1><div class="header-metrics"><span>Ping <b id="metricPing">—</b></span><span>RAM <b id="metricRam">—</b></span><span>Uptime <b id="metricUptime">—</b></span><span id="railwayStatus" class="railway-ready">Railway ready</span></div><button id="themeToggle" class="icon-button" title="Design wechseln">◐</button><div id="connectionBadge" class="status offline">Offline</div></header>
       <main>
         <section class="page" data-view="connect">
-          <div class="command-hero"><div><span class="eyebrow">RCC COMMAND CENTER</span><h2>Deine Bots. Ein Dashboard.</h2><p>Accounts, Welten, Makros und Warnungen in einer sicheren Live-Ansicht.</p></div><div class="hero-orbit"><span></span><b>D</b></div></div>
+          <div class="command-hero"><div><span class="eyebrow">RCC COMMAND CENTER</span><h2>Deine Bots. Ein Dashboard.</h2><p>Accounts, Welten, Makros und Warnungen in einer sicheren Live-Ansicht.</p></div><div class="hero-orbit"><span></span><b>R</b></div></div>
           <div class="quick-stats"><article><span class="stat-icon purple">◈</span><div><small>Client status</small><b>Operational</b></div></article><article><span class="stat-icon cyan">⌁</span><div><small>Connection mode</small><b>Safe manual</b></div></article><article><span class="stat-icon green">ϟ</span><div><small>Automation</small><b>Guarded</b></div></article><article><span class="stat-icon orange">◇</span><div><small>Token storage</small><b>Encrypted</b></div></article></div>
           <div id="authPanel" class="panel auth-panel hidden"><div><h2>Microsoft-Anmeldung erforderlich</h2><p><b id="authAccountName">Account</b>: Öffne die Microsoft-Seite und gib den Gerätecode ein. Dein Microsoft-Passwort wird niemals an RCC übertragen.</p><small>Code gültig für <b id="authExpires">—</b></small></div><code id="authCode">—</code><div><a id="authLink" class="btn green" target="_blank" rel="noopener">Bei Microsoft anmelden</a><button id="copyAuthCode" class="btn dark">Code kopieren</button><button id="refreshAuthCode" class="btn dark">Neuen Code erstellen</button></div></div>
           <div id="reconnectPanel" class="panel reconnect-panel hidden"><span class="pulse"></span><b>Automatischer Reconnect</b><strong id="reconnectAccountName">—</strong><span id="reconnectCountdown">—</span><button id="cancelReconnect" class="btn dark">Abbrechen</button></div>
