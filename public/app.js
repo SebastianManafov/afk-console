@@ -58,6 +58,56 @@ function toast(message, error = false) {
   clearTimeout(toast.timer); toast.timer = setTimeout(() => element.classList.add('hidden'), 3000)
 }
 
+function povColor(name) {
+  const value = String(name || '')
+  if (/water/.test(value)) return '#3178c6'
+  if (/lava/.test(value)) return '#f06a20'
+  if (/grass|leaves|moss|vine/.test(value)) return '#57934d'
+  if (/dirt|mud|soul_sand/.test(value)) return '#76543d'
+  if (/sand|sandstone/.test(value)) return '#d6c27b'
+  if (/wood|log|planks|stem/.test(value)) return '#8a633d'
+  if (/glass|ice/.test(value)) return '#8bc7d5'
+  if (/ore|raw_/.test(value)) return '#aa9677'
+  if (/deepslate|blackstone|obsidian/.test(value)) return '#34343f'
+  if (/stone|cobble|brick|concrete/.test(value)) return '#777c85'
+  return '#9a9da3'
+}
+
+function renderPov(snapshot) {
+  const canvas = $('povCanvas')
+  if (!canvas) return
+  const box = canvas.getBoundingClientRect(); const dpr = Math.min(2, window.devicePixelRatio || 1)
+  const width = Math.max(1, Math.floor(box.width * dpr)); const height = Math.max(1, Math.floor(box.height * dpr))
+  if (canvas.width !== width || canvas.height !== height) { canvas.width = width; canvas.height = height }
+  const context = canvas.getContext('2d'); context.clearRect(0, 0, width, height)
+  const sky = context.createLinearGradient(0, 0, 0, height); sky.addColorStop(0, '#6ea8d0'); sky.addColorStop(.62, '#b9d7e5'); sky.addColorStop(1, '#263b2d'); context.fillStyle = sky; context.fillRect(0, 0, width, height)
+  const pov = snapshot?.pov
+  $('povStatus').textContent = pov ? `LIVE · ${pov.blocks.length} sichtbare Blöcke` : 'Warte auf Weltdaten …'
+  if (!pov?.blocks?.length) return
+  const yaw = pov.yaw || 0; const pitch = pov.pitch || 0; const focal = Math.min(width, height) * .72; const eye = pov.eye || { x: .5, y: 1.62, z: .5 }
+  const project = (point) => {
+    const dx = point[0] - eye.x; const dy = point[1] - eye.y; const dz = point[2] - eye.z
+    const cameraX = dx * Math.cos(yaw) - dz * Math.sin(yaw); const forward = -dx * Math.sin(yaw) - dz * Math.cos(yaw)
+    const cameraY = dy * Math.cos(pitch) - forward * Math.sin(pitch); const depth = dy * Math.sin(pitch) + forward * Math.cos(pitch)
+    if (depth < .08) return null
+    return { x: width / 2 + cameraX * focal / depth, y: height / 2 - cameraY * focal / depth, depth }
+  }
+  const vertices = [[0,0,0],[1,0,0],[1,1,0],[0,1,0],[0,0,1],[1,0,1],[1,1,1],[0,1,1]]
+  const faceIndexes = [[0,1,2,3],[5,4,7,6],[4,0,3,7],[1,5,6,2],[3,2,6,7],[4,5,1,0]]; const shades = [.82,.65,.72,.9,1,.58]; const faces = []
+  for (const block of pov.blocks) {
+    const projected = vertices.map(([x,y,z]) => project([block.x + x, block.y + y, block.z + z]))
+    for (let index = 0; index < faceIndexes.length; index += 1) {
+      const points = faceIndexes[index].map((vertex) => projected[vertex]); if (points.some((point) => !point)) continue
+      faces.push({ points, depth: points.reduce((sum, point) => sum + point.depth, 0) / 4, color: povColor(block.name), shade: shades[index] })
+    }
+  }
+  faces.sort((a, b) => b.depth - a.depth)
+  for (const face of faces) {
+    context.beginPath(); context.moveTo(face.points[0].x, face.points[0].y); for (let index = 1; index < face.points.length; index += 1) context.lineTo(face.points[index].x, face.points[index].y); context.closePath()
+    context.fillStyle = face.color; context.globalAlpha = face.shade; context.fill(); context.globalAlpha = 1; context.strokeStyle = 'rgba(0,0,0,.22)'; context.lineWidth = Math.max(1, dpr * .55); context.stroke()
+  }
+}
+
 async function boot() {
   const info = await api('/api/auth/info').catch(() => ({ totpRequired: false, role: null }))
   if (info.role) { sessionRole = info.role; sessionStorage.setItem('rcc-role', sessionRole) }
@@ -180,6 +230,7 @@ function renderState() {
   $('povHealth').textContent = operationalState.health ?? '—'; $('povFood').textContent = operationalState.food ?? '—'; $('povXp').textContent = operationalState.experienceLevel ?? '—'
   $('coordinates').textContent = operationalState.position ? `x${operationalState.position.x}, y${operationalState.position.y}, z${operationalState.position.z}` : '—'
   $('povCoordinates').textContent = operationalState.position ? `X ${operationalState.position.x} · Y ${operationalState.position.y} · Z ${operationalState.position.z}` : 'Keine Positionsdaten'
+  renderPov(operationalState)
   $('arrowGuard').classList.toggle('blocked', spawnerRuntime.phase === 'ARROW_FILTER_ABORT')
   const locked = Boolean(operationalState.controlLock?.locked)
   $('controlLockBanner').classList.toggle('hidden', !locked)

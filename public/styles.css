@@ -230,10 +230,9 @@ label { display: grid; gap: 5px; color: #475467; font-size: 11px; }
 .pov { max-width: 960px; margin-inline: auto; }
 .pov-top { display: flex; gap: 18px; margin-bottom: 9px; }
 .pov-top > :first-child { margin-right: auto; }
-.pov-screen { position: relative; display: grid; place-items: center; height: 450px; overflow: hidden; border: 2px solid #333; background: linear-gradient(#39596f 0 55%, #263a27 55%); }
-.pov-screen::after { position: absolute; inset: 55% 0 0; content: ""; background: repeating-linear-gradient(45deg, rgb(0 0 0 / 12%) 0 8px, transparent 8px 16px); }
-.map-grid { position: absolute; inset: 0; opacity: .3; background-image: linear-gradient(#fff2 1px, transparent 1px), linear-gradient(90deg, #fff2 1px, transparent 1px); background-size: 40px 40px; }
-.player-dot { position: relative; z-index: 2; color: #fff; font-size: 28px; filter: drop-shadow(0 2px 2px #000); }
+.pov-screen { position: relative; display: grid; place-items: center; height: 450px; overflow: hidden; border: 2px solid #333; background: #09121d; }
+.pov-screen canvas { width: 100%; height: 100%; display: block; }
+.pov-status { position: absolute; top: 14px; left: 14px; z-index: 2; padding: 7px 10px; border-radius: 8px; background: rgb(0 0 0 / 65%); color: #dce7f5; font-size: 12px; }
 .pov-screen p { position: absolute; bottom: 18px; z-index: 2; padding: 7px; background: rgb(0 0 0 / 68%); }
 .crosshair { z-index: 2; font-size: 25px; }
 
