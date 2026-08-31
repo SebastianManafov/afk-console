@@ -9,7 +9,6 @@ import { Server as SocketIOServer } from 'socket.io';
 
 const require = createRequire(import.meta.url);
 const mineflayer = require('mineflayer');
-const { SocksClient } = require('socks');
 const { WorldView } = require('prismarine-viewer/viewer/lib/worldView');
 const viewerPublic = join(dirname(require.resolve('prismarine-viewer')), 'public');
 const port = Number(process.env.PORT ?? 8080);
@@ -20,7 +19,7 @@ let bot = null;
 let status = 'offline';
 let lastError = '';
 let targetOverride = null;
-let connectionMode = 'proxy';
+let connectionMode = 'railway-direct';
 let intentionalStop = false;
 let reconnectTimer = null;
 let antiAfkTimer = null;
@@ -30,7 +29,6 @@ const viewerTickets = new Map();
 const viewerSessions = new Map();
 
 const cleanText = (value) => String(value ?? '').replace(/\x1b\[[0-9;]*m/g, '').replace(/§[0-9a-fk-or]/gi, '').trim();
-const railwayDirectAllowed = String(process.env.ALLOW_RAILWAY_DIRECT_EGRESS ?? '').trim().toLowerCase() === 'true';
 const runningOnRailway = Boolean(process.env.RAILWAY_PROJECT_ID && process.env.RAILWAY_ENVIRONMENT_ID);
 function addLog(text, tone) {
   const clean = cleanText(text);
@@ -57,12 +55,7 @@ function safeConfig() {
   const proxyPort = Number(process.env.SOCKS5_PORT);
   if (!host || !username) throw new Error('Server und Konto sind Pflicht');
   if (!Number.isInteger(serverPort) || serverPort < 1 || serverPort > 65535) throw new Error('Ungültiger Server-Port');
-  if (connectionMode === 'proxy') {
-    if (!proxyHost || !Number.isInteger(proxyPort) || proxyPort < 1 || proxyPort > 65535) throw new Error('SOCKS5-Proxy fehlt oder ist ungültig');
-    if (proxyHost === host && proxyPort === serverPort) throw new Error('Proxy und Spielserver dürfen nicht identisch sein');
-  } else if (!railwayDirectAllowed || !runningOnRailway) {
-    throw new Error('Direktmodus ist nur im Railway-Worker mit ALLOW_RAILWAY_DIRECT_EGRESS=true erlaubt');
-  }
+  if (!runningOnRailway) throw new Error('Railway-IP-Modus ist nur im Railway-Worker erlaubt; lokale Verbindungen sind gesperrt');
   return { host, serverPort, username, proxyHost, proxyPort, proxyUsername: String(process.env.SOCKS5_USERNAME ?? ''), proxyPassword: String(process.env.SOCKS5_PASSWORD ?? '') };
 }
 
@@ -126,7 +119,7 @@ function worldPayload() {
 function statePayload() {
   return {
     status, logs, lastError, proxyOnly: connectionMode === 'proxy', connectionMode,
-    railwayDirectAvailable: railwayDirectAllowed && runningOnRailway,
+    railwayDirectAvailable: runningOnRailway,
     engine: 'mineflayer', canSend: status === 'online', world: worldPayload(), diagnostic,
   };
 }
@@ -156,29 +149,15 @@ async function connect() {
   lastError = '';
   const profilesFolder = process.env.AUTH_CACHE_DIR ?? '/home/node/.minecraft';
   mkdirSync(profilesFolder, { recursive: true });
-  const routeLabel = connectionMode === 'proxy' ? `SOCKS5-Tunnel zu ${cfg.host}:${cfg.serverPort}` : `Railway-Ausgangs-IP zu ${cfg.host}:${cfg.serverPort}`;
-  setDiagnostic({ phase: 'connecting', route: connectionMode === 'proxy' ? 'SOCKS5' : 'RAILWAY-IP', destination: `${destination.host}:${destination.port}`, account: cfg.username, protocol: null, ping: null, players: 0, detail: 'Verbindung wird aufgebaut' });
+  const routeLabel = `Railway-Ausgangs-IP zu ${cfg.host}:${cfg.serverPort}`;
+  setDiagnostic({ phase: 'connecting', route: 'RAILWAY-IP', destination: `${destination.host}:${destination.port}`, account: cfg.username, protocol: null, ping: null, players: 0, detail: 'Direkte Verbindung über die Railway-Ausgangs-IP wird aufgebaut' });
   addLog(`Mineflayer ${process.env.MINECRAFT_VERSION?.trim() || '26.1'} startet · ${routeLabel}${destination.source === 'srv' ? ` (SRV → ${destination.host}:${destination.port})` : ''}`, 'ok');
   const botOptions = {
     host: destination.host, port: destination.port, username: cfg.username, auth: 'microsoft',
     version: process.env.MINECRAFT_VERSION?.trim() || '26.1', profilesFolder, viewDistance: 'tiny',
     onMsaCode: (data) => addLog(`Microsoft-Gerätecode: ${data.user_code} · ${data.verification_uri}`, 'ok'),
   };
-  if (connectionMode === 'proxy') {
-    botOptions.connect = (client) => {
-      SocksClient.createConnection({
-        proxy: { host: cfg.proxyHost, port: cfg.proxyPort, type: 5, userId: cfg.proxyUsername || undefined, password: cfg.proxyPassword || undefined },
-        command: 'connect', destination: { host: destination.host, port: destination.port }, timeout: 20_000,
-      }).then(({ socket }) => {
-        socket.setNoDelay(true); socket.setKeepAlive(true, 10_000); client.setSocket(socket); client.emit('connect');
-        setDiagnostic({ phase: 'transport-connected', detail: 'SOCKS5-Tunnel steht · Minecraft-Handshake folgt' });
-      }).catch((error) => {
-        lastError = `SOCKS5 fehlgeschlagen: ${error.message}`;
-        addLog(`${lastError} · Direktverbindung blockiert`, 'warn');
-        client.emit('error', error); client.emit('end', 'proxyError');
-      });
-    };
-  }
+  addLog('Railway-IP aktiv · keine Verbindung über deinen Laptop oder SOCKS5-Proxy', 'ok');
   const instance = mineflayer.createBot(botOptions);
   bot = instance;
   instance.once('login', () => { setDiagnostic({ phase: 'minecraft-login', protocol: instance.protocolVersion ?? null, detail: 'Minecraft-Login bestätigt · Server-Spawn wird erwartet' }); addLog(`Minecraft-Login bestätigt · Protokoll ${instance.protocolVersion ?? 'unbekannt'}`, 'ok'); });
@@ -206,7 +185,7 @@ async function joinServer(target) {
 }
 async function setConnectionMode(mode) {
   if (!['proxy', 'railway-direct'].includes(mode)) throw new Error('Ungültiger Verbindungsmodus');
-  if (mode === 'railway-direct' && (!railwayDirectAllowed || !runningOnRailway)) throw new Error('Railway-Direktmodus ist nicht freigeschaltet');
+  if (mode !== 'railway-direct' || !runningOnRailway) throw new Error('RCC verwendet ausschließlich die Railway-Ausgangs-IP');
   if (connectionMode === mode) return;
   const reconnect = Boolean(bot);
   intentionalStop = true;
@@ -275,7 +254,7 @@ viewerIo.on('connection', (socket) => {
   socket.on('disconnect', () => { active.removeListener('move', position); worldView.removeListenersFromBot(active); });
 });
 
-app.get('/healthz', (_request, response) => response.json({ ok: true, service: 'rcc-worker', release: '1.1', engine: 'mineflayer', minecraft: process.env.MINECRAFT_VERSION?.trim() || '26.1', proxyOnly: connectionMode === 'proxy', railwayDirectAvailable: railwayDirectAllowed && runningOnRailway, liveViewer: true, controls: ['join', 'joinserver', 'disconnect', 'restart', 'connection-mode', 'chat', 'movement', 'inventory', 'viewer'] }));
+app.get('/healthz', (_request, response) => response.json({ ok: true, service: 'rcc-worker', release: '1.2', engine: 'mineflayer', minecraft: process.env.MINECRAFT_VERSION?.trim() || '26.1', proxyOnly: false, railwayDirectAvailable: runningOnRailway, liveViewer: true, controls: ['join', 'joinserver', 'disconnect', 'restart', 'connection-mode', 'chat', 'movement', 'inventory', 'viewer'] }));
 app.use('/v1', (request, response, next) => authorized(request) ? next() : response.status(401).json({ error: 'Unauthorized' }));
 app.get('/v1/status', (_request, response) => response.json(statePayload()));
 app.get('/v1/events', (request, response) => {
@@ -293,7 +272,7 @@ app.post('/v1/connect', async (_request, response, next) => { try { await connec
 app.post('/v1/join', async (_request, response, next) => { try { await connect(); response.status(202).json({ status }); } catch (error) { next(error); } });
 app.post('/v1/disconnect', (_request, response) => { intentionalStop = true; stopBot(); response.json({ status }); });
 app.post('/v1/restart', async (_request, response, next) => { try { intentionalStop = true; stopBot(); await new Promise((resolve) => setTimeout(resolve, 500)); await connect(); response.status(202).json({ status }); } catch (error) { next(error); } });
-app.post('/v1/connection-mode', async (request, response, next) => { try { await setConnectionMode(String(request.body?.mode ?? '')); response.json({ connectionMode, railwayDirectAvailable: railwayDirectAllowed && runningOnRailway, status }); } catch (error) { next(error); } });
+app.post('/v1/connection-mode', async (request, response, next) => { try { await setConnectionMode(String(request.body?.mode ?? 'railway-direct')); response.json({ connectionMode, railwayDirectAvailable: runningOnRailway, status }); } catch (error) { next(error); } });
 app.post('/v1/chat', async (request, response, next) => { try { const message = String(request.body?.message ?? '').trim(); const joinCommand = message.match(/^\/joinserver\s+(.+)$/i); if (joinCommand) await joinServer(joinCommand[1]); else sendChat(message); response.status(joinCommand ? 202 : 200).json({ sent: true, status }); } catch (error) { next(error); } });
 app.post('/v1/control', (request, response, next) => { try { control(request.body?.action); response.json({ sent: true }); } catch (error) { next(error); } });
 app.use((error, _request, response, next) => { void next; lastError = cleanText(error.message); addLog(lastError, 'warn'); response.status(400).json({ error: lastError }); });

@@ -6,11 +6,9 @@ The dashboard is also compatible with a private Codex Sites deployment. On Sites
 
 ## Security invariants
 
-- Minecraft, Microsoft cache, server and SOCKS5 values are worker environment variables only.
+- Minecraft and Microsoft cache values are worker environment variables only.
 - The browser never receives proxy credentials, the worker API token, or Microsoft tokens.
-- In SOCKS5 mode, Mineflayer is not given a direct `host` socket. Its only Minecraft socket comes from `SocksClient`.
-- Missing or failed SOCKS5 configuration aborts the attempt in SOCKS5 mode. There is no automatic direct-connect fallback.
-- Optional Railway-IP mode can be enabled only by setting `ALLOW_RAILWAY_DIRECT_EGRESS=true` in the Railway worker. It connects from Railway's server network, never from the dashboard visitor's device.
+- RCC uses the Railway worker's egress IP exclusively. Local-machine connections are rejected.
 - The public website is protected by a signed, 12-hour `HttpOnly`, `Secure`, `SameSite=Strict` session.
 - The worker API requires a 32+ character bearer token. Only `/healthz` is unauthenticated.
 
@@ -43,17 +41,12 @@ API_TOKEN=<same random value as web WORKER_API_TOKEN, at least 32 characters>
 MINECRAFT_HOST=play.example.net
 MINECRAFT_PORT=25565
 MINECRAFT_USERNAME=<stable account/cache identifier, normally Microsoft email>
-SOCKS5_HOST=proxy.example.net
-SOCKS5_PORT=1080
-SOCKS5_USERNAME=<optional>
-SOCKS5_PASSWORD=<optional>
 AUTH_CACHE_DIR=/home/node/.minecraft
-ALLOW_RAILWAY_DIRECT_EGRESS=false
 ```
 
 Railway supplies `PORT`; neither service needs a manual `PORT` variable. Both services bind it on `0.0.0.0`.
 
-To make the "Railway-IP" button available in RCC, change only `ALLOW_RAILWAY_DIRECT_EGRESS` to `true` in the **afk-worker** Railway service and redeploy. Keep it `false` to enforce SOCKS5-only operation.
+RCC connects directly through Railway's server network. The dashboard device is never used as a Minecraft connection path.
 
 ## Local checks
 
