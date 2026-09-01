@@ -100,7 +100,13 @@ export function startServer(config: ConfigStore, events: AppEvents, bot: MultiBo
   viewerSockets.on("connection", async (socket) => {
     const target = bot.viewerBot();
     if (!target?.entity?.position) { socket.emit("viewerUnavailable", "Kein Bot ist online"); return; }
-    const viewerVersion = String(target.version).startsWith("26.1") ? "26.1.2" : String(target.version);
+    const minecraftVersion = typeof target.version === "string" ? target.version.trim() : "";
+    if (!minecraftVersion) { socket.emit("viewerUnavailable", "Minecraft-Version ist noch nicht verfügbar"); return; }
+    const viewerVersion = minecraftVersion.startsWith("26.1")
+      ? "26.1.2"
+      : minecraftVersion.startsWith("1.21.")
+        ? "1.21.4"
+        : minecraftVersion;
     socket.emit("version", viewerVersion);
     const worldView = new WorldView(target.world, 6, target.entity.position, socket);
     const activeControls = new Set<"forward" | "back" | "left" | "right" | "jump" | "sneak" | "sprint">();

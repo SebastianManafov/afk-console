@@ -86,6 +86,7 @@ socket.on('viewerUnavailable', (message) => {
   setTimeout(() => { socket.disconnect(); socket.connect() }, 2000)
 })
 socket.on('version', (version) => {
+  if (!version) { status.textContent = 'POV wartet auf die Minecraft-Version'; return }
   if (!viewer.setVersion(version)) { status.textContent = `Viewer unterstützt ${version} nicht`; return }
   viewer.listen(socket)
 })
