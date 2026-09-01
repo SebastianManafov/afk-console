@@ -9,9 +9,10 @@ renderer.setSize(window.innerWidth, window.innerHeight)
 renderer.outputEncoding = THREE.sRGBEncoding
 document.body.prepend(renderer.domElement)
 const viewer = new Viewer(renderer)
-// prismarine-viewer 1.33 only marks Y 0..255 as dirty when a chunk arrives.
-// Modern Java worlds extend down to -64 and up to 319, so a bot below Y 0
-// otherwise receives valid chunks that never get meshed or displayed.
+// PrismarineJS's 1.21.4 viewer only marks the legacy Y 0..255 range dirty
+// when a chunk arrives. Modern Java worlds extend from -64 through 319, so a
+// bot outside the legacy range otherwise receives valid chunks that never get
+// meshed or displayed. Keep the 26.1 viewer path and its version mapping intact.
 const addLegacyHeightColumn = viewer.world.addColumn.bind(viewer.world)
 viewer.world.addColumn = (x, z, chunk) => {
   addLegacyHeightColumn(x, z, chunk)

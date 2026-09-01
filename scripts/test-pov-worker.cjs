@@ -8,13 +8,16 @@ const { Vec3 } = require('vec3')
 
 const builtWorker = path.resolve(__dirname, '../public/pov-viewer/worker.js')
 const runnableWorker = path.join(os.tmpdir(), `rcc-pov-worker-${process.pid}.cjs`)
-const blockStates = path.resolve(__dirname, '../public/pov-viewer/blocksStates/26.1.2.json')
+const blockStates = path.resolve(__dirname, '../public/pov-viewer/blocksStates/1.21.4.json')
 fs.copyFileSync(builtWorker, runnableWorker)
 
 const chunk = new Chunk()
 const stoneState = mcData.blocksByName.stone.defaultState
 for (let x = 0; x < 16; x++) {
-  for (let z = 0; z < 16; z++) chunk.setBlockStateId(new Vec3(x, -32, z), stoneState)
+  for (let z = 0; z < 16; z++) chunk.setBlockStateId(new Vec3(x, -64, z), stoneState)
+}
+for (let x = 0; x < 16; x++) {
+  for (let z = 0; z < 16; z++) chunk.setBlockStateId(new Vec3(x, 288, z), stoneState)
 }
 
 const worker = new Worker(runnableWorker)
@@ -34,14 +37,20 @@ worker.on('error', finish)
 worker.on('message', message => {
   if (message.type !== 'geometry') return
   if (message.geometry.positions.length === 0) {
-    finish(new Error('POV worker returned empty geometry for blocks below Y=0'))
+    finish(new Error('POV worker returned empty geometry outside Y 0..255'))
     return
   }
-  console.log(`[pov] Geometry test passed (${message.geometry.positions.length} positions below Y=0)`)
-  finish()
+  if (message.key === '0,-64,0') {
+    worker.postMessage({ type: 'dirty', x: 0, y: 288, z: 0, value: true })
+    return
+  }
+  if (message.key === '0,288,0') {
+    console.log(`[pov] Geometry test passed for Y=-64 and Y=288 (${message.geometry.positions.length} positions)`)
+    finish()
+  }
 })
 
-worker.postMessage({ type: 'version', version: '26.1.2' })
+worker.postMessage({ type: 'version', version: '1.21.4' })
 worker.postMessage({ type: 'blockStates', json: JSON.parse(fs.readFileSync(blockStates, 'utf8')) })
 worker.postMessage({ type: 'chunk', x: 0, z: 0, chunk: chunk.toJson() })
-worker.postMessage({ type: 'dirty', x: 0, y: -32, z: 0, value: true })
+worker.postMessage({ type: 'dirty', x: 0, y: -64, z: 0, value: true })
