@@ -102,11 +102,11 @@ export function startServer(config: ConfigStore, events: AppEvents, bot: MultiBo
     if (!target?.entity?.position) { socket.emit("viewerUnavailable", "Kein Bot ist online"); return; }
     const minecraftVersion = typeof target.version === "string" ? target.version.trim() : "";
     if (!minecraftVersion) { socket.emit("viewerUnavailable", "Minecraft-Version ist noch nicht verfügbar"); return; }
-    const viewerVersion = minecraftVersion.startsWith("26.1")
-      ? "26.1.2"
-      : minecraftVersion.startsWith("1.21.")
-        ? "1.21.4"
-        : minecraftVersion;
+    if (!minecraftVersion.startsWith("1.21.")) {
+      socket.emit("viewerUnavailable", `POV unterstützt ${minecraftVersion} derzeit nicht`);
+      return;
+    }
+    const viewerVersion = "1.21.4";
     socket.emit("version", viewerVersion);
     socket.emit("selfEntity", {
       id: target.entity.id,
