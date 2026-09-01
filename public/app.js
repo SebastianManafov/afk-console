@@ -177,9 +177,7 @@ function renderState() {
   $('sellNow').disabled = !hasOnlineMacroTarget || !$('sellEnabled').checked; $('spawnerNow').disabled = !hasOnlineMacroTarget || !$('spawnerEnabled').checked
   $('sneakToggle').checked = operationalState.sneak; $('movementSneak').textContent = String(operationalState.sneak)
   $('health').textContent = operationalState.health ?? '—'; $('food').textContent = operationalState.food ?? '—'
-  $('povHealth').textContent = operationalState.health ?? '—'; $('povFood').textContent = operationalState.food ?? '—'; $('povXp').textContent = operationalState.experienceLevel ?? '—'
   $('coordinates').textContent = operationalState.position ? `x${operationalState.position.x}, y${operationalState.position.y}, z${operationalState.position.z}` : '—'
-  $('povCoordinates').textContent = operationalState.position ? `X ${operationalState.position.x} · Y ${operationalState.position.y} · Z ${operationalState.position.z}` : 'Keine Positionsdaten'
   $('arrowGuard').classList.toggle('blocked', spawnerRuntime.phase === 'ARROW_FILTER_ABORT')
   const locked = Boolean(operationalState.controlLock?.locked)
   $('controlLockBanner').classList.toggle('hidden', !locked)
@@ -371,7 +369,6 @@ function renderInventory() {
   const bySlot = new Map((snapshot.inventory || []).map((item) => [item.slot, item]))
   fillSlots($('inventoryGrid'), Array.from({ length: 27 }, (_, i) => i + 9), bySlot)
   fillSlots($('hotbar'), Array.from({ length: 9 }, (_, i) => i + 36), bySlot)
-  fillSlots($('povHotbar'), Array.from({ length: 9 }, (_, i) => i + 36), bySlot)
 }
 
 function fillSlots(container, slots, bySlot) {
