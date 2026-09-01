@@ -471,3 +471,4 @@ th, td { height: 50px; border-bottom-color: #202638; }
   .quick-stats { grid-template-columns: 1fr 1fr; gap: 8px; }.quick-stats article { min-height: 62px; padding: 10px; }.stat-icon { width: 32px; height: 32px; }
   .login-box { padding: 25px; }.login-security { flex-wrap: wrap; justify-content: flex-start; }
 }
+#povHotbar{display:none}

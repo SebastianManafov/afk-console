@@ -9,9 +9,20 @@
 <body>
   <div id="hud"><button id="follow" class="active">Bot POV</button><button id="freecam">Freecam</button><span id="status">Verbinde …</span><span id="vitals">❤ – · 🍗 – · XP –</span><span id="hint">Klicken · WASD · Maus · Space/Shift · F Freecam · Tab Spieler · M Minimap</span></div>
   <div id="crosshair">+</div>
+  <div id="chatOverlay" aria-live="polite"></div>
+  <div id="minecraftHud">
+    <div id="offhandItem" class="held-card" hidden></div>
+    <div id="survivalHud">
+      <div class="meter-row"><span id="armorMeter"></span><span id="heartMeter"></span><span id="foodMeter"></span></div>
+      <div class="xp-row"><span id="xpLevel">0</span></div>
+      <div id="mcHotbar"></div>
+    </div>
+    <div id="firstPersonHand"><span id="heldItemName"></span></div>
+  </div>
+  <div id="inventoryPanel" class="minecraft-window" hidden><h2>Inventory</h2><div id="inventorySlots"></div><p>E oder Esc zum Schließen</p></div>
   <div id="playerList" class="panel" hidden><strong>Spieler online</strong><div id="players"></div></div>
   <canvas id="minimap" width="180" height="180" hidden></canvas>
-  <div id="controls">Bot POV: Linksklick abbauen/angreifen · Rechtsklick benutzen · Mausrad/1–9 Hotbar · Esc freigeben</div>
+  <div id="controls">Bot POV: WASD/Maus · E Inventar · Linksklick abbauen/angreifen · Rechtsklick benutzen · Mausrad/1–9 Hotbar · Esc freigeben</div>
   <script src="index.js"></script>
 </body>
 </html>

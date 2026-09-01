@@ -48,6 +48,16 @@ const playerList = document.getElementById('playerList')
 const players = document.getElementById('players')
 const minimap = document.getElementById('minimap')
 const minimapContext = minimap.getContext('2d')
+const heartMeter = document.getElementById('heartMeter')
+const foodMeter = document.getElementById('foodMeter')
+const armorMeter = document.getElementById('armorMeter')
+const xpLevel = document.getElementById('xpLevel')
+const mcHotbar = document.getElementById('mcHotbar')
+const heldItemName = document.getElementById('heldItemName')
+const offhandItem = document.getElementById('offhandItem')
+const chatOverlay = document.getElementById('chatOverlay')
+const inventoryPanel = document.getElementById('inventoryPanel')
+const inventorySlots = document.getElementById('inventorySlots')
 function lockPointer () {
   try {
     const result = renderer.domElement.requestPointerLock?.()
@@ -73,6 +83,8 @@ const movementControls = { KeyW: 'forward', KeyS: 'back', KeyA: 'left', KeyD: 'r
 document.addEventListener('keydown', (event) => {
   keys.add(event.code)
   if (event.code === 'KeyF' && !event.repeat) setMode(!freecam)
+  if (event.code === 'KeyE' && !event.repeat) { inventoryPanel.hidden = !inventoryPanel.hidden; if (!inventoryPanel.hidden && document.pointerLockElement) document.exitPointerLock() }
+  if (event.code === 'Escape' && !inventoryPanel.hidden) inventoryPanel.hidden = true
   if (event.code === 'Tab') { event.preventDefault(); playerList.hidden = false }
   if (event.code === 'KeyM' && !event.repeat) minimap.hidden = !minimap.hidden
   if (!freecam && document.pointerLockElement === renderer.domElement && movementControls[event.code] && !event.repeat) socket.emit('botControl', { control: movementControls[event.code], enabled: true })
@@ -131,6 +143,7 @@ socket.on('selfEntity', (entity) => {
 })
 socket.on('entity', (entity) => { if (entity.delete) entities.delete(entity.id); else entities.set(entity.id, { ...(entities.get(entity.id) || {}), ...entity }) })
 socket.on('hud', (nextHud) => {
+  document.body.classList.add('live')
   hudData = nextHud
   vitals.textContent = `❤ ${Math.ceil(nextHud.health ?? 0)} · 🍗 ${Math.ceil(nextHud.food ?? 0)} · XP ${nextHud.experience ?? 0}`
   players.replaceChildren(...(nextHud.players || []).map((player) => {
@@ -139,8 +152,43 @@ socket.on('hud', (nextHud) => {
     const ping = document.createElement('span'); ping.textContent = `${player.ping ?? '?'} ms`
     row.append(name, ping); return row
   }))
+  renderMinecraftHud(nextHud)
+})
+socket.on('chatLine', (message) => {
+  const line = document.createElement('div'); line.className = 'chat-line'; line.textContent = message
+  chatOverlay.append(line); while (chatOverlay.children.length > 8) chatOverlay.firstChild.remove()
+  setTimeout(() => line.remove(), 12500)
 })
 socket.on('controlError', (message) => { status.textContent = `Steuerung: ${message}` })
+
+function itemLabel(item) {
+  if (!item) return ''
+  return String(item.displayName || item.name || '').replace(/_/g, ' ')
+}
+function makeSlot(item, selected = false) {
+  const slot = document.createElement('div'); slot.className = `mc-slot${selected ? ' selected' : ''}`
+  const glyph = document.createElement('span'); glyph.className = 'glyph'; glyph.textContent = item ? itemLabel(item).slice(0, 2).toUpperCase() : ''
+  const name = document.createElement('span'); name.textContent = item ? itemLabel(item) : ''
+  slot.title = itemLabel(item); slot.append(glyph, name)
+  if (item?.count > 1) { const count = document.createElement('span'); count.className = 'count'; count.textContent = item.count; slot.append(count) }
+  return slot
+}
+function renderMinecraftHud(data) {
+  const hearts = Math.max(0, Math.min(10, Math.ceil((data.health || 0) / 2)))
+  const foods = Math.max(0, Math.min(10, Math.ceil((data.food || 0) / 2)))
+  heartMeter.textContent = '♥'.repeat(hearts) + '♡'.repeat(10 - hearts)
+  foodMeter.textContent = '●'.repeat(foods) + '○'.repeat(10 - foods)
+  armorMeter.textContent = '♢'.repeat(Math.max(0, data.armor || 0))
+  xpLevel.textContent = data.experience || 0
+  mcHotbar.replaceChildren(...(data.hotbar || Array(9).fill(null)).map((item, index) => makeSlot(item, index === data.selectedSlot)))
+  heldItemName.textContent = itemLabel(data.heldItem) || 'Hand'
+  offhandItem.hidden = !data.offhand; offhandItem.textContent = itemLabel(data.offhand)
+  inventorySlots.replaceChildren(...(data.inventory || []).map((item) => {
+    const slot = document.createElement('div'); slot.className = `inventory-slot${item ? '' : ' empty'}`
+    slot.textContent = item ? `${itemLabel(item)}${item.count > 1 ? ` ×${item.count}` : ''}` : ''
+    return slot
+  }))
+}
 
 function updateFreecam(delta) {
   if (!freecam) return

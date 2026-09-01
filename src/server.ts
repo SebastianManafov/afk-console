@@ -126,10 +126,17 @@ export function startServer(config: ConfigStore, events: AppEvents, bot: MultiBo
       activeControls.clear();
     };
     const sendHud = (): void => {
+      const inventoryItem = (item: any) => item ? { name: item.name, displayName: item.displayName, count: item.count } : null;
       socket.emit("hud", {
         health: target.health,
         food: target.food,
         experience: target.experience?.level ?? 0,
+        selectedSlot: target.quickBarSlot,
+        heldItem: inventoryItem(target.heldItem),
+        offhand: inventoryItem(target.inventory.slots[45]),
+        armor: target.inventory.slots.slice(5, 9).filter(Boolean).length,
+        hotbar: target.inventory.slots.slice(36, 45).map(inventoryItem),
+        inventory: target.inventory.slots.slice(9, 45).map(inventoryItem),
         username: target.username,
         players: Object.values(target.players).filter((player) => player?.username).map((player) => ({ username: player.username, ping: player.ping }))
       });
@@ -143,10 +150,13 @@ export function startServer(config: ConfigStore, events: AppEvents, bot: MultiBo
     await worldView.init(target.entity.position);
     sendPosition();
     sendHud();
+    const hudInterval = setInterval(sendHud, 500);
+    const sendChat = (message: string): void => { socket.emit("chatLine", String(message)); };
     target.on("move", sendPosition);
     target.on("health", sendHud);
     target.on("playerJoined", sendHud);
     target.on("playerLeft", sendHud);
+    target.on("messagestr", sendChat);
     socket.on("botControl", (payload: { control?: unknown; enabled?: unknown }) => {
       const control = String(payload?.control ?? "") as "forward" | "back" | "left" | "right" | "jump" | "sneak" | "sprint";
       if (!["forward", "back", "left", "right", "jump", "sneak", "sprint"].includes(control)) return;
@@ -187,6 +197,8 @@ export function startServer(config: ConfigStore, events: AppEvents, bot: MultiBo
       target.removeListener("health", sendHud);
       target.removeListener("playerJoined", sendHud);
       target.removeListener("playerLeft", sendHud);
+      target.removeListener("messagestr", sendChat);
+      clearInterval(hudInterval);
       worldView.removeListenersFromBot(target);
     });
   });
