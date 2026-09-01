@@ -194,11 +194,26 @@ function renderState() {
 }
 
 let povSortAscending = true
+let povBotGridSignature = ''
+let maximizedPovAccountId = null
 function renderPovBots() {
   const grid = $('povBotGrid'); if (!grid || !config) return
   const query = ($('povSearch')?.value || '').trim().toLowerCase()
   const bots = botSnapshots().map((bot) => ({ bot, account: config.accounts.find((account) => account.id === bot.accountId) })).filter(({ account, bot }) => !query || (account?.name || bot.username || '').toLowerCase().includes(query)).sort((left, right) => { const a = left.account?.name || left.bot.username || ''; const b = right.account?.name || right.bot.username || ''; return povSortAscending ? a.localeCompare(b) : b.localeCompare(a) })
-  grid.replaceChildren(...bots.map(({ bot, account }) => { const card = document.createElement('article'); const accountId = bot.accountId || 'primary'; const name = account?.name || bot.username || 'Primary account'; const status = bot.connection || 'offline'; card.className = 'pov-bot-card'; card.innerHTML = `<div class="pov-card-header"><span class="drag-handle">⠿</span><span class="player-head">${escapeHtml(name.slice(0, 1).toUpperCase())}</span><span class="pov-card-name">${escapeHtml(name)}</span><span class="pov-card-status ${status}">${escapeHtml(labelStatus(status))}</span><button class="icon-button pov-fullscreen" title="Fullscreen">↗</button></div><div class="pov-card-screen"><iframe title="${escapeHtml(name)} live POV" allow="fullscreen" src="/pov-viewer/?viewer=3&accountId=${encodeURIComponent(accountId)}"></iframe>${status !== 'online' ? `<div class="pov-card-overlay">${status === 'connecting' ? 'Connecting…' : 'Connect'}</div>` : ''}</div>`; card.querySelector('.pov-fullscreen').onclick = () => card.requestFullscreen?.(); return card }))
+  const signature = JSON.stringify(bots.map(({ bot, account }) => ({ id: bot.accountId || 'primary', name: account?.name || bot.username || 'Primary account' })))
+  if (signature === povBotGridSignature) {
+    bots.forEach(({ bot }) => updatePovCard(grid.querySelector(`[data-account-id="${CSS.escape(bot.accountId || 'primary')}"]`), bot))
+    return
+  }
+  povBotGridSignature = signature
+  if (maximizedPovAccountId && !bots.some(({ bot }) => (bot.accountId || 'primary') === maximizedPovAccountId)) { maximizedPovAccountId = null; document.body.classList.remove('pov-maximized') }
+  grid.replaceChildren(...bots.map(({ bot, account }) => { const card = document.createElement('article'); const accountId = bot.accountId || 'primary'; const name = account?.name || bot.username || 'Primary account'; card.className = `pov-bot-card${maximizedPovAccountId === accountId ? ' is-maximized' : ''}`; card.dataset.accountId = accountId; card.innerHTML = `<div class="pov-card-header"><span class="drag-handle">⠿</span><span class="player-head">${escapeHtml(name.slice(0, 1).toUpperCase())}</span><span class="pov-card-name">${escapeHtml(name)}</span><span class="pov-card-status"></span><button class="icon-button pov-fullscreen" title="Maximize POV">↗</button></div><div class="pov-card-screen"><iframe title="${escapeHtml(name)} live POV" allow="fullscreen" src="/pov-viewer/?viewer=3&accountId=${encodeURIComponent(accountId)}"></iframe></div>`; updatePovCard(card, bot); card.querySelector('.pov-fullscreen').onclick = () => { const maximized = card.classList.toggle('is-maximized'); maximizedPovAccountId = maximized ? accountId : null; document.body.classList.toggle('pov-maximized', maximized); card.querySelector('.pov-fullscreen').textContent = maximized ? '↙' : '↗'; card.querySelector('.pov-fullscreen').title = maximized ? 'Restore POV' : 'Maximize POV' }; return card }))
+}
+function updatePovCard(card, bot) {
+  if (!card) return
+  const status = bot.connection || 'offline'; const statusElement = card.querySelector('.pov-card-status'); statusElement.className = `pov-card-status ${status}`; statusElement.textContent = labelStatus(status)
+  const screen = card.querySelector('.pov-card-screen'); let overlay = screen.querySelector('.pov-card-overlay')
+  if (status === 'online') { overlay?.remove() } else { if (!overlay) { overlay = document.createElement('div'); overlay.className = 'pov-card-overlay'; screen.append(overlay) } overlay.textContent = status === 'connecting' ? 'Connecting…' : 'Connect' }
 }
 $('povSearch')?.addEventListener('input', renderPovBots)
 $('povSort')?.addEventListener('click', () => { povSortAscending = !povSortAscending; renderPovBots() })
