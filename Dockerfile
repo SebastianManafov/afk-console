@@ -1,18 +1,23 @@
 FROM node:22-alpine AS build
 WORKDIR /app
-COPY package.json ./
-RUN npm install --no-audit --no-fund
-COPY tsconfig.json ./
+RUN corepack enable
+COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
+RUN pnpm install --frozen-lockfile
+COPY tsconfig.json webpack.pov.cjs ./
 COPY src ./src
-RUN npm run build
+COPY viewer-client ./viewer-client
+COPY scripts ./scripts
+COPY public ./public
+RUN pnpm build
 
 FROM node:22-alpine AS runtime
 ENV NODE_ENV=production
 WORKDIR /app
-COPY package.json ./
-RUN npm install --omit=dev --no-audit --no-fund && npm cache clean --force
+RUN corepack enable
+COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
+RUN pnpm install --prod --frozen-lockfile
 COPY --from=build /app/dist ./dist
-COPY public ./public
-RUN mkdir -p /data/auth
-EXPOSE 8080
+COPY --from=build /app/public ./public
+RUN mkdir -p /data
+EXPOSE 3000
 CMD ["node", "dist/src/index.js"]

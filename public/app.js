@@ -42,7 +42,7 @@ for (const label of [...spawnerGrid.children]) {
 spawnerGrid.after(spawnerAdvanced)
 document.querySelector('[data-view="macros"] .toolbar').insertAdjacentHTML('afterend', '<div id="macroTargets" class="panel macro-targets"><b>Apply to accounts</b><div id="macroTargetChecks" class="check-list horizontal"></div><button id="previewMacros" class="btn dark">Preview without clicks</button></div><pre id="macroPreview" class="panel preview-output hidden"></pre>')
 document.querySelector('.danger-zone').insertAdjacentHTML('beforebegin', '<div class="panel"><div class="section-heading"><div><h2>AFK automation</h2><p>Join- und Weltwechselbefehle, natürliche Aktivität und geplante Chat-Nachrichten.</p></div><span class="section-badge">Per server</span></div><div class="form-grid"><label>Join command<input id="settingJoinCommand" maxlength="256" placeholder="/server survival"></label><label>World-change command<input id="settingWorldCommand" maxlength="256" placeholder="/server survival"></label><label>Chat timer message<input id="settingSpamMessage" maxlength="256" placeholder="/server survival"></label><label>Chat interval (sec)<input id="settingSpamInterval" type="number" min="10" max="86400"></label><label>Anti-AFK min (sec)<input id="settingAntiAfkMin" type="number" min="10" max="3600"></label><label>Anti-AFK max (sec)<input id="settingAntiAfkMax" type="number" min="10" max="3600"></label></div><div class="check-list horizontal"><label><input id="settingAntiAfk" type="checkbox"> Random anti-AFK activity</label><label><input id="settingSpamEnabled" type="checkbox"> Enable chat timer</label></div></div>')
-document.querySelector('.danger-zone').insertAdjacentHTML('beforebegin', '<div class="panel"><div class="section-heading"><div><h2>System check</h2><p>Prüft die lokale oder Railway-Konfiguration, ohne Minecraft zu verbinden.</p></div><button id="runSystemCheck" class="btn dark">Check now</button></div><div id="systemCheckOutput" class="connection-health"><span class="health-chip">Noch nicht geprüft</span></div></div>')
+document.querySelector('.danger-zone').insertAdjacentHTML('beforebegin', '<div class="panel"><div class="section-heading"><div><h2>System check</h2><p>Prüft die lokale Laufzeitkonfiguration, ohne Minecraft zu verbinden.</p></div><button id="runSystemCheck" class="btn dark">Check now</button></div><div id="systemCheckOutput" class="connection-health"><span class="health-chip">Noch nicht geprüft</span></div></div>')
 
 async function api(path, options = {}) {
   let response
@@ -70,7 +70,10 @@ function showApp(data) {
   state = data.state; config = data.config
   logEntries = (data.logs || []).map((entry) => ({ ...entry, system: true, message: `[${entry.source}] ${entry.message}` }))
   renderConsole()
-  renderState(); renderConfig(); connectSocket()
+  renderState(); renderConfig();
+  const requestedPage = location.hash.slice(1) || 'servers'
+  showPage(document.querySelector(`[data-view="${requestedPage}"]`) ? requestedPage : 'servers')
+  connectSocket()
 }
 
 function connectSocket() {
@@ -130,15 +133,11 @@ function renderState() {
   const operationalState = activeControlSnapshot()
   const online = operationalState.connection === 'online'
   const badge = $('connectionBadge'); badge.className = `status ${operationalState.connection}`; badge.textContent = labelStatus(operationalState.connection)
-  for (const id of ['connectStatus', 'serverCardStatus']) { const e = $(id); if (e) { e.className = `status ${state.connection}`; e.textContent = labelStatus(state.connection) } }
+  const connectStatus = $('connectStatus'); if (connectStatus) { connectStatus.className = `status ${state.connection}`; connectStatus.textContent = labelStatus(state.connection) }
   const activeAccount = config.accounts.find((account) => account.id === activeControlAccountId)
   const name = operationalState.username || activeAccount?.name || activeAccount?.username || 'Microsoft Account'
-  for (const id of ['movementName', 'proxyAccount']) $(id).textContent = name
+  $('movementName').textContent = name
   $('profileCount').textContent = `${bots.filter((bot) => bot.connection === 'online').length}/${config?.accounts?.length || 1}`
-  $('metricPing').textContent = operationalState.ping == null ? '—' : `${operationalState.ping} ms`
-  $('metricRam').textContent = `${state.memoryMb} MB`
-  $('metricUptime').textContent = formatDuration(state.uptimeSeconds)
-  $('railwayStatus').textContent = state.deployment.provider === 'railway' ? `Railway · ${state.deployment.environment}` : 'Local runtime'
   $('consoleConnection').textContent = labelStatus(operationalState.connection); $('consoleReconnects').textContent = operationalState.reconnectAttempt; $('consoleMemory').textContent = `${state.memoryMb} MB`
   const reconnectingBots = bots.filter((bot) => bot.connection === 'reconnecting' && bot.reconnectAt)
   const reconnectingBot = reconnectingBots.sort((left, right) => Date.parse(left.reconnectAt) - Date.parse(right.reconnectAt))[0] || null
@@ -287,9 +286,19 @@ function renderProfiles() {
   const signature = JSON.stringify({ servers: config.servers, proxies: config.proxies, accounts: config.accounts, bots: [...botMap].map(([id, bot]) => ({ id, connection: bot.connection, authenticated: bot.authenticated, authenticating: bot.authenticating, hasAuthCode: Boolean(bot.authCode), authExpiresAt: bot.authExpiresAt, paused: bot.paused, lastError: bot.lastError, worldTransition: bot.worldTransition?.state, controlLocked: bot.controlLock?.locked })) })
   if (signature === lastProfilesSignature) return
   lastProfilesSignature = signature
-  if ($('serverCards')) {
-    $('serverCards').innerHTML = ''
-    config.servers.forEach((server) => { const users = config.accounts.filter((account) => account.serverId === server.id); const online = users.some((account) => botMap.get(account.id)?.connection === 'online'); const card = document.createElement('div'); card.className = 'server-card'; card.innerHTML = `<span class="server-gem large">${escapeHtml(server.name.slice(0, 1).toUpperCase())}</span><div><b>${escapeHtml(server.name)}</b><small>${escapeHtml(server.host)}:${server.port} · ${users.length} Account(s) · Auto-GUI ${server.autoGuiJoinEnabled ? `Slot ${server.autoGuiJoinSlot}` : 'aus'}</small></div><span class="status ${online ? 'online' : 'offline'}">${online ? 'Online' : 'Offline'}</span><div class="card-actions"><button class="btn dark test-server">Test</button><button class="btn dark edit-profile">Edit</button><button class="btn red delete-profile">Delete</button></div>`; card.querySelector('.test-server').onclick = async () => { try { const result = await api('/api/server/test', { method: 'POST', body: JSON.stringify({ serverId: server.id }) }); toast(`Server erreichbar · ${result.latencyMs} ms · kein Minecraft-Login`) } catch (error) { toast(error.message, true) } }; card.querySelector('.edit-profile').onclick = () => openProfileDialog('server', server); card.querySelector('.delete-profile').onclick = () => deleteServerProfile(server); $('serverCards').append(card) })
+  if ($('serversTable')) {
+    $('serversTable').innerHTML = ''
+    config.servers.forEach((server) => {
+      const users = config.accounts.filter((account) => account.serverId === server.id)
+      const onlineCount = users.filter((account) => botMap.get(account.id)?.connection === 'online').length
+      const row = document.createElement('tr')
+      row.innerHTML = `<td><span class="server-gem">${escapeHtml(server.name.slice(0, 1).toUpperCase())}</span></td><td><b>${escapeHtml(server.name)}</b></td><td><span class="status ${onlineCount ? 'online' : 'offline'}">${onlineCount}/${users.length}</span></td><td>${users.length}</td><td><code>${escapeHtml(server.host)}:${server.port}</code></td><td>${escapeHtml(server.version)}</td><td><div class="row-actions"><button class="btn dark open-server">Open</button><button class="btn dark test-server">Test</button><button class="btn dark edit-profile">Edit</button><button class="btn red delete-profile">Delete</button></div></td>`
+      row.querySelector('.open-server').onclick = () => showPage('connect')
+      row.querySelector('.test-server').onclick = async () => { try { const result = await api('/api/server/test', { method: 'POST', body: JSON.stringify({ serverId: server.id }) }); toast(`Server erreichbar · ${result.latencyMs} ms · kein Minecraft-Login`) } catch (error) { toast(error.message, true) } }
+      row.querySelector('.edit-profile').onclick = () => openProfileDialog('server', server)
+      row.querySelector('.delete-profile').onclick = () => deleteServerProfile(server)
+      $('serversTable').append(row)
+    })
   }
   if ($('accountsTable')) {
     $('accountsTable').innerHTML = ''
@@ -339,7 +348,7 @@ function renderProfiles() {
     })
   }
   if ($('proxyCards')) {
-    $('proxyCards').innerHTML = config.proxies.length ? '' : '<div class="panel placeholder"><h2>No proxies configured</h2><p>Accounts connect directly through the Railway or local outbound IP.</p></div>'
+    $('proxyCards').innerHTML = config.proxies.length ? '' : '<div class="panel placeholder"><h2>No proxies configured</h2><p>Accounts connect directly through the current host runtime.</p></div>'
     config.proxies.forEach((proxy) => { const card = document.createElement('div'); card.className = 'server-card'; card.innerHTML = `<span class="server-gem large">P</span><div><b>${escapeHtml(proxy.name)}</b><small>${escapeHtml(proxy.host)}:${proxy.port}</small></div><div class="card-actions"><button class="btn dark test-proxy">Test</button><button class="btn dark edit-profile">Edit</button><button class="btn red delete-profile">Delete</button></div>`; card.querySelector('.test-proxy').onclick = async () => { try { const result = await api('/api/proxy/test', { method: 'POST', body: JSON.stringify({ proxyId: proxy.id, serverId: config.servers[0].id }) }); toast(`Proxy OK · ${result.latencyMs} ms`) } catch (error) { toast(error.message, true) } }; card.querySelector('.edit-profile').onclick = () => openProfileDialog('proxy', proxy); card.querySelector('.delete-profile').onclick = () => deleteProxyProfile(proxy); $('proxyCards').append(card) })
   }
   reapplyFilters()
@@ -439,13 +448,7 @@ document.querySelector('.nav-label button').onclick = () => openProfileDialog('s
 document.querySelector('.profile').onclick = () => showPage('connect')
 document.querySelectorAll('button').forEach((button) => {
   const label = button.textContent.trim()
-  if (label === 'Import') button.onclick = () => $('importSettings').click()
-  if (label === 'Add Macro') button.onclick = () => toast('Sell und Spawner sind bereits als getrennte Makromodule verfügbar.')
-  if (label === 'Buy Proxy') button.onclick = () => showPage('global-proxies')
-  if (label === 'Randomly divide') button.onclick = async () => {
-    if (!config.proxies.length) return toast('Bitte zuerst mindestens einen Proxy hinzufügen.', true)
-    try { await saveProfilePatch({ accounts: config.accounts.map((account, index) => ({ ...account, proxyId: config.proxies[index % config.proxies.length].id })) }); toast('Proxies wurden verteilt') } catch (error) { toast(error.message, true) }
-  }
+  if (label === 'Import' || label === 'Import backup') button.onclick = () => $('importSettings').click()
 })
 document.querySelectorAll('.filter').forEach((input) => input.addEventListener('input', () => applyFilter(input)))
 $('openNav').onclick = () => $('app').classList.add('nav-open'); $('closeNav').onclick = () => $('app').classList.remove('nav-open')
@@ -562,7 +565,7 @@ $('saveConnection').onclick = async () => {
 }
 $('saveConnection').textContent = 'Save connection profile'
 
-const initialPage = location.hash.slice(1) || 'connect'; showPage(document.querySelector(`[data-view="${initialPage}"]`) ? initialPage : 'connect')
+const initialPage = location.hash.slice(1) || 'servers'; showPage(document.querySelector(`[data-view="${initialPage}"]`) ? initialPage : 'servers')
 setInterval(renderState, 1000)
 if ('serviceWorker' in navigator) navigator.serviceWorker.register('/sw.js').catch(() => {})
 boot()

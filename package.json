@@ -1,7 +1,10 @@
 {
   "name": "rcc",
   "version": "0.1.0",
+  "description": "Self-hosted Minecraft Java console client with encrypted sessions, automation and a live web POV.",
   "private": true,
+  "license": "MIT",
+  "packageManager": "pnpm@11.24.0",
   "type": "module",
   "engines": {
     "node": ">=22"
