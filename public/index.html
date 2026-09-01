@@ -34,7 +34,7 @@
     </aside>
 
     <div class="workspace">
-      <header><button id="openNav" class="mobile-menu">☰</button><h1 id="pageTitle">Servers</h1><button id="themeToggle" class="icon-button" title="Design wechseln">◐</button><div id="connectionBadge" class="status offline">Offline</div></header>
+      <header><button id="openNav" class="mobile-menu">☰</button><h1 id="pageTitle">Servers</h1><span id="appVersion" class="app-version">v1</span><button id="themeToggle" class="icon-button" title="Design wechseln">◐</button><div id="connectionBadge" class="status offline">Offline</div></header>
       <main>
         <section class="page" data-view="connect">
           <div id="authPanel" class="panel auth-panel hidden"><div><h2>Microsoft-Anmeldung erforderlich</h2><p><b id="authAccountName">Account</b>: Öffne die Microsoft-Seite und gib den Gerätecode ein. Dein Microsoft-Passwort wird niemals an RCC übertragen.</p><small>Code gültig für <b id="authExpires">—</b></small></div><code id="authCode">—</code><div><a id="authLink" class="btn green" target="_blank" rel="noopener">Bei Microsoft anmelden</a><button id="copyAuthCode" class="btn dark">Code kopieren</button><button id="refreshAuthCode" class="btn dark">Neuen Code erstellen</button></div></div>
@@ -74,7 +74,7 @@
           <div class="inventory-layout"><div class="panel"><div class="subbar"><h2>Player Inventory</h2><label>Account<select id="inventoryAccountSelect" class="operational-account-select"></select></label></div><div id="inventoryGrid" class="inventory-grid"></div><h3>Hotbar</h3><div id="hotbar" class="inventory-grid hotbar"></div></div><aside class="panel bulk"><h2>Slot Action</h2><label>Beim Klick<select id="inventoryActionMode"><option value="inspect">Item anzeigen</option><option value="shift">Shift-Klick</option><option value="drop-one">Ein Item droppen</option><option value="drop-stack">Ganzen Stack droppen</option><option value="offhand">In Offhand legen</option></select></label><button id="useInventory" class="btn dark full">Right Click Active Hand</button><button id="dropInventory" class="btn red full" disabled>Drop Entire Inventory</button><p class="warning">Ganze Stacks benötigen eine Bestätigung. Massendrop bleibt deaktiviert.</p></aside></div>
         </section>
 
-        <section class="page hidden" data-view="pov"><div class="panel pov"><div class="pov-top"><label>Account<select id="povAccountSelect" class="operational-account-select"></select></label><span>❤ <b id="povHealth">—</b></span><span>🍗 <b id="povFood">—</b></span><span>XP <b id="povXp">—</b></span></div><div class="pov-screen"><iframe id="povViewer" data-src="/pov-viewer/?viewer=3" title="Texturierter Minecraft Live-POV" allow="fullscreen"></iframe><p id="povCoordinates">Keine Positionsdaten</p></div><div id="povHotbar" class="inventory-grid hotbar"></div></div></section>
+        <section class="page hidden" data-view="pov"><div class="pov-workspace"><div class="pov-heading"><div><h2>Bots</h2><p>Live POV streams for connected accounts.</p></div><div class="pov-tools"><input id="povSearch" class="filter" aria-label="Bots suchen" placeholder="Search bots"><button id="povSort" class="icon-button" title="Sort bots">↕</button><button class="icon-button" title="POV information">ⓘ</button></div></div><div id="povBotGrid" class="pov-bot-grid"></div></div></section>
 
 
         <section class="page hidden" data-view="macros">

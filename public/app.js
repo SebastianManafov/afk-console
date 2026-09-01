@@ -66,7 +66,7 @@ async function boot() {
 
 function showApp(data) {
   $('login').classList.add('hidden'); $('app').classList.remove('hidden')
-  if ($('povViewer') && !$('povViewer').getAttribute('src')) $('povViewer').src = $('povViewer').dataset.src
+  const versionScript = document.createElement('script'); versionScript.src = '/app-version.js'; versionScript.onload = () => { if (window.RCC_VERSION) $('appVersion').textContent = window.RCC_VERSION }; document.head.append(versionScript)
   state = data.state; config = data.config
   logEntries = (data.logs || []).map((entry) => ({ ...entry, system: true, message: `[${entry.source}] ${entry.message}` }))
   renderConsole()
@@ -192,7 +192,18 @@ function renderState() {
   $('chatInput').disabled = !online
   $('chatForm').querySelector('button').disabled = !online
   renderProfiles()
+  renderPovBots()
 }
+
+let povSortAscending = true
+function renderPovBots() {
+  const grid = $('povBotGrid'); if (!grid || !config) return
+  const query = ($('povSearch')?.value || '').trim().toLowerCase()
+  const bots = botSnapshots().map((bot) => ({ bot, account: config.accounts.find((account) => account.id === bot.accountId) })).filter(({ account, bot }) => !query || (account?.name || bot.username || '').toLowerCase().includes(query)).sort((left, right) => { const a = left.account?.name || left.bot.username || ''; const b = right.account?.name || right.bot.username || ''; return povSortAscending ? a.localeCompare(b) : b.localeCompare(a) })
+  grid.replaceChildren(...bots.map(({ bot, account }) => { const card = document.createElement('article'); const accountId = bot.accountId || 'primary'; const name = account?.name || bot.username || 'Primary account'; const status = bot.connection || 'offline'; card.className = 'pov-bot-card'; card.innerHTML = `<div class="pov-card-header"><span class="drag-handle">⠿</span><span class="player-head">${escapeHtml(name.slice(0, 1).toUpperCase())}</span><span class="pov-card-name">${escapeHtml(name)}</span><span class="pov-card-status ${status}">${escapeHtml(labelStatus(status))}</span><button class="icon-button pov-fullscreen" title="Fullscreen">↗</button></div><div class="pov-card-screen"><iframe title="${escapeHtml(name)} live POV" allow="fullscreen" src="/pov-viewer/?viewer=3&accountId=${encodeURIComponent(accountId)}"></iframe>${status !== 'online' ? `<div class="pov-card-overlay">${status === 'connecting' ? 'Connecting…' : 'Connect'}</div>` : ''}</div>`; card.querySelector('.pov-fullscreen').onclick = () => card.requestFullscreen?.(); return card }))
+}
+$('povSearch')?.addEventListener('input', renderPovBots)
+$('povSort')?.addEventListener('click', () => { povSortAscending = !povSortAscending; renderPovBots() })
 
 function renderDiagnostics() {
   const bots = state.bots?.length ? state.bots : [state]

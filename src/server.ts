@@ -98,7 +98,8 @@ export function startServer(config: ConfigStore, events: AppEvents, bot: MultiBo
   });
   viewerSockets.use((socket, next) => auth.isAuthenticated(socket.request) ? next() : next(new Error("Nicht angemeldet")));
   viewerSockets.on("connection", async (socket) => {
-    const target = bot.viewerBot();
+    const requestedAccountId = typeof socket.handshake.query.accountId === "string" ? socket.handshake.query.accountId : undefined;
+    const target = bot.viewerBot(requestedAccountId);
     if (!target?.entity?.position) { socket.emit("viewerUnavailable", "Kein Bot ist online"); return; }
     const minecraftVersion = typeof target.version === "string" ? target.version.trim() : "";
     if (!minecraftVersion) { socket.emit("viewerUnavailable", "Minecraft-Version ist noch nicht verfügbar"); return; }
