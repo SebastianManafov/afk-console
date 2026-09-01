@@ -13,17 +13,20 @@
     "dev": "tsx watch src/index.ts",
     "build": "tsc && webpack --config webpack.pov.cjs && node scripts/build-pov-worker.cjs",
     "start": "node dist/src/index.js",
-    "test": "npm run build && node --test dist/test/*.test.js"
+    "test": "npm run build && node scripts/test-pov-worker.cjs && node --test dist/test/*.test.js"
   },
   "dependencies": {
     "buffer": "^6.0.3",
+    "minecraft-data": "3.113.2",
     "mineflayer": "4.38.0",
     "prismarine-auth": "3.1.1",
+    "prismarine-chunk": "1.41.0",
     "prismarine-viewer": "1.33.0",
     "process": "0.11.10",
     "socket.io": "4.8.1",
     "socket.io-client": "4.8.1",
     "three": "0.128.0",
+    "vec3": "0.2.0",
     "ws": "8.18.3"
   },
   "devDependencies": {

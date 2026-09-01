@@ -11,12 +11,18 @@ importers:
       buffer:
         specifier: ^6.0.3
         version: 6.0.3
+      minecraft-data:
+        specifier: 3.113.2
+        version: 3.113.2
       mineflayer:
         specifier: 4.38.0
         version: 4.38.0
       prismarine-auth:
         specifier: 3.1.1
         version: 3.1.1
+      prismarine-chunk:
+        specifier: 1.41.0
+        version: 1.41.0
       prismarine-viewer:
         specifier: 1.33.0
         version: 1.33.0
@@ -32,6 +38,9 @@ importers:
       three:
         specifier: 0.128.0
         version: 0.128.0
+      vec3:
+        specifier: 0.2.0
+        version: 0.2.0
       ws:
         specifier: 8.18.3
         version: 8.18.3
