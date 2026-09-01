@@ -8,7 +8,7 @@
   },
   "scripts": {
     "dev": "tsx watch src/index.ts",
-    "build": "tsc && webpack --config webpack.pov.cjs",
+    "build": "tsc && webpack --config webpack.pov.cjs && node scripts/build-pov-worker.cjs",
     "start": "node dist/src/index.js",
     "test": "npm run build && node --test dist/test/*.test.js"
   },
