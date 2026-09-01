@@ -108,6 +108,16 @@ export function startServer(config: ConfigStore, events: AppEvents, bot: MultiBo
         ? "1.21.4"
         : minecraftVersion;
     socket.emit("version", viewerVersion);
+    socket.emit("selfEntity", {
+      id: target.entity.id,
+      name: "player",
+      username: target.username,
+      pos: target.entity.position,
+      width: target.entity.width ?? 0.6,
+      height: target.entity.height ?? 1.8,
+      yaw: target.entity.yaw,
+      pitch: target.entity.pitch
+    });
     const worldView = new WorldView(target.world, 6, target.entity.position, socket);
     const activeControls = new Set<"forward" | "back" | "left" | "right" | "jump" | "sneak" | "sprint">();
     let lastLookAt = 0;

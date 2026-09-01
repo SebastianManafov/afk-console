@@ -9,6 +9,23 @@ renderer.setSize(window.innerWidth, window.innerHeight)
 renderer.outputEncoding = THREE.sRGBEncoding
 document.body.prepend(renderer.domElement)
 const viewer = new Viewer(renderer)
+// prismarine-viewer 1.33 only marks Y 0..255 as dirty when a chunk arrives.
+// Modern Java worlds extend down to -64 and up to 319, so a bot below Y 0
+// otherwise receives valid chunks that never get meshed or displayed.
+const addLegacyHeightColumn = viewer.world.addColumn.bind(viewer.world)
+viewer.world.addColumn = (x, z, chunk) => {
+  addLegacyHeightColumn(x, z, chunk)
+  for (const [start, end] of [[-64, 0], [256, 320]]) {
+    for (let y = start; y < end; y += 16) {
+      const section = new THREE.Vector3(x, y, z)
+      viewer.world.setSectionDirty(section)
+      viewer.world.setSectionDirty(section.clone().add(new THREE.Vector3(-16, 0, 0)))
+      viewer.world.setSectionDirty(section.clone().add(new THREE.Vector3(16, 0, 0)))
+      viewer.world.setSectionDirty(section.clone().add(new THREE.Vector3(0, 0, -16)))
+      viewer.world.setSectionDirty(section.clone().add(new THREE.Vector3(0, 0, 16)))
+    }
+  }
+}
 const socket = io({ path: '/pov-viewer/socket.io' })
 const keys = new Set()
 let freecam = false
@@ -20,6 +37,7 @@ let botYaw = 0
 let botPitch = 0
 let selectedSlot = 0
 let hudData = null
+let selfEntityId = null
 const entities = new Map()
 
 const followButton = document.getElementById('follow')
@@ -42,6 +60,11 @@ function setMode(nextFreecam) {
   followButton.classList.toggle('active', !freecam)
   freecamButton.classList.toggle('active', freecam)
   if (freecam && botPosition) viewer.camera.position.set(botPosition.x, botPosition.y + 1.62, botPosition.z)
+  syncSelfVisibility()
+}
+function syncSelfVisibility () {
+  const mesh = selfEntityId === null ? null : viewer.entities.entities[selfEntityId]
+  if (mesh) mesh.visible = freecam
 }
 followButton.onclick = () => { setMode(false); lockPointer() }
 freecamButton.onclick = () => { setMode(true); lockPointer() }
@@ -92,10 +115,19 @@ socket.on('version', (version) => {
 })
 socket.on('position', ({ pos, yaw: botYaw, pitch: botPitch }) => {
   botPosition = pos
+  if (selfEntityId !== null) {
+    viewer.updateEntity({ id: selfEntityId, pos, yaw: botYaw, pitch: botPitch })
+    syncSelfVisibility()
+  }
   if (!freecam) {
     yaw = botYaw; pitch = botPitch
     viewer.setFirstPersonCamera(pos, botYaw, botPitch)
   }
+})
+socket.on('selfEntity', (entity) => {
+  selfEntityId = entity.id
+  viewer.updateEntity(entity)
+  syncSelfVisibility()
 })
 socket.on('entity', (entity) => { if (entity.delete) entities.delete(entity.id); else entities.set(entity.id, { ...(entities.get(entity.id) || {}), ...entity }) })
 socket.on('hud', (nextHud) => {
