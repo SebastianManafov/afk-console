@@ -109,7 +109,7 @@ configured.
 
 Use imperative, focused commit messages (for example, `Fix negative-height
 POV sections`). After a completed code change, create the focused commit
-automatically once the relevant checks pass. Documentation-only or exploratory
-changes may remain uncommitted unless requested otherwise. Do not push to a
-remote, rewrite history, force-push, or delete data unless the user explicitly
-asks for it.
+automatically once the relevant checks pass, then push that commit to the
+configured upstream branch (normally `origin/main`). Documentation-only or
+exploratory changes may remain uncommitted unless requested otherwise. Never
+rewrite history, force-push, or delete data.
