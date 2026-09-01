@@ -7,16 +7,23 @@ export interface ConfigReader { get(): AppConfig }
 
 const AUTO_GUI_DEFAULTS = { autoGuiJoinEnabled: false, autoGuiJoinTitleIncludes: "", autoGuiJoinSlot: 0, autoGuiJoinDelayMs: 750 };
 const AUTOMATION_DEFAULTS = { joinCommand: "", worldChangeCommand: "", antiAfkEnabled: false, antiAfkMinSeconds: 45, antiAfkMaxSeconds: 90, spamEnabled: false, spamMessage: "", spamIntervalSeconds: 60 };
+export const SUPPORTED_MINECRAFT_VERSIONS = ["1.21.4", "26.1"] as const;
+export type SupportedMinecraftVersion = typeof SUPPORTED_MINECRAFT_VERSIONS[number];
+const DEFAULT_MINECRAFT_VERSION: SupportedMinecraftVersion = "1.21.4";
+
+function migrateMinecraftVersion(version: unknown): unknown {
+  return typeof version === "string" && /^1\.21(?:\.\d+)?$/.test(version) ? DEFAULT_MINECRAFT_VERSION : version;
+}
 
 export const DEFAULT_CONFIG: AppConfig = {
-  servers: [{ id: "hugosmp", name: "Hugosmp.net", host: process.env.MC_HOST || "hugosmp.net", port: Number(process.env.MC_PORT || 25565), version: process.env.MC_VERSION || "1.21.8", ...AUTO_GUI_DEFAULTS, ...AUTOMATION_DEFAULTS }],
+  servers: [{ id: "hugosmp", name: "Hugosmp.net", host: process.env.MC_HOST || "hugosmp.net", port: Number(process.env.MC_PORT || 25565), version: process.env.MC_VERSION || DEFAULT_MINECRAFT_VERSION, ...AUTO_GUI_DEFAULTS, ...AUTOMATION_DEFAULTS }],
   proxies: [],
   accounts: [{ id: "primary", name: "Primary account", username: process.env.MC_USERNAME || "", serverId: "hugosmp", proxyId: null, enabled: true, paused: false, autoConnect: process.env.AUTO_CONNECT === "true", reconnectEnabled: true, reconnectDelaysSeconds: [5, 15, 30, 60], sell: null, spawner: null }],
   connection: {
     profileName: "Hugosmp.net",
     host: process.env.MC_HOST || "hugosmp.net",
     port: Number(process.env.MC_PORT || 25565),
-    version: process.env.MC_VERSION || "1.21.8",
+    version: process.env.MC_VERSION || DEFAULT_MINECRAFT_VERSION,
     username: process.env.MC_USERNAME || "",
     autoConnect: process.env.AUTO_CONNECT === "true"
     ,reconnectEnabled: true,
@@ -131,6 +138,8 @@ export class ConfigStore {
       const stored = JSON.parse(await readFile(this.file, "utf8")) as Partial<AppConfig>;
       if (stored.webhook?.url?.startsWith("enc:v1:")) stored.webhook.url = this.decrypt(stored.webhook.url);
       for (const proxy of stored.proxies ?? []) if (proxy.password?.startsWith("enc:v1:")) proxy.password = this.decrypt(proxy.password);
+      if (stored.connection) stored.connection.version = migrateMinecraftVersion(stored.connection.version) as string;
+      if (stored.servers) for (const server of stored.servers) server.version = migrateMinecraftVersion(server.version) as string;
       this.value = mergeConfig(stored);
       this.validate(this.value);
     } catch (error) {
@@ -194,7 +203,7 @@ export class ConfigStore {
     for (const server of value.servers) {
       if (!/^[a-z0-9.-]+$/i.test(server.host)) throw new Error(`Ungültige Serveradresse für ${server.name}`);
       if (!Number.isInteger(server.port) || server.port < 1 || server.port > 65535) throw new Error(`Ungültiger Serverport für ${server.name}`);
-      if (!/^\d+\.\d+(?:\.\d+)?$/.test(server.version)) throw new Error(`Ungültige Minecraft-Version für ${server.name}`);
+      if (!SUPPORTED_MINECRAFT_VERSIONS.includes(server.version as SupportedMinecraftVersion)) throw new Error(`Nicht unterstützte Minecraft-Version für ${server.name}`);
       if (server.autoGuiJoinEnabled && !server.autoGuiJoinTitleIncludes.trim()) throw new Error(`Auto-GUI-Titel fehlt für ${server.name}`);
       if (!Number.isInteger(server.autoGuiJoinSlot) || server.autoGuiJoinSlot < 0 || server.autoGuiJoinSlot > 89) throw new Error(`Ungültiger Auto-GUI-Slot für ${server.name}`);
       if (!Number.isInteger(server.autoGuiJoinDelayMs) || server.autoGuiJoinDelayMs < 100 || server.autoGuiJoinDelayMs > 10_000) throw new Error(`Ungültige Auto-GUI-Verzögerung für ${server.name}`);
@@ -204,7 +213,7 @@ export class ConfigStore {
     }
     if (!/^[a-z0-9.-]+$/i.test(value.connection.host)) throw new Error("Ungültige Serveradresse");
     if (!Number.isInteger(value.connection.port) || value.connection.port < 1 || value.connection.port > 65535) throw new Error("Ungültiger Serverport");
-    if (!/^\d+\.\d+(?:\.\d+)?$/.test(value.connection.version)) throw new Error("Ungültige Minecraft-Version");
+    if (!SUPPORTED_MINECRAFT_VERSIONS.includes(value.connection.version as SupportedMinecraftVersion)) throw new Error("Nicht unterstützte Minecraft-Version");
     if (!value.connection.reconnectDelaysSeconds.length || value.connection.reconnectDelaysSeconds.some((delay) => !Number.isInteger(delay) || delay < 1 || delay > 3600)) throw new Error("Ungültige Reconnect-Regeln");
     if (value.connection.autoGuiJoinEnabled && !value.connection.autoGuiJoinTitleIncludes.trim()) throw new Error("Auto-GUI-Titel fehlt");
     if (!Number.isInteger(value.connection.autoGuiJoinSlot) || value.connection.autoGuiJoinSlot < 0 || value.connection.autoGuiJoinSlot > 89) throw new Error("Ungültiger Auto-GUI-Slot");

@@ -3,7 +3,26 @@ import { mkdtemp, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
-import { ConfigStore } from "../src/config.js";
+import { ConfigStore, DEFAULT_CONFIG } from "../src/config.js";
+
+test("Prismarine-Versionen sind auswählbar und 1.21.4 ist der Standard", async () => {
+  assert.equal(DEFAULT_CONFIG.connection.version, "1.21.4");
+  assert.equal(DEFAULT_CONFIG.servers[0]!.version, "1.21.4");
+  const directory = await mkdtemp(join(tmpdir(), "rcc-version-selection-"));
+  try {
+    const store = new ConfigStore(directory, "test-encryption-secret-with-32-characters");
+    const initial = await store.load();
+    for (const version of ["1.21.4", "26.1"]) {
+      await store.update({ connection: { ...initial.connection, version }, servers: [{ ...initial.servers[0]!, version }] });
+      assert.equal(store.get().connection.version, version);
+      assert.equal(store.get().servers[0]!.version, version);
+    }
+    await assert.rejects(() => store.update({ connection: { ...store.get().connection, version: "1.21.8" } }), /Nicht unterstützte Minecraft-Version/);
+    await assert.rejects(() => store.update({ servers: [{ ...store.get().servers[0]!, version: "1.21.8" }] }), /Nicht unterstützte Minecraft-Version/);
+  } finally {
+    await rm(directory, { recursive: true, force: true });
+  }
+});
 
 test("Standardwerte entsprechen der analysierten Mod-Konfiguration", async () => {
   const directory = await mkdtemp(join(tmpdir(), "hugo-afk-defaults-"));
@@ -70,7 +89,7 @@ test("Verbindungsprofil wird validiert und persistent gespeichert", async () => 
         profileName: "RCC HugoSMP",
         host: "play.example.net",
         port: 25566,
-        version: "1.21.11",
+        version: "1.21.4",
         username: "player@example.com",
         autoConnect: true
       }
@@ -91,7 +110,7 @@ test("Multi-Account-Profile und Proxy-Passwort bleiben getrennt und verschlüsse
   try {
     const secret = "test-encryption-secret-with-32-characters";
     const store = new ConfigStore(directory, secret); const initial = await store.load();
-    const server = { ...initial.servers[0]!, id: "second", name: "Second", host: "play.example.net", port: 25565, version: "1.21.11", autoGuiJoinEnabled: false, autoGuiJoinTitleIncludes: "", autoGuiJoinSlot: 0, autoGuiJoinDelayMs: 750 };
+    const server = { ...initial.servers[0]!, id: "second", name: "Second", host: "play.example.net", port: 25565, version: "1.21.4", autoGuiJoinEnabled: false, autoGuiJoinTitleIncludes: "", autoGuiJoinSlot: 0, autoGuiJoinDelayMs: 750 };
     const proxy = { id: "proxy-1", name: "Proxy", host: "127.0.0.1", port: 8080, username: "user", password: "top-secret" };
     const account = { id: "second-account", name: "Second Bot", username: "second@example.com", serverId: server.id, proxyId: proxy.id, enabled: true, paused: false, autoConnect: false, reconnectEnabled: true, reconnectDelaysSeconds: [5, 15, 30, 60], sell: { ...initial.sell, command: "/sell second" }, spawner: null };
     const publicValue = await store.update({ servers: [...initial.servers, server], proxies: [proxy], accounts: [...initial.accounts, account] });
