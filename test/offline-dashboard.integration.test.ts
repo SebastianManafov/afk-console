@@ -82,6 +82,10 @@ test("Offline-Dashboard: Login, State, Health, Preview und Sicherheitsfehler", {
     assert.equal((await fetch(`${baseUrl}/api/state`, { headers: { cookie: guestCookie } })).status, 200);
     const guestPreview = await fetch(`${baseUrl}/api/macro/preview`, { method: "POST", headers: { cookie: guestCookie, "content-type": "application/json" }, body: "{}" });
     assert.equal(guestPreview.status, 200);
+    const guestControl = await fetch(`${baseUrl}/api/bot/control`, { method: "POST", headers: { cookie: guestCookie, "content-type": "application/json" }, body: JSON.stringify({ accountId: "primary", action: "swing" }) });
+    assert.equal(guestControl.status, 403);
+    const guestSettings = await fetch(`${baseUrl}/api/settings`, { method: "PUT", headers: { cookie: guestCookie, "content-type": "application/json" }, body: JSON.stringify({}) });
+    assert.equal(guestSettings.status, 403);
 
     const preview = await fetch(`${baseUrl}/api/macro/preview`, { method: "POST", headers: { ...headers, "content-type": "application/json" }, body: "{}" });
     assert.equal(preview.status, 200);

@@ -38,3 +38,22 @@ test("Lokale Passwörter dürfen 8 Zeichen haben, Produktion verlangt 12", () =>
     if (previous.nodeEnv === undefined) delete process.env.NODE_ENV; else process.env.NODE_ENV = previous.nodeEnv;
   }
 });
+
+test("Gastrolle bleibt authentifiziert, ist aber keine Adminrolle", () => {
+  const previous = { password: process.env.DASHBOARD_PASSWORD, guest: process.env.GUEST_PASSWORD, secret: process.env.SESSION_SECRET, nodeEnv: process.env.NODE_ENV };
+  try {
+    process.env.DASHBOARD_PASSWORD = "AdminPass123!";
+    process.env.GUEST_PASSWORD = "GuestPass123!";
+    process.env.SESSION_SECRET = "01234567890123456789012345678901";
+    process.env.NODE_ENV = "development";
+    const auth = new DashboardAuth();
+    assert.equal(auth.loginRole("GuestPass123!"), "guest");
+    assert.equal(auth.loginRole("AdminPass123!"), "admin");
+    assert.notEqual(auth.loginRole("GuestPass123!"), "admin");
+  } finally {
+    if (previous.password === undefined) delete process.env.DASHBOARD_PASSWORD; else process.env.DASHBOARD_PASSWORD = previous.password;
+    if (previous.guest === undefined) delete process.env.GUEST_PASSWORD; else process.env.GUEST_PASSWORD = previous.guest;
+    if (previous.secret === undefined) delete process.env.SESSION_SECRET; else process.env.SESSION_SECRET = previous.secret;
+    if (previous.nodeEnv === undefined) delete process.env.NODE_ENV; else process.env.NODE_ENV = previous.nodeEnv;
+  }
+});

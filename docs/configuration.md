@@ -5,6 +5,7 @@ RCC reads secrets from environment variables and stores runtime state below `DAT
 | Variable | Required | Description |
 | --- | --- | --- |
 | `DASHBOARD_PASSWORD` | Yes | Dashboard password; minimum 8 characters locally and 12 in production |
+| `GUEST_PASSWORD` | No | Optional authenticated read-only dashboard password; it cannot change settings, bots, chat, macros, accounts or webhooks |
 | `SESSION_SECRET` | Yes | Random secret with at least 32 characters |
 | `CONFIG_ENCRYPTION_KEY` | Recommended | Dedicated 32+ character key for encrypted configuration and token vaults |
 | `DATA_DIR` | Recommended | Persistent private runtime directory; defaults to `./data` |
@@ -15,6 +16,8 @@ RCC reads secrets from environment variables and stores runtime state below `DAT
 Minecraft servers, accounts, reconnect rules, proxies, macros and webhooks are configured through the dashboard. The `.env.example` file contains placeholders only.
 
 The browser POV terrain renderer uses the Prismarine-compatible Minecraft `1.21.4` render profile. RCC keeps the configured `26.1` and `26.1.2` protocol paths working and maps them to that profile only inside viewer rendering.
+
+Guests can inspect dashboard state, diagnostics, previews, inventory and POV terrain, but all state-changing controls are admin-only. Browser bot control is available only to an admin who maximizes one POV card, clicks its canvas to acquire iframe-owned pointer lock, and keeps that view active. Minimizing, switching, hiding the tab, losing focus, disconnecting, or entering a world transition releases movement and interaction controls.
 
 ## Token persistence
 

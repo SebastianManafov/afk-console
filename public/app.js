@@ -1,3 +1,5 @@
+import { createPovSelectionController } from './pov-selection.js'
+
 const $ = (id) => document.getElementById(id)
 document.documentElement.lang = 'en'
 const worldRestartPrefs = JSON.parse(localStorage.getItem('rcc-world-restart') || '{}')
@@ -15,8 +17,45 @@ let activeControlAccountId = null
 let editingProfileId = null
 let lastProfilesSignature = ''
 let selectedConnectAccountIds = null
-let sessionRole = sessionStorage.getItem('rcc-role') || 'admin'
+let sessionRole = null
 let hiddenEmailAccountIds = new Set(JSON.parse(localStorage.getItem('rcc-hidden-emails') || '[]'))
+let maximizedPovAccountId = null
+
+function isAdminSession() { return sessionRole === 'admin' }
+
+function sendPovActivation(accountId, active) {
+  const iframe = $('povBotGrid')?.querySelector(`[data-account-id="${CSS.escape(accountId)}"] iframe`)
+  if (!iframe?.contentWindow) return
+  const bot = botForAccount(accountId)
+  if (active && (!bot || bot.connection !== 'online' || bot.worldTransition?.state !== 'stable')) active = false
+  iframe.contentWindow.postMessage({ type: 'rcc-pov-activation', accountId, active: active === true }, location.origin)
+}
+
+function setPovCardMaximized(accountId, maximized) {
+  const card = $('povBotGrid')?.querySelector(`[data-account-id="${CSS.escape(accountId)}"]`)
+  if (!card) return
+  card.classList.toggle('is-maximized', maximized)
+  const button = card.querySelector('.pov-fullscreen')
+  if (button) { button.textContent = maximized ? '↙' : '↗'; button.title = maximized ? 'Restore POV' : 'Maximize POV' }
+}
+
+const povSelection = createPovSelectionController({
+  sendActivation: sendPovActivation,
+  setCardMaximized: setPovCardMaximized,
+  onSelectionChanged: (accountId) => {
+    maximizedPovAccountId = accountId
+    document.body.classList.toggle('pov-maximized', Boolean(accountId))
+  }
+})
+
+window.addEventListener('message', (event) => {
+  if (event.origin !== location.origin) return
+  const message = event.data
+  if (!message || typeof message !== 'object' || message.type !== 'rcc-pov-ready' || typeof message.accountId !== 'string') return
+  const iframe = $('povBotGrid')?.querySelector(`[data-account-id="${CSS.escape(message.accountId)}"] iframe`)
+  if (!iframe || event.source !== iframe.contentWindow) return
+  povSelection.handleReady(message.accountId)
+})
 
 function maskedEmail(value) {
   return '*'.repeat(Math.max(8, String(value || '').length))
@@ -91,6 +130,7 @@ function connectSocket() {
 }
 
 function showPage(name) {
+  if (name !== 'pov' && povSelection.activeAccountId) povSelection.clear()
   document.querySelectorAll('.page').forEach((page) => page.classList.toggle('hidden', page.dataset.view !== name))
   document.querySelectorAll('[data-page]').forEach((button) => button.classList.toggle('active', button.dataset.page === name))
   const label = (document.querySelector(`nav [data-page="${name}"]`)?.textContent.trim() || name).replace(/^[^A-Za-z0-9]+/, '')
@@ -114,7 +154,7 @@ function renderOperationalAccountSelectors() {
   document.querySelectorAll('.operational-account-select').forEach((select) => {
     if (select.dataset.signature !== signature) { select.innerHTML = options; select.dataset.signature = signature }
     select.value = activeControlAccountId || ''
-    select.onchange = () => { activeControlAccountId = select.value; renderState() }
+    select.onchange = () => { if (povSelection.activeAccountId && povSelection.activeAccountId !== select.value) povSelection.clear(); activeControlAccountId = select.value; renderState() }
   })
 }
 function activeControlSnapshot() { return activeControlAccountId ? botForAccount(activeControlAccountId) || state : state }
@@ -129,6 +169,7 @@ function selectedMacroSnapshot() {
 
 function renderState() {
   if (!state) return
+  applyRoleUi()
   const bots = botSnapshots()
   renderOperationalAccountSelectors()
   const operationalState = activeControlSnapshot()
@@ -183,38 +224,79 @@ function renderState() {
   const locked = Boolean(operationalState.controlLock?.locked)
   $('controlLockBanner').classList.toggle('hidden', !locked)
   $('controlLockReason').textContent = operationalState.controlLock?.reason || ''
-  document.querySelectorAll('[data-view="movement"] .control-grid button, [data-view="movement"] .control-grid input, [data-view="movement"] .control-grid select').forEach((element) => { element.disabled = !online || locked })
+  document.querySelectorAll('[data-view="movement"] .control-grid button, [data-view="movement"] .control-grid input, [data-view="movement"] .control-grid select').forEach((element) => { element.disabled = !isAdminSession() || !online || locked })
   renderDiagnostics()
   renderInventory()
-  $('useInventory').disabled = !online || locked
-  document.querySelectorAll('[data-view="inventory"] .slot, [data-view="pov"] .slot').forEach((element) => { element.disabled = !online || locked })
-  $('chatInput').disabled = !online
-  $('chatForm').querySelector('button').disabled = !online
+  $('useInventory').disabled = !isAdminSession() || !online || locked
+  document.querySelectorAll('[data-view="inventory"] .slot, [data-view="pov"] .slot').forEach((element) => { element.disabled = isAdminSession() ? !online || locked : false })
+  $('chatInput').disabled = !isAdminSession() || !online
+  $('chatForm').querySelector('button').disabled = !isAdminSession() || !online
+  const selectedPov = maximizedPovAccountId ? botForAccount(maximizedPovAccountId) : null
+  if (selectedPov && selectedPov.connection !== 'online') povSelection.clear()
+  else if (selectedPov && selectedPov.worldTransition?.state === 'stable') povSelection.replay(maximizedPovAccountId)
+  else if (selectedPov) sendPovActivation(maximizedPovAccountId, false)
   renderProfiles()
   renderPovBots()
+  applyRoleUi()
+}
+
+function applyRoleUi() {
+  const admin = isAdminSession()
+  const adminSelectors = [
+    '#connect', '#stop', '#reconnect', '#cancelReconnect', '#takeOver', '#chatForm',
+    '[data-view="movement"] .control-grid', '[data-view="inventory"] .bulk',
+    '[data-view="macros"] .toolbar', '[data-view="macros"] .macro-grid', '[data-view="macros"] > .macro-panel', '[data-view="macros"] #saveMacros',
+    '[data-view="webhooks"] .toolbar', '[data-view="webhooks"] .webhook-form',
+    '#addServerProfile', '#addAccountProfile', '#addProxyProfile',
+    '#settingsStop', '#emergencyStop', '#saveConnection', '#saveWebhook', '#addWebhook', '#testWebhook', '#refreshAuthCode', '.nav-label button',
+    '#serversTable .row-actions', '#accountsTable .account-actions', '#proxyCards .card-actions', '#profileDialog'
+  ]
+  for (const selector of adminSelectors) document.querySelectorAll(selector).forEach((element) => element.setAttribute('data-admin-only', ''))
+  document.querySelectorAll('[data-view="settings"] .settings-stack > .panel').forEach((element) => {
+    if (!element.querySelector('#systemCheckOutput')) element.setAttribute('data-admin-only', '')
+  })
+  document.body.classList.toggle('guest-mode', !admin)
+  document.querySelectorAll('[data-admin-only]').forEach((element) => {
+    if (element instanceof HTMLButtonElement || element instanceof HTMLInputElement || element instanceof HTMLSelectElement || element instanceof HTMLTextAreaElement) element.disabled = !admin
+    else element.classList.toggle('hidden', !admin)
+  })
+  const status = $('dashboardRole')
+  if (status) status.textContent = admin ? 'Admin controls' : 'View-only guest'
 }
 
 let povSortAscending = true
 let povBotGridSignature = ''
-let maximizedPovAccountId = null
 function renderPovBots() {
   const grid = $('povBotGrid'); if (!grid || !config) return
   const query = ($('povSearch')?.value || '').trim().toLowerCase()
-  const bots = botSnapshots().map((bot) => ({ bot, account: config.accounts.find((account) => account.id === bot.accountId) })).filter(({ account, bot }) => !query || (account?.name || bot.username || '').toLowerCase().includes(query)).sort((left, right) => { const a = left.account?.name || left.bot.username || ''; const b = right.account?.name || right.bot.username || ''; return povSortAscending ? a.localeCompare(b) : b.localeCompare(a) })
+  const allBots = botSnapshots().map((bot) => ({ bot, account: config.accounts.find((account) => account.id === bot.accountId) }))
+  const bots = allBots.filter(({ account, bot }) => !query || (account?.name || bot.username || '').toLowerCase().includes(query)).sort((left, right) => { const a = left.account?.name || left.bot.username || ''; const b = right.account?.name || right.bot.username || ''; return povSortAscending ? a.localeCompare(b) : b.localeCompare(a) })
+  if (maximizedPovAccountId && !bots.some(({ bot }) => (bot.accountId || 'primary') === maximizedPovAccountId)) {
+    const active = allBots.find(({ bot }) => (bot.accountId || 'primary') === maximizedPovAccountId)
+    if (active) bots.push(active)
+  }
   const signature = JSON.stringify(bots.map(({ bot, account }) => ({ id: bot.accountId || 'primary', name: account?.name || bot.username || 'Primary account' })))
   if (signature === povBotGridSignature) {
     bots.forEach(({ bot }) => updatePovCard(grid.querySelector(`[data-account-id="${CSS.escape(bot.accountId || 'primary')}"]`), bot))
     return
   }
   povBotGridSignature = signature
-  if (maximizedPovAccountId && !bots.some(({ bot }) => (bot.accountId || 'primary') === maximizedPovAccountId)) { maximizedPovAccountId = null; document.body.classList.remove('pov-maximized') }
-  grid.replaceChildren(...bots.map(({ bot, account }) => { const card = document.createElement('article'); const accountId = bot.accountId || 'primary'; const name = account?.name || bot.username || 'Primary account'; card.className = `pov-bot-card${maximizedPovAccountId === accountId ? ' is-maximized' : ''}`; card.dataset.accountId = accountId; card.innerHTML = `<div class="pov-card-header"><span class="drag-handle">⠿</span><span class="player-head">${escapeHtml(name.slice(0, 1).toUpperCase())}</span><span class="pov-card-name">${escapeHtml(name)}</span><span class="pov-card-status"></span><button class="icon-button pov-fullscreen" title="Maximize POV">↗</button></div><div class="pov-card-screen"><iframe title="${escapeHtml(name)} live POV" allow="fullscreen" src="/pov-viewer/?viewer=3&accountId=${encodeURIComponent(accountId)}"></iframe></div>`; updatePovCard(card, bot); card.querySelector('.pov-fullscreen').onclick = () => { const maximized = card.classList.toggle('is-maximized'); maximizedPovAccountId = maximized ? accountId : null; document.body.classList.toggle('pov-maximized', maximized); card.querySelector('.pov-fullscreen').textContent = maximized ? '↙' : '↗'; card.querySelector('.pov-fullscreen').title = maximized ? 'Restore POV' : 'Maximize POV' }; return card }))
+  if (maximizedPovAccountId && !bots.some(({ bot }) => (bot.accountId || 'primary') === maximizedPovAccountId)) povSelection.clear()
+  povSelection.prepareRebuild()
+  grid.replaceChildren(...bots.map(({ bot, account }) => { const card = document.createElement('article'); const accountId = bot.accountId || 'primary'; const name = account?.name || bot.username || 'Primary account'; card.className = `pov-bot-card${maximizedPovAccountId === accountId ? ' is-maximized' : ''}`; card.dataset.accountId = accountId; card.innerHTML = `<div class="pov-card-header"><span class="drag-handle">⠿</span><span class="player-head">${escapeHtml(name.slice(0, 1).toUpperCase())}</span><span class="pov-card-name">${escapeHtml(name)}</span><span class="pov-card-status"></span><span class="pov-card-control-status">View-only</span><button class="icon-button pov-fullscreen" title="Maximize POV">↗</button></div><div class="pov-card-screen"><iframe title="${escapeHtml(name)} live POV" allow="fullscreen; pointer-lock" src="/pov-viewer/?viewer=3&accountId=${encodeURIComponent(accountId)}"></iframe></div>`; updatePovCard(card, bot); card.querySelector('.pov-fullscreen').onclick = () => { if (povSelection.isSelected(accountId)) povSelection.minimize(accountId); else povSelection.select(accountId) }; return card }))
 }
 function updatePovCard(card, bot) {
   if (!card) return
   const status = bot.connection || 'offline'; const statusElement = card.querySelector('.pov-card-status'); statusElement.className = `pov-card-status ${status}`; statusElement.textContent = labelStatus(status)
   const screen = card.querySelector('.pov-card-screen'); let overlay = screen.querySelector('.pov-card-overlay')
-  if (status === 'online') { overlay?.remove() } else { if (!overlay) { overlay = document.createElement('div'); overlay.className = 'pov-card-overlay'; screen.append(overlay) } overlay.textContent = status === 'connecting' ? 'Connecting…' : 'Connect' }
+  if (status === 'online') { overlay?.remove() } else { if (!overlay) { overlay = document.createElement('div'); overlay.className = 'pov-card-overlay'; screen.append(overlay) } overlay.textContent = status === 'connecting' ? 'Connecting…' : 'View-only · bot offline' }
+  const controlStatus = card.querySelector('.pov-card-control-status')
+  if (controlStatus) {
+    const lockedForViewer = bot.controlLock?.locked && bot.controlLock.reason !== 'Viewer controls are active'
+    const available = isAdminSession() && status === 'online' && bot.worldTransition?.state === 'stable' && !lockedForViewer
+    controlStatus.textContent = !isAdminSession() ? 'View-only' : available && maximizedPovAccountId === (bot.accountId || 'primary') ? 'Control available' : lockedForViewer ? 'Controls locked' : 'View-only'
+    controlStatus.className = `pov-card-control-status ${available ? 'available' : lockedForViewer ? 'locked' : ''}`
+  }
 }
 $('povSearch')?.addEventListener('input', renderPovBots)
 $('povSort')?.addEventListener('click', () => { povSortAscending = !povSortAscending; renderPovBots() })
@@ -349,6 +431,7 @@ function renderProfiles() {
       }
       row.querySelector('.server-assignment').onchange = (event) => switchAccountConnection(account.id, { serverId: event.target.value }, bot?.connection === 'online', 'Server profile')
       row.querySelector('.proxy-assignment').onchange = (event) => switchAccountConnection(account.id, { proxyId: event.target.value || null }, bot?.connection === 'online', 'Proxy profile')
+      row.querySelectorAll('.server-assignment,.proxy-assignment,.reconnect-enabled,.reconnect-delays').forEach((element) => element.setAttribute('data-admin-only', ''))
       row.querySelector('.account-login').onclick = () => bot?.authenticated ? connectAccounts([account.id], bot.connection === 'online') : loginMicrosoftAccount(account.id)
       row.querySelector('.account-edit').onclick = () => openProfileDialog('account', account)
       row.querySelector('.account-pause').onclick = () => pauseAccount(account.id, !account.paused)
@@ -394,6 +477,7 @@ function fillSlots(container, slots, bySlot) {
     element.title = item ? `${item.displayName} · ${item.name} · Slot ${slot}` : `Empty · slot ${slot}`
     if (item) element.innerHTML = `<b>${escapeHtml(item.displayName)}</b><span>${item.count}</span>`
     if (slots.length === 9) element.onclick = () => {
+      if (!isAdminSession()) return toast('Guest sessions can inspect inventory only')
       const mode = $('inventoryActionMode')?.value || 'inspect'
       if (mode === 'drop-one' || mode === 'drop-stack') {
         if (!item) return toast('This slot is empty', true)
@@ -405,6 +489,7 @@ function fillSlots(container, slots, bySlot) {
     else element.onclick = async () => {
       const mode = $('inventoryActionMode').value
       if (mode === 'inspect') return toast(item ? `${item.displayName} · ${item.count} · slot ${slot}` : `Slot ${slot} is empty`)
+      if (!isAdminSession()) return toast('Guest sessions can inspect inventory only')
       if (!item) return toast('This slot is empty', true)
       if (mode === 'drop-stack' && !confirm(`${item.count}× ${item.displayName} drop entire stack?`)) return
       if (mode === 'shift') return control({ action: 'inventoryClick', slot, shift: true })
@@ -420,7 +505,7 @@ function labelStatus(value) { return ({ online: 'Online', connecting: 'Connectin
 function formatDuration(seconds) { const s = Math.max(0, Number(seconds) || 0); const h = Math.floor(s / 3600); const m = Math.floor(s % 3600 / 60); return h ? `${h}h ${m}m` : `${m}m ${s % 60}s` }
 function addChat(entry, system = false) { logEntries.push({ ...entry, system }); if (logEntries.length > 500) logEntries.shift(); renderConsole() }
 function renderConsole() { if (!$('chat')) return; const filter = $('logFilter')?.value || 'all'; const accountId = $('chatAccountSelect')?.value; const account = config?.accounts?.find((item) => item.id === accountId); const visible = logEntries.filter((entry) => (!accountId || entry.accountId === accountId || (!entry.accountId && account && entry.message.includes(`[${account.name}/`))) && (filter === 'all' || (filter === 'chat' ? !entry.system : ['warn', 'error'].includes(entry.level)))); $('chat').innerHTML = ''; visible.forEach((entry) => { const row = document.createElement('p'); row.className = `log-${entry.level || 'info'}`; row.textContent = `${new Date(entry.at).toLocaleTimeString('en-US')} ${entry.system ? 'SYSTEM ' : ''}${entry.message}`; $('chat').append(row) }); $('chat').scrollTop = $('chat').scrollHeight }
-async function control(body) { try { await api('/api/bot/control', { method: 'POST', body: JSON.stringify({ ...body, accountId: activeControlAccountId }) }) } catch (error) { toast(error.message, true) } }
+async function control(body) { if (!isAdminSession()) return toast('Guest sessions are view-only', true); try { await api('/api/bot/control', { method: 'POST', body: JSON.stringify({ ...body, accountId: activeControlAccountId }) }) } catch (error) { toast(error.message, true) } }
   $('runSystemCheck').onclick = async () => { try { const result = await api('/api/system-check'); const labels = { nodeVersion: 'Node', provider: 'Runtime', dataDirConfigured: 'Data directory configured', dataWritable: 'Writable', autoConnectAllowed: 'Auto-connect', sessionSecretConfigured: 'Session secret', encryptionKeyDedicated: 'Dedicated encryption key' }; $('systemCheckOutput').innerHTML = Object.entries(result).map(([key, value]) => `<span class="health-chip ${value === false ? 'locked' : ''}">${escapeHtml(labels[key] || key)}: <b>${escapeHtml(String(value))}</b></span>`).join('') } catch (error) { toast(error.message, true) } }
 $('takeOver').onclick = async () => { try { await api('/api/bot/take-over', { method: 'POST', body: JSON.stringify({ accountId: activeControlAccountId }) }); toast('Macro ended · manual controls available') } catch (error) { toast(error.message, true) } }
 $('chatAccountSelect').addEventListener('change', renderConsole)
@@ -463,8 +548,8 @@ async function connectAccounts(accountIds, reconnect = false) {
 }
 async function pauseAccount(accountId, paused) { try { const result = await api('/api/account/pause', { method: 'POST', body: JSON.stringify({ accountId, paused }) }); config = result.config; renderConfig(); renderState(); toast(paused ? 'Account paused' : 'Account resumed') } catch (error) { toast(error.message, true) } }
 async function loginMicrosoftAccount(accountId) { try { await api('/api/account/login', { method: 'POST', body: JSON.stringify({ accountId }) }); showPage('connect'); toast('Creating a new Microsoft code …') } catch (error) { toast(error.message, true) } }
-async function logoutMicrosoftAccount(accountId, name) { if (!confirm(`Remove Microsoft authentication for “${name}”? The OAuth token will be deleted locally.`)) return; try { await api('/api/account/logout', { method: 'POST', body: JSON.stringify({ accountId }) }); toast('Microsoft authentication removed') } catch (error) { toast(error.message, true) } }
-async function deleteAccount(accountId, name) { if (!confirm(`Delete account “${name}” and its local OAuth token?`)) return; try { const result = await api('/api/account', { method: 'DELETE', body: JSON.stringify({ accountId }) }); config = result.config; await saveProfilePatch({ accounts: config.accounts }); toast('Account deleted') } catch (error) { toast(error.message, true) } }
+async function logoutMicrosoftAccount(accountId, name) { if (!confirm(`Remove Microsoft authentication for “${name}”? The OAuth token will be deleted locally.`)) return; if (povSelection.isSelected(accountId)) povSelection.clear(); try { await api('/api/account/logout', { method: 'POST', body: JSON.stringify({ accountId }) }); toast('Microsoft authentication removed') } catch (error) { toast(error.message, true) } }
+async function deleteAccount(accountId, name) { if (!confirm(`Delete account “${name}” and its local OAuth token?`)) return; if (povSelection.isSelected(accountId)) povSelection.clear(); try { const result = await api('/api/account', { method: 'DELETE', body: JSON.stringify({ accountId }) }); config = result.config; await saveProfilePatch({ accounts: config.accounts }); toast('Account deleted') } catch (error) { toast(error.message, true) } }
 
 document.querySelectorAll('[data-page]').forEach((button) => button.addEventListener('click', () => showPage(button.dataset.page)))
 document.querySelectorAll('.configure-account,.configure-server').forEach((button) => button.addEventListener('click', () => showPage('settings')))
@@ -477,7 +562,7 @@ document.querySelectorAll('button').forEach((button) => {
 document.querySelectorAll('.filter').forEach((input) => input.addEventListener('input', () => applyFilter(input)))
 $('openNav').onclick = () => $('app').classList.add('nav-open'); $('closeNav').onclick = () => $('app').classList.remove('nav-open')
 $('loginForm').addEventListener('submit', async (event) => { event.preventDefault(); try { const login = await api('/api/login', { method: 'POST', body: JSON.stringify({ password: $('password').value, totp: $('totp').value }) }); sessionRole = login.role || 'admin'; sessionStorage.setItem('rcc-role', sessionRole); showApp(await api('/api/state')) } catch (error) { $('loginError').textContent = error.message } })
-$('logout').onclick = async () => { await api('/api/logout', { method: 'POST' }); sessionStorage.removeItem('rcc-role'); location.reload() }
+$('logout').onclick = async () => { povSelection.clear(); await api('/api/logout', { method: 'POST' }); sessionStorage.removeItem('rcc-role'); location.reload() }
 $('connect').onclick = () => { const accountIds = selectedAccountsOrWarn(); if (accountIds) connectAccounts(accountIds) }
 $('stop').onclick = () => { const accountIds = selectedAccountsOrWarn(); if (accountIds) api('/api/bot/stop', { method: 'POST', body: JSON.stringify({ accountIds }) }).catch((error) => toast(error.message, true)) }
 $('settingsStop').onclick = () => { if (confirm('Disconnect all connected bots?')) api('/api/bot/stop', { method: 'POST', body: JSON.stringify({}) }).catch((error) => toast(error.message, true)) }

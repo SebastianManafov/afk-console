@@ -9,11 +9,12 @@ import { createGzip } from "node:zlib";
 import { extname, join, normalize } from "node:path";
 import { WebSocketServer } from "ws";
 import { Server as SocketIOServer } from "socket.io";
-import { DashboardAuth } from "./auth.js";
+import { DashboardAuth, type DashboardRole } from "./auth.js";
 import type { MultiBotManager } from "./multi-bot-manager.js";
 import type { ConfigStore } from "./config.js";
 import type { AppEvents } from "./events.js";
 import type { WebhookNotifier } from "./webhook.js";
+import { registerViewerControlHandlers } from "./viewer-control-socket.js";
 
 const contentTypes: Record<string, string> = {
   ".html": "text/html; charset=utf-8",
@@ -66,7 +67,7 @@ export function startServer(config: ConfigStore, events: AppEvents, bot: MultiBo
       if (request.url?.startsWith("/api/")) {
         const role = auth.role(request);
         if (!role) return json(response, 401, { error: "Not authenticated" });
-        return await handleApi(request, response, config, events, bot, webhook);
+        return await handleApi(request, response, config, events, bot, webhook, role);
       }
       if (request.url?.startsWith("/pov-viewer/textures/") || request.url?.startsWith("/pov-viewer/blocksStates/") || request.url === "/pov-viewer/worker.js") {
         if (!auth.isAuthenticated(request)) return json(response, 401, { error: "Not authenticated" });
@@ -106,14 +107,28 @@ export function startServer(config: ConfigStore, events: AppEvents, bot: MultiBo
   });
   viewerSockets.use((socket, next) => auth.isAuthenticated(socket.request) ? next() : next(new Error("Not authenticated")));
   viewerSockets.on("connection", async (socket) => {
+    const role = auth.role(socket.request);
+    if (!role) { socket.disconnect(true); return; }
     const requestedAccountId = typeof socket.handshake.query.accountId === "string" ? socket.handshake.query.accountId : undefined;
-    const target = bot.viewerBot(requestedAccountId);
-    if (!target?.entity?.position) { socket.emit("viewerUnavailable", "No bot is online"); return; }
+    const primarySnapshot = bot.snapshot();
+    const accountId = requestedAccountId || primarySnapshot.accountId || primarySnapshot.bots?.[0]?.accountId || "primary";
+    const removeControlHandlers = registerViewerControlHandlers(socket, bot, accountId, role);
+    const target = bot.viewerBot(accountId);
+    if (!target?.entity?.position) {
+      socket.emit("viewerUnavailable", "No bot is online");
+      removeControlHandlers();
+      return;
+    }
     const minecraftVersion = typeof target.version === "string" ? target.version.trim() : "";
-    if (!minecraftVersion) { socket.emit("viewerUnavailable", "Minecraft version is not available yet"); return; }
+    if (!minecraftVersion) {
+      socket.emit("viewerUnavailable", "Minecraft version is not available yet");
+      removeControlHandlers();
+      return;
+    }
     const viewerVersion = viewerRenderVersion(minecraftVersion);
     if (!viewerVersion) {
       socket.emit("viewerUnavailable", `POV does not support ${minecraftVersion} yet`);
+      removeControlHandlers();
       return;
     }
     events.log("info", "viewer", `POV starting: Minecraft ${minecraftVersion}, render profile ${viewerVersion}, position ${Math.round(target.entity.position.x)},${Math.round(target.entity.position.y)},${Math.round(target.entity.position.z)}`);
@@ -150,14 +165,21 @@ export function startServer(config: ConfigStore, events: AppEvents, bot: MultiBo
       socket.emit("viewerDiagnostics", { stage: "unload", unloaded: unloadedChunkCount, x, z });
       socket.emit("unloadChunk", { x, z });
     });
-    socket.on("mouseClick", (click: unknown) => viewerEmitter.emit("mouseClick", click));
     const worldView = new WorldView(target.world, 6, target.entity.position, viewerEmitter);
-    const activeControls = new Set<"forward" | "back" | "left" | "right" | "jump" | "sneak" | "sprint">();
-    let lastLookAt = 0;
-    const releaseControls = () => {
-      for (const control of activeControls) target.setControlState(control, false);
-      activeControls.clear();
+    let viewerCleaned = false;
+    let hudInterval: NodeJS.Timeout | null = null;
+    const handleMouseClick = (click: unknown) => viewerEmitter.emit("mouseClick", click);
+    socket.on("mouseClick", handleMouseClick);
+    const cleanupViewer = () => {
+      if (viewerCleaned) return;
+      viewerCleaned = true;
+      removeControlHandlers();
+      socket.off("disconnect", cleanupViewer);
+      socket.off("mouseClick", handleMouseClick);
+      if (hudInterval) clearInterval(hudInterval);
+      worldView.removeListenersFromBot(target);
     };
+    socket.on("disconnect", cleanupViewer);
     const sendHud = (): void => {
       const inventoryItem = (item: any) => item ? { name: item.name, displayName: item.displayName, count: item.count } : null;
       socket.emit("hud", {
@@ -187,8 +209,11 @@ export function startServer(config: ConfigStore, events: AppEvents, bot: MultiBo
       const message = error instanceof Error ? error.message : String(error);
       events.log("error", "viewer", `POV chunk initialization failed: ${message}`);
       socket.emit("viewerDiagnostics", { stage: "error", message });
-      socket.removeAllListeners("mouseClick");
-      worldView.removeListenersFromBot(target);
+      cleanupViewer();
+      return;
+    }
+    if (viewerCleaned || socket.disconnected) {
+      cleanupViewer();
       return;
     }
     const initializedChunks = Object.keys(worldView.loadedChunks ?? {}).length;
@@ -196,57 +221,20 @@ export function startServer(config: ConfigStore, events: AppEvents, bot: MultiBo
     socket.emit("viewerDiagnostics", { stage: "init", loaded: loadedChunkCount, initialized: initializedChunks, unloaded: unloadedChunkCount });
     sendPosition();
     sendHud();
-    const hudInterval = setInterval(sendHud, 500);
+    hudInterval = setInterval(sendHud, 500);
     const sendChat = (message: string): void => { socket.emit("chatLine", String(message)); };
     target.on("move", sendPosition);
     target.on("health", sendHud);
     target.on("playerJoined", sendHud);
     target.on("playerLeft", sendHud);
     target.on("messagestr", sendChat);
-    socket.on("botControl", (payload: { control?: unknown; enabled?: unknown }) => {
-      const control = String(payload?.control ?? "") as "forward" | "back" | "left" | "right" | "jump" | "sneak" | "sprint";
-      if (!["forward", "back", "left", "right", "jump", "sneak", "sprint"].includes(control)) return;
-      const enabled = payload?.enabled === true;
-      target.setControlState(control, enabled);
-      if (enabled) activeControls.add(control); else activeControls.delete(control);
-    });
-    socket.on("botLook", (payload: { yaw?: unknown; pitch?: unknown }) => {
-      const now = Date.now();
-      if (now - lastLookAt < 25) return;
-      const yaw = Number(payload?.yaw); const pitch = Number(payload?.pitch);
-      if (!Number.isFinite(yaw) || !Number.isFinite(pitch)) return;
-      lastLookAt = now;
-      void target.look(yaw, Math.max(-Math.PI / 2, Math.min(Math.PI / 2, pitch)), true);
-    });
-    socket.on("botAction", async (payload: { action?: unknown; slot?: unknown }) => {
-      const action = String(payload?.action ?? "");
-      try {
-        if (action === "attack") {
-          const entity = target.entityAtCursor(5);
-          if (entity) target.attack(entity); else {
-            const block = target.blockAtCursor(5);
-            if (block && target.canDigBlock(block)) await target.dig(block, "ignore"); else target.swingArm("right");
-          }
-        } else if (action === "use") {
-          const block = target.blockAtCursor(5);
-          if (block) await target.activateBlock(block); else target.activateItem();
-        } else if (action === "hotbar") {
-          const slot = Number(payload?.slot);
-          if (Number.isInteger(slot) && slot >= 0 && slot <= 8) target.setQuickBarSlot(slot);
-        }
-      } catch (error) { socket.emit("controlError", (error as Error).message); }
-    });
-    socket.on("releaseControls", releaseControls);
     socket.on("disconnect", () => {
-      releaseControls();
       target.removeListener("move", sendPosition);
       target.removeListener("health", sendHud);
       target.removeListener("playerJoined", sendHud);
       target.removeListener("playerLeft", sendHud);
       target.removeListener("messagestr", sendChat);
-      clearInterval(hudInterval);
-      socket.removeAllListeners("mouseClick");
-      worldView.removeListenersFromBot(target);
+      cleanupViewer();
     });
   });
 
@@ -264,8 +252,10 @@ async function handleApi(
   config: ConfigStore,
   events: AppEvents,
   bot: MultiBotManager,
-  webhook: WebhookNotifier
+  webhook: WebhookNotifier,
+  role: DashboardRole
 ): Promise<void> {
+  if (role !== "admin" && request.method !== "GET" && request.url !== "/api/macro/preview") return json(response, 403, { error: "Administrator access required" });
   if (request.url === "/api/state" && request.method === "GET") return json(response, 200, { state: bot.snapshot(), logs: events.recentLogs(), config: config.publicValue() });
   if (request.url === "/api/system-check" && request.method === "GET") {
     const dataDir = process.env.DATA_DIR || "./data"; let dataWritable = false;

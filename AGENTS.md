@@ -118,3 +118,19 @@ automatically once the relevant checks pass, then push that commit to the
 configured upstream branch (normally `origin/main`). Documentation-only or
 exploratory changes may remain uncommitted unless requested otherwise. Never
 rewrite history, force-push, or delete data.
+
+After every new RCC version is pushed to GitHub, tell the user exactly what to
+run in their console to update and start it. Provide a copy-pasteable command
+block, using the user's environment path when known. For Codespaces, the
+default sequence is:
+
+```bash
+cd /workspaces/afk-console
+git pull --ff-only
+pnpm install --frozen-lockfile --prod=false
+pnpm run build
+pnpm start
+```
+
+Only present `pnpm start` as the next step after a successful build, and never
+include or regenerate real secrets in the command block.

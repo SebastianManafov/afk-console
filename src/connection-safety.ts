@@ -31,12 +31,14 @@ export function determineControlLock(
   worldState: BotSnapshot["worldTransition"]["state"],
   sell: MacroRuntime,
   spawner: MacroRuntime,
-  manualControlActive = false
+  manualControlActive = false,
+  viewerControlActive = false
 ): BotSnapshot["controlLock"] {
   if (worldState !== "stable") return { locked: true, reason: "World/server change in progress" };
   if (manualControlActive) return { locked: true, reason: "Manual controls are active" };
   if (sell.status === "running") return { locked: true, reason: "Sell macro is running" };
   if (spawner.status === "running") return { locked: true, reason: "Spawner macro is running" };
+  if (viewerControlActive) return { locked: true, reason: "Viewer controls are active" };
   return { locked: false, reason: null };
 }
 

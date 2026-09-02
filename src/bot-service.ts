@@ -14,6 +14,7 @@ import { SpawnerMacro } from "./spawner-macro.js";
 import type { BotSnapshot } from "./types.js";
 import type { WebhookNotifier } from "./webhook.js";
 import { TokenVault } from "./token-vault.js";
+import { ViewerControlDeniedError, ViewerControlLease, type ViewerControlInput } from "./viewer-control.js";
 
 const { Authflow, Titles } = prismarineAuth;
 
@@ -45,6 +46,8 @@ export class BotService {
   private antiAfkTimer: NodeJS.Timeout | null = null;
   private spamTimer: NodeJS.Timeout | null = null;
   private manualControlActive = false;
+  private readonly viewerControlLease: ViewerControlLease;
+  private viewerActionGeneration = 0;
   private activeEndpoint: { host: string; port: number } | null = null;
   private readonly acceptedBots = new WeakSet<Bot>();
   private intentionalStop = false;
@@ -63,6 +66,7 @@ export class BotService {
     this.tokenVault = new TokenVault(join(dataDir, "auth"));
     this.sell = new SellMacro(events, config, webhook);
     this.spawner = new SpawnerMacro(events, config, webhook);
+    this.viewerControlLease = new ViewerControlLease((reason) => this.releaseViewerState(reason));
     events.on("macroState", () => this.publish());
     this.pulseTimer = setInterval(() => this.publish(), 5_000);
     this.pulseTimer.unref();
@@ -220,6 +224,7 @@ export class BotService {
         this.worldTransition = { state: "configuring", startedAt: new Date().toISOString(), message: "Synchronizing registry and world" };
         this.diagnose("world-change", "info", "World/server change detected; controls and macros paused");
         bot.physicsEnabled = false;
+        this.viewerControlLease.forceRelease("world transition");
         bot.clearControlStates();
         this.sneak = false;
         this.sell.detach();
@@ -350,6 +355,7 @@ export class BotService {
         this.worldTransition = { state: "configuring", startedAt: new Date().toISOString(), message: "World restart detected; reconnecting in 3 minutes" };
         this.clearAutomationTimers();
         bot.physicsEnabled = false;
+        this.viewerControlLease.forceRelease("world restart detected");
         bot.clearControlStates();
         try { bot.end("World restart detected"); } catch { this.handleEnd(bot, "World restart detected"); }
       }
@@ -370,6 +376,7 @@ export class BotService {
         this.clearAutomationTimers();
         this.worldTransition = { state: "waiting_world", startedAt: new Date().toISOString(), message: "Stabilizing respawn" };
         bot.physicsEnabled = false;
+        this.viewerControlLease.forceRelease("respawn or dimension change");
         bot.clearControlStates();
         this.sneak = false;
         this.sell.detach();
@@ -458,6 +465,7 @@ export class BotService {
     this.clearAutoGuiJoinTimer();
     this.clearWorldReadyWait();
     this.clearAutomationTimers();
+    this.viewerControlLease.forceRelease("bot stopped");
     const bot = this.bot;
     this.bot = null;
     this.activeEndpoint = null;
@@ -572,6 +580,70 @@ export class BotService {
     }
   }
 
+  acquireViewerControl(accountId: string, controllerId: string): void {
+    this.assertAccount(accountId);
+    this.assertViewerReady();
+    this.viewerControlLease.acquire(controllerId);
+    this.publish();
+  }
+
+  heartbeatViewerControl(accountId: string, controllerId: string): boolean {
+    this.assertAccount(accountId);
+    const active = this.viewerControlLease.heartbeat(controllerId);
+    if (active) this.publish();
+    return active;
+  }
+
+  async viewerControl(accountId: string, controllerId: string, input: ViewerControlInput): Promise<void> {
+    this.assertAccount(accountId);
+    this.assertViewerControl(controllerId);
+    const generation = this.viewerActionGeneration;
+    const bot = this.bot!;
+    if (input.kind === "movement") {
+      bot.setControlState(input.control, input.enabled);
+      if (input.control === "sneak") {
+        this.sneak = input.enabled;
+        this.publish();
+      }
+      return;
+    }
+    if (input.kind === "look") {
+      const yaw = this.normalizeYaw(input.yaw);
+      const pitch = this.clampPitch(input.pitch);
+      await bot.look(yaw, pitch, true);
+      if (generation !== this.viewerActionGeneration || !this.viewerControlLease.owns(controllerId)) return;
+      return;
+    }
+    if (input.action === "hotbar") {
+      if (!Number.isInteger(input.slot) || input.slot < 0 || input.slot > 8) throw new Error("Invalid hotbar slot");
+      bot.setQuickBarSlot(input.slot);
+      return;
+    }
+    if (input.action === "use") {
+      if (input.enabled === false) {
+        bot.deactivateItem();
+        return;
+      }
+      const block = bot.blockAtCursor(5);
+      if (block) await bot.activateBlock(block);
+      else bot.activateItem();
+      return;
+    }
+    const entity = bot.entityAtCursor(5);
+    if (entity) bot.attack(entity);
+    else {
+      const block = bot.blockAtCursor(5);
+      if (block && bot.canDigBlock(block)) await bot.dig(block, "ignore");
+      else bot.swingArm("right");
+    }
+    if (generation !== this.viewerActionGeneration || !this.viewerControlLease.owns(controllerId)) return;
+  }
+
+  releaseViewerControl(accountId: string, controllerId: string, reason = "released"): boolean {
+    this.assertAccount(accountId);
+    return this.viewerControlLease.release(controllerId, reason);
+  }
+
   setSneak(enabled: boolean): void {
     if (!this.bot) return;
     this.bot.setControlState("sneak", enabled);
@@ -649,6 +721,7 @@ export class BotService {
     this.clearProtocolHandlers();
     this.clearAutoGuiJoinTimer();
     this.clearWorldReadyWait();
+    this.viewerControlLease.forceRelease("connection ended");
     const reachedServerLogin = this.acceptedBots.has(endedBot);
     const username = endedBot.username || "Bot";
     this.bot = null;
@@ -835,7 +908,45 @@ export class BotService {
   }
 
   private currentControlLock(): BotSnapshot["controlLock"] {
-    return determineControlLock(this.worldTransition.state, this.sell.snapshot(), this.spawner.snapshot(), this.manualControlActive);
+    return determineControlLock(this.worldTransition.state, this.sell.snapshot(), this.spawner.snapshot(), this.manualControlActive, this.viewerControlLease.isActive);
+  }
+
+  private assertAccount(accountId: string): void {
+    if (accountId !== this.accountId) throw new Error("Account not found");
+  }
+
+  private assertViewerReady(): void {
+    if (!this.isWorldReady()) throw new ViewerControlDeniedError("not_ready");
+    const lock = determineControlLock(this.worldTransition.state, this.sell.snapshot(), this.spawner.snapshot(), this.manualControlActive);
+    if (lock.locked) throw new ViewerControlDeniedError("locked");
+  }
+
+  private assertViewerControl(controllerId: string): void {
+    this.assertViewerReady();
+    if (!this.viewerControlLease.owns(controllerId)) throw new ViewerControlDeniedError("not_owner");
+  }
+
+  private normalizeYaw(yaw: number): number {
+    if (!Number.isFinite(yaw)) throw new Error("Invalid view angle");
+    return Math.atan2(Math.sin(yaw), Math.cos(yaw));
+  }
+
+  private clampPitch(pitch: number): number {
+    if (!Number.isFinite(pitch)) throw new Error("Invalid view angle");
+    return Math.max(-Math.PI / 2, Math.min(Math.PI / 2, pitch));
+  }
+
+  private releaseViewerState(reason: string): void {
+    this.viewerActionGeneration += 1;
+    const bot = this.bot;
+    if (bot) {
+      try { bot.clearControlStates(); } catch { /* The protocol may already be closed. */ }
+      try { bot.stopDigging(); } catch { /* The protocol may already be closed. */ }
+      try { bot.deactivateItem(); } catch { /* The protocol may already be closed. */ }
+    }
+    this.sneak = false;
+    this.events.emit("viewerControlRevoked", { accountId: this.accountId, reason });
+    this.publish();
   }
 
   private activateAutomations(event: "join" | "worldChange"): void {

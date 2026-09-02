@@ -3,6 +3,7 @@ global.THREE = require('three')
 const { Viewer } = require('prismarine-viewer/viewer')
 const { io } = require('socket.io-client')
 const { itemIconUrl } = require('./item-icons.cjs')
+const { createControlSession } = require('./control-session.cjs')
 
 const renderer = new THREE.WebGLRenderer({ antialias: true })
 renderer.setPixelRatio(Math.min(2, window.devicePixelRatio || 1))
@@ -50,29 +51,17 @@ viewer.world.addColumn = (x, z, chunk) => {
     }
   }
 }
-const socket = io({ path: '/pov-viewer/socket.io' })
+const accountId = new URLSearchParams(window.location.search).get('accountId') || ''
+const socket = io({ path: '/pov-viewer/socket.io', query: { accountId } })
 socket.on('viewerDiagnostics', (data) => {
   if (data.stage === 'chunk' || data.stage === 'init') viewerDiagnostics.chunks = data.loaded || viewerDiagnostics.chunks
   if (data.stage === 'error') status.textContent = `POV error: ${data.message}`
   reportViewerState(`server ${data.stage}`, data)
 })
-const keys = new Set()
-let freecam = false
-let yaw = 0
-let pitch = 0
-let lastFrame = performance.now()
-let botPosition = null
-let botYaw = 0
-let botPitch = 0
-let selectedSlot = 0
-let itemRenderVersion = '1.21.4'
-let hudData = null
-let selfEntityId = null
-const entities = new Map()
-
 const followButton = document.getElementById('follow')
 const freecamButton = document.getElementById('freecam')
 const status = document.getElementById('status')
+const controlStatus = document.getElementById('controlStatus')
 const vitals = document.getElementById('vitals')
 const playerList = document.getElementById('playerList')
 const players = document.getElementById('players')
@@ -97,6 +86,59 @@ const inventoryHotbar = document.getElementById('inventoryHotbar')
 const craftingGrid = document.getElementById('craftingGrid')
 const craftingOutput = document.getElementById('craftingOutput')
 
+const keys = new Set()
+let freecam = false
+let yaw = 0
+let pitch = 0
+let lastFrame = performance.now()
+let botPosition = null
+let botYaw = 0
+let botPitch = 0
+let selectedSlot = 0
+let itemRenderVersion = '1.21.4'
+let hudData = null
+let selfEntityId = null
+const entities = new Map()
+
+const controlSession = createControlSession({
+  emit: (event, payload, options = {}) => {
+    const channel = options.volatile ? socket.volatile : socket
+    if (payload === undefined) channel.emit(event)
+    else channel.emit(event, payload)
+  },
+  onRevoked: (reason) => {
+    keys.clear()
+    status.textContent = `Controls revoked: ${reason}`
+    if (document.pointerLockElement === renderer.domElement) document.exitPointerLock()
+  },
+  onStateChange: (session) => {
+    if (!controlStatus) return
+    if (!session.adminCapable) controlStatus.textContent = 'View-only'
+    else if (session.canControl) controlStatus.textContent = 'Controls active'
+    else if (!session.parentActive) controlStatus.textContent = 'Maximize POV to control'
+    else if (!session.botPov) controlStatus.textContent = 'Freecam · controls off'
+    else if (!session.pointerLocked) controlStatus.textContent = 'Click canvas for pointer lock'
+    else if (!session.socketConnected) controlStatus.textContent = 'Controls offline'
+    else controlStatus.textContent = 'Controls locked'
+  }
+})
+
+function postParent (message) {
+  if (window.parent !== window) window.parent.postMessage(message, window.location.origin)
+}
+
+window.addEventListener('message', (event) => {
+  if (event.source !== window.parent || event.origin !== window.location.origin) return
+  const message = event.data
+  if (!message || typeof message !== 'object' || message.accountId !== accountId) return
+  if (message.type === 'rcc-pov-activation' || message.type === 'povActivation') {
+    if (message.active !== true) keys.clear()
+    controlSession.setParentActive(message.active === true)
+    if (message.active !== true && document.pointerLockElement === renderer.domElement) document.exitPointerLock()
+  }
+})
+postParent({ type: 'rcc-pov-ready', accountId })
+
 function setInventoryVisible (visible) {
   inventoryPanel.hidden = !visible
   if (visible && document.pointerLockElement) document.exitPointerLock()
@@ -110,8 +152,8 @@ function lockPointer () {
   } catch {}
 }
 function setMode(nextFreecam) {
-  if (nextFreecam && !freecam) socket.emit('releaseControls')
   freecam = nextFreecam
+  controlSession.setBotPov(!freecam)
   followButton.classList.toggle('active', !freecam)
   freecamButton.classList.toggle('active', freecam)
   if (freecam && botPosition) viewer.camera.position.set(botPosition.x, botPosition.y + 1.62, botPosition.z)
@@ -124,7 +166,7 @@ function syncSelfVisibility () {
 followButton.onclick = () => { setMode(false); lockPointer() }
 freecamButton.onclick = () => { setMode(true); lockPointer() }
 renderer.domElement.addEventListener('click', lockPointer)
-const movementControls = { KeyW: 'forward', KeyS: 'back', KeyA: 'left', KeyD: 'right', Space: 'jump', ShiftLeft: 'sneak', ControlLeft: 'sprint' }
+const movementControls = { KeyW: 'forward', KeyS: 'back', KeyA: 'left', KeyD: 'right', Space: 'jump', ShiftLeft: 'sneak', ShiftRight: 'sneak', ControlLeft: 'sprint', ControlRight: 'sprint' }
 document.addEventListener('keydown', (event) => {
   keys.add(event.code)
   if (event.code === 'KeyF' && !event.repeat) setMode(!freecam)
@@ -132,35 +174,61 @@ document.addEventListener('keydown', (event) => {
   if (event.code === 'Escape' && !inventoryPanel.hidden) setInventoryVisible(false)
   if (event.code === 'Tab') { event.preventDefault(); playerList.hidden = false }
   if (event.code === 'KeyM' && !event.repeat) minimap.hidden = !minimap.hidden
-  if (!freecam && document.pointerLockElement === renderer.domElement && movementControls[event.code] && !event.repeat) socket.emit('botControl', { control: movementControls[event.code], enabled: true })
-  if (!freecam && /^Digit[1-9]$/.test(event.code)) { selectedSlot = Number(event.code.slice(5)) - 1; socket.emit('botAction', { action: 'hotbar', slot: selectedSlot }) }
+  if (!freecam && movementControls[event.code] && !event.repeat) controlSession.keyDown(movementControls[event.code])
+  if (!freecam && /^Digit[1-9]$/.test(event.code)) { selectedSlot = Number(event.code.slice(5)) - 1; controlSession.action('hotbar', { slot: selectedSlot }) }
 })
 document.addEventListener('keyup', (event) => {
   keys.delete(event.code)
   if (event.code === 'Tab') playerList.hidden = true
-  if (!freecam && movementControls[event.code]) socket.emit('botControl', { control: movementControls[event.code], enabled: false })
+  if (!freecam && movementControls[event.code]) controlSession.keyUp(movementControls[event.code])
 })
-document.addEventListener('pointerlockchange', () => { if (document.pointerLockElement !== renderer.domElement) socket.emit('releaseControls') })
+document.addEventListener('pointerlockchange', () => {
+  const locked = document.pointerLockElement === renderer.domElement
+  if (!locked) keys.clear()
+  controlSession.setPointerLocked(locked)
+})
 document.addEventListener('mousemove', (event) => {
   if (document.pointerLockElement !== renderer.domElement) return
   yaw -= event.movementX * .0022
   pitch = Math.max(-Math.PI / 2 + .01, Math.min(Math.PI / 2 - .01, pitch - event.movementY * .0022))
-  if (!freecam) { botYaw = yaw; botPitch = pitch; socket.emit('botLook', { yaw: botYaw, pitch: botPitch }) }
+  if (!freecam) { botYaw = yaw; botPitch = pitch; controlSession.look(botYaw, botPitch) }
 })
 renderer.domElement.addEventListener('mousedown', (event) => {
   if (freecam || document.pointerLockElement !== renderer.domElement) return
-  if (event.button === 0) socket.emit('botAction', { action: 'attack' })
-  if (event.button === 2) socket.emit('botAction', { action: 'use' })
+  if (event.button === 0) controlSession.action('attack')
+  if (event.button === 2) controlSession.action('use', { enabled: true })
 })
+renderer.domElement.addEventListener('mouseup', (event) => { if (event.button === 2) controlSession.action('use', { enabled: false }) })
 renderer.domElement.addEventListener('contextmenu', (event) => event.preventDefault())
 renderer.domElement.addEventListener('wheel', (event) => {
   if (freecam) return
   selectedSlot = (selectedSlot + (event.deltaY > 0 ? 1 : 8)) % 9
-  socket.emit('botAction', { action: 'hotbar', slot: selectedSlot })
+  controlSession.action('hotbar', { slot: selectedSlot })
 }, { passive: true })
 
-socket.on('connect', () => { status.textContent = 'Live connected' })
-socket.on('disconnect', () => { status.textContent = 'Connection lost' })
+const releaseOnFocusLoss = (reason) => { keys.clear(); controlSession.releaseControl(reason); if (document.pointerLockElement === renderer.domElement) document.exitPointerLock() }
+window.addEventListener('blur', () => releaseOnFocusLoss('window blur'))
+document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'hidden') releaseOnFocusLoss('tab hidden') })
+window.addEventListener('pagehide', () => controlSession.cleanup('page hidden'))
+window.addEventListener('beforeunload', () => controlSession.cleanup('page unloading'))
+
+socket.on('connect', () => { controlSession.setSocketConnected(true); status.textContent = 'Live connected' })
+socket.on('disconnect', () => { keys.clear(); controlSession.setSocketConnected(false); status.textContent = 'Connection lost' })
+socket.on('viewerControlCapabilities', (capabilities) => {
+  if (!capabilities || capabilities.accountId !== accountId) return
+  controlSession.setCapability(capabilities.canControl === true)
+  status.textContent = capabilities.canControl === true ? 'View-only until the POV is maximized and locked' : 'View-only'
+})
+socket.on('viewerControlGranted', (grant) => {
+  if (grant?.accountId !== accountId) return
+  controlSession.setLeaseGranted(true)
+  status.textContent = 'Controls active'
+})
+socket.on('viewerControlDenied', (denial) => {
+  controlSession.serverDenied()
+  status.textContent = `Controls locked: ${denial?.reason || 'not available'}`
+})
+socket.on('viewerControlRevoked', (revocation) => controlSession.serverRevoked(revocation?.reason || 'server revoked control'))
 socket.on('viewerUnavailable', (message) => {
   status.textContent = `${message} \u00b7 retrying \u2026`
   setTimeout(() => { socket.disconnect(); socket.connect() }, 2000)
@@ -281,10 +349,10 @@ function renderMinecraftHud (data) {
 }
 function updateFreecam(delta) {
   if (!freecam) return
-  const speed = (keys.has('ControlLeft') ? 18 : 7) * delta
+  const speed = (keys.has('ControlLeft') || keys.has('ControlRight') ? 18 : 7) * delta
   const forward = (keys.has('KeyW') ? 1 : 0) - (keys.has('KeyS') ? 1 : 0)
   const side = (keys.has('KeyD') ? 1 : 0) - (keys.has('KeyA') ? 1 : 0)
-  const vertical = (keys.has('Space') ? 1 : 0) - (keys.has('ShiftLeft') ? 1 : 0)
+  const vertical = (keys.has('Space') ? 1 : 0) - (keys.has('ShiftLeft') || keys.has('ShiftRight') ? 1 : 0)
   viewer.camera.position.x += (-Math.sin(yaw) * forward + Math.cos(yaw) * side) * speed
   viewer.camera.position.z += (-Math.cos(yaw) * forward - Math.sin(yaw) * side) * speed
   viewer.camera.position.y += vertical * speed

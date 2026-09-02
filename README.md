@@ -15,7 +15,7 @@ RCC is a self-hosted Minecraft Java console client with a private web dashboard,
 - encrypted OAuth cache and dashboard secrets using AES-256-GCM
 - multiple accounts, server profiles and optional HTTP CONNECT proxies
 - connect, chat, movement, inventory and reconnect controls from the browser
-- live textured 3D world viewer with Bot POV, Freecam, HUD, chat and inventory
+- live textured 3D world viewer with Bot POV, Freecam, HUD, chat and inventory; browser bot controls are admin-only and fail closed on focus, visibility, disconnect and world transitions
 - guarded Sell and Spawner automation with previews, schedules and cancellation
 - connection diagnostics, Discord webhooks, TOTP and emergency stop
 - local, Codespaces and container-based operation

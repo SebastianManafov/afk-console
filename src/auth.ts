@@ -3,6 +3,8 @@ import type { IncomingMessage, ServerResponse } from "node:http";
 
 const MAX_AGE_SECONDS = 7 * 24 * 60 * 60;
 
+export type DashboardRole = "admin" | "guest";
+
 export class DashboardAuth {
   private readonly secret: string;
   private readonly password: string;
@@ -23,7 +25,7 @@ export class DashboardAuth {
     return this.safeEqual(value, this.password);
   }
 
-  loginRole(value: string): "admin" | "guest" | null {
+  loginRole(value: string): DashboardRole | null {
     if (this.verifyPassword(value)) return "admin";
     if (this.guestPassword.length >= 8 && this.safeEqual(value, this.guestPassword)) return "guest";
     return null;
@@ -38,7 +40,7 @@ export class DashboardAuth {
     return [-1, 0, 1].some((offset) => this.safeEqual(value, this.totp(counter + offset)));
   }
 
-  setCookie(response: ServerResponse, role: "admin" | "guest" = "admin"): void {
+  setCookie(response: ServerResponse, role: DashboardRole = "admin"): void {
     const expires = Math.floor(Date.now() / 1000) + MAX_AGE_SECONDS;
     const value = `${role}.${expires}.${this.sign(`${role}.${expires}`)}`;
     const secure = process.env.NODE_ENV === "production" ? "; Secure" : "";
@@ -53,7 +55,7 @@ export class DashboardAuth {
     return this.role(request) !== null;
   }
 
-  role(request: IncomingMessage): "admin" | "guest" | null {
+  role(request: IncomingMessage): DashboardRole | null {
     const cookie = request.headers.cookie?.split(";").map((part) => part.trim()).find((part) => part.startsWith("rcc_session="));
     if (!cookie) return null;
     const [role, expires, signature] = cookie.slice("rcc_session=".length).split(".");

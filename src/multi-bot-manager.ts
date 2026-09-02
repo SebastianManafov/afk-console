@@ -8,6 +8,7 @@ import type { AppConfig, BotSnapshot } from "./types.js";
 import type { WebhookNotifier } from "./webhook.js";
 import { selectPrimarySnapshot } from "./snapshot-policy.js";
 import { selectRoutedAccountId } from "./routing-policy.js";
+import type { ViewerControlInput } from "./viewer-control.js";
 
 export class MultiBotManager {
   private readonly bots = new Map<string, BotService>();
@@ -55,6 +56,7 @@ export class MultiBotManager {
       const childEvents = new AppEvents(false);
       childEvents.on("log", (entry) => this.events.log(entry.level, `${this.accountName(account.id)}/${entry.source}`, entry.message));
       childEvents.on("chat", (entry) => this.events.emit("chat", { ...entry, accountId: account.id, accountName: this.accountName(account.id) }));
+      childEvents.on("viewerControlRevoked", (payload) => this.events.emit("viewerControlRevoked", payload));
       childEvents.on("state", () => { this.events.state(this.snapshot()); this.handleQueuedConnectionState(account.id); });
       this.bots.set(account.id, new BotService(this.reader(account.id), childEvents, this.webhook, join(this.dataDir, "accounts", account.id), account.id, proxy));
       this.proxyKeys.set(account.id, proxyKey);
@@ -96,6 +98,19 @@ export class MultiBotManager {
   }
   sendChat(message: string, accountId?: string): void { this.routedBot(accountId).sendChat(message); }
   control(input: Record<string, unknown>, accountId?: string): Promise<void> { return this.routedBot(accountId).control(input); }
+  acquireViewerControl(accountId: string, controllerId: string): void { this.viewerBotService(accountId).acquireViewerControl(accountId, controllerId); }
+  heartbeatViewerControl(accountId: string, controllerId: string): boolean { return this.viewerBotService(accountId).heartbeatViewerControl(accountId, controllerId); }
+  viewerControl(accountId: string, controllerId: string, input: ViewerControlInput): Promise<void> { return this.viewerBotService(accountId).viewerControl(accountId, controllerId, input); }
+  releaseViewerControl(accountId: string, controllerId: string, reason?: string): boolean { return this.viewerBotService(accountId).releaseViewerControl(accountId, controllerId, reason); }
+  onViewerControlRevoked(listener: (payload: { accountId: string; reason: string }) => void): () => void {
+    const handler = (payload: unknown) => {
+      if (!payload || typeof payload !== "object") return;
+      const value = payload as { accountId?: unknown; reason?: unknown };
+      if (typeof value.accountId === "string" && typeof value.reason === "string") listener({ accountId: value.accountId, reason: value.reason });
+    };
+    this.events.on("viewerControlRevoked", handler);
+    return () => this.events.off("viewerControlRevoked", handler);
+  }
   takeOver(accountId?: string): boolean {
     const target = this.routedBot(accountId);
     const stopped = target.sell.cancel() || target.spawner.cancel();
@@ -134,6 +149,12 @@ export class MultiBotManager {
     const snapshots = [...this.bots.values()].map((bot) => bot.snapshot());
     const selectedId = selectRoutedAccountId(snapshots, accountId);
     const bot = this.bots.get(selectedId);
+    if (!bot) throw new Error("Account not found");
+    return bot;
+  }
+
+  private viewerBotService(accountId: string): BotService {
+    const bot = this.bots.get(accountId);
     if (!bot) throw new Error("Account not found");
     return bot;
   }
