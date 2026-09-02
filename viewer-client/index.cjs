@@ -13,7 +13,7 @@ const viewerDiagnostics = { chunks: 0, geometries: 0, emptyGeometries: 0, finish
 function reportViewerState (label, extra = {}) {
   const loadedChunks = Object.keys(viewer.world.loadedChunks || {}).length
   const meshes = Object.keys(viewer.world.sectionMeshs || {}).length
-  console.info('[POV]', label, { ...viewerDiagnostics, loadedChunks, meshes, ...extra })
+  console.info(`[POV] ${label} ${JSON.stringify({ ...viewerDiagnostics, loadedChunks, meshes, ...extra })}`)
 }
 for (const worker of viewer.world.workers || []) {
   const onmessage = worker.onmessage
@@ -52,7 +52,7 @@ viewer.world.addColumn = (x, z, chunk) => {
 }
 const socket = io({ path: '/pov-viewer/socket.io' })
 socket.on('viewerDiagnostics', (data) => {
-  if (data.stage === 'chunk') viewerDiagnostics.chunks = data.loaded || viewerDiagnostics.chunks
+  if (data.stage === 'chunk' || data.stage === 'init') viewerDiagnostics.chunks = data.loaded || viewerDiagnostics.chunks
   if (data.stage === 'error') status.textContent = `POV-Fehler: ${data.message}`
   reportViewerState(`server ${data.stage}`, data)
 })

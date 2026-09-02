@@ -140,7 +140,7 @@ export function startServer(config: ConfigStore, events: AppEvents, bot: MultiBo
         details = `JSON-Fehler ${(error as Error).message}`;
       }
       if (loadedChunkCount <= 3 || loadedChunkCount % 25 === 0) events.log("info", "viewer", `POV-Chunk ${loadedChunkCount} geladen bei ${x},${z}: ${details}`);
-      socket.emit("viewerDiagnostics", { stage: "chunk", loaded: loadedChunkCount, x, z, details });
+      if (loadedChunkCount <= 3 || loadedChunkCount % 25 === 0) socket.emit("viewerDiagnostics", { stage: "chunk", loaded: loadedChunkCount, x, z, details });
       socket.emit("loadChunk", { x, z, chunk });
     });
     viewerEmitter.on("unloadChunk", ({ x, z }: { x: number; z: number }) => {
