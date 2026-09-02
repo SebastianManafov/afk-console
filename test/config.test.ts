@@ -17,8 +17,8 @@ test("Prismarine-Versionen sind auswählbar und 1.21.4 ist der Standard", async 
       assert.equal(store.get().connection.version, version);
       assert.equal(store.get().servers[0]!.version, version);
     }
-    await assert.rejects(() => store.update({ connection: { ...store.get().connection, version: "1.21.8" } }), /Nicht unterstützte Minecraft-Version/);
-    await assert.rejects(() => store.update({ servers: [{ ...store.get().servers[0]!, version: "1.21.8" }] }), /Nicht unterstützte Minecraft-Version/);
+    await assert.rejects(() => store.update({ connection: { ...store.get().connection, version: "1.21.8" } }), /Unsupported Minecraft version/);
+    await assert.rejects(() => store.update({ servers: [{ ...store.get().servers[0]!, version: "1.21.8" }] }), /Unsupported Minecraft version/);
   } finally {
     await rm(directory, { recursive: true, force: true });
   }
@@ -127,15 +127,15 @@ test("Ungültige Account-, Server- und Reconnect-Einstellungen werden abgelehnt"
   const directory = await mkdtemp(join(tmpdir(), "rcc-validation-"));
   try {
     const store = new ConfigStore(directory, "test-encryption-secret-with-32-characters"); const initial = await store.load();
-    await assert.rejects(() => store.update({ accounts: initial.accounts.map((account) => ({ ...account, username: "keine-email" })) }), /Microsoft-E-Mail/);
-    await assert.rejects(() => store.update({ servers: initial.servers.map((server) => ({ ...server, port: 70000 })) }), /Serverport/);
-    await assert.rejects(() => store.update({ accounts: initial.accounts.map((account) => ({ ...account, reconnectDelaysSeconds: [] })) }), /Reconnect-Regeln/);
-    await assert.rejects(() => store.update({ accounts: initial.accounts.map((account) => ({ ...account, sell: { ...initial.sell, confirmSlot: 36 } })) }), /Sell-Slots/);
-    await assert.rejects(() => store.update({ servers: [] }), /Mindestens ein Server/);
-    await assert.rejects(() => store.update({ accounts: [] }), /Mindestens ein Server und Account/);
-    await assert.rejects(() => store.update({ accounts: initial.accounts.map((account) => ({ ...account, proxyId: "fehlt" })) }), /Proxyprofil/);
+    await assert.rejects(() => store.update({ accounts: initial.accounts.map((account) => ({ ...account, username: "keine-email" })) }), /Microsoft email/);
+    await assert.rejects(() => store.update({ servers: initial.servers.map((server) => ({ ...server, port: 70000 })) }), /server port/);
+    await assert.rejects(() => store.update({ accounts: initial.accounts.map((account) => ({ ...account, reconnectDelaysSeconds: [] })) }), /reconnect rules/);
+    await assert.rejects(() => store.update({ accounts: initial.accounts.map((account) => ({ ...account, sell: { ...initial.sell, confirmSlot: 36 } })) }), /sell slots/);
+    await assert.rejects(() => store.update({ servers: [] }), /At least one server/);
+    await assert.rejects(() => store.update({ accounts: [] }), /At least one server and account/);
+    await assert.rejects(() => store.update({ accounts: initial.accounts.map((account) => ({ ...account, proxyId: "fehlt" })) }), /Proxy profile/);
     const duplicateProxy = { id: "doppelt", name: "Proxy", host: "127.0.0.1", port: 8080, username: "", password: "" };
-    await assert.rejects(() => store.update({ proxies: [duplicateProxy, { ...duplicateProxy, name: "Proxy 2" }] }), /Doppelte Profil-ID/);
+    await assert.rejects(() => store.update({ proxies: [duplicateProxy, { ...duplicateProxy, name: "Proxy 2" }] }), /Duplicate profile ID/);
   } finally { await rm(directory, { recursive: true, force: true }); }
 });
 

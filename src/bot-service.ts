@@ -29,7 +29,7 @@ export class BotService {
   private authPromise: Promise<void> | null = null;
   private lastError: string | null = null;
   private serverNotice: BotSnapshot["serverNotice"] = null;
-  private worldTransition: BotSnapshot["worldTransition"] = { state: "stable", startedAt: null, message: "Bereit" };
+  private worldTransition: BotSnapshot["worldTransition"] = { state: "stable", startedAt: null, message: "Ready" };
   private readonly diagnostics: BotSnapshot["diagnostics"] = [];
   private readonly startedAt = Date.now();
   private readonly pulseTimer: NodeJS.Timeout;
@@ -74,12 +74,12 @@ export class BotService {
     this.reconnectTimer = null;
     const connection = this.config.get().connection;
     const username = connection.username.trim();
-    if (!username) throw new Error("Microsoft-Konto ist in Settings nicht konfiguriert");
+    if (!username) throw new Error("Microsoft account is not configured in Settings");
     this.intentionalStop = false;
     this.autoGuiJoinCompleted = false;
     this.autoGuiJoinInFlight = false;
     this.connection = this.reconnectAttempt ? "reconnecting" : "connecting";
-    this.diagnose("connect", "info", `Verbindungsaufbau zu ${connection.host}:${connection.port} gestartet`);
+    this.diagnose("connect", "info", `Connection attempt to ${connection.host}:${connection.port} started`);
     this.publish();
     const profilesFolder = join(this.dataDir, "auth");
     this.tokenVault.restore();
@@ -111,7 +111,7 @@ export class BotService {
           userCode: data.user_code,
           expiresAt: new Date(Date.now() + data.expires_in * 1000).toISOString()
         };
-        this.events.log("info", "auth", `Microsoft-Gerätecode bereit: ${data.user_code}`);
+        this.events.log("info", "auth", `Microsoft device code ready: ${data.user_code}`);
         this.publish();
       }
     };
@@ -159,13 +159,13 @@ export class BotService {
         try {
           const channelClient = bot._client as unknown as { writeChannel(channel: string, value: string): void };
           channelClient.writeChannel("minecraft:brand", "vanilla");
-          this.events.log("info", "protocol", "Vanilla-Clientkennung in der initialen Konfigurationsphase gesendet");
-          this.diagnose("configuration", "info", "Clientkennung minecraft:brand gesendet");
+          this.events.log("info", "protocol", "Vanilla client brand sent during the initial configuration phase");
+          this.diagnose("configuration", "info", "Minecraft client brand sent");
           this.publish();
         } catch (error) {
           const message = error instanceof Error ? error.message : String(error);
-          this.events.log("warn", "protocol", `Clientkennung konnte nicht gesendet werden: ${message}`);
-          this.diagnose("configuration", "warn", `Clientkennung fehlgeschlagen: ${message}`);
+          this.events.log("warn", "protocol", `Client brand could not be sent: ${message}`);
+          this.diagnose("configuration", "warn", `Client brand failed: ${message}`);
         }
       });
     };
@@ -173,8 +173,8 @@ export class BotService {
     bot._client.prependListener("add_resource_pack", (packet: { uuid: unknown; forced?: boolean; hash?: string }) => {
       const offer = { forced: packet.forced === true, hash: packet.hash ?? "" };
       resourcePackOffers.set(String(packet.uuid), offer);
-      this.events.log("info", "protocol", `Resource-Pack-Details: ${offer.forced ? "erzwungen" : "optional"}, Hash ${offer.hash ? "vorhanden" : "fehlt"}`);
-      this.diagnose("resource-pack", "info", `Server-Pack ist ${offer.forced ? "erzwungen" : "optional"}`);
+      this.events.log("info", "protocol", `Resource pack details: ${offer.forced ? "required" : "optional"}, hash ${offer.hash ? "present" : "missing"}`);
+      this.diagnose("resource-pack", "info", `Server pack is ${offer.forced ? "required" : "optional"}`);
     });
     bot._client.on("packet", (data, metadata) => {
       const phase = String(metadata.state ?? "");
@@ -186,51 +186,51 @@ export class BotService {
         const serverKnownPacks = Array.isArray(offered) ? offered : [];
         const compatibleKnownPacks = serverKnownPacks.filter((pack) => pack.version === connection.version);
         const description = serverKnownPacks.map((pack) => `${pack.namespace}:${pack.id}@${pack.version}`).join(", ");
-        this.events.log("info", "protocol", `Server bietet ${serverKnownPacks.length} bekannte Packs an${description ? `: ${description}` : ""}`);
-        this.diagnose("registry", "info", `Server-Angebot: ${description || "keins"}; versionsgleich: ${compatibleKnownPacks.length}`);
+        this.events.log("info", "protocol", `Server offers ${serverKnownPacks.length} known packs${description ? `: ${description}` : ""}`);
+        this.diagnose("registry", "info", `Server offer: ${description || "none"}; matching versions: ${compatibleKnownPacks.length}`);
       }
       const count = (receivedPacketCounts.get(key) ?? 0) + 1;
       receivedPacketCounts.set(key, count);
       if (count > 3 && !["finish_configuration", "login", "respawn", "start_configuration"].includes(name)) return;
-      this.events.log("info", "protocol", `${phase}-Paket empfangen: ${name}`);
+      this.events.log("info", "protocol", `${phase} packet received: ${name}`);
       if (phase === "login" && name === "success") this.acceptedBots.add(bot);
-      if (phase === "configuration" && name === "finish_configuration") this.diagnose("configuration", "ok", "Server hat die Konfigurationsphase abgeschlossen");
-      if (phase === "play") this.diagnose("play", "ok", `Erstes Play-Paket: ${name}`);
+      if (phase === "configuration" && name === "finish_configuration") this.diagnose("configuration", "ok", "Server completed the configuration phase");
+      if (phase === "play") this.diagnose("play", "ok", `First play packet: ${name}`);
       this.publish();
     });
     bot._client.once("session", () => {
-      this.diagnose("microsoft", "ok", "Microsoft- und Minecraft-Sitzung bestätigt");
-      this.events.log("info", "auth", "Microsoft- und Minecraft-Sitzung bestätigt");
+      this.diagnose("microsoft", "ok", "Microsoft and Minecraft session confirmed");
+      this.events.log("info", "auth", "Microsoft and Minecraft session confirmed");
       this.publish();
     });
     bot._client.once("connect", () => {
-      this.diagnose("tcp", "ok", `TCP-Verbindung zu ${connection.host}:${connection.port} hergestellt`);
-      this.events.log("info", "bot", `TCP-Verbindung zu ${connection.host}:${connection.port} hergestellt`);
+      this.diagnose("tcp", "ok", `TCP connection to ${connection.host}:${connection.port} established`);
+      this.events.log("info", "bot", `TCP connection to ${connection.host}:${connection.port} established`);
       this.publish();
     });
     this.protocolCleanup?.();
     let worldSwitchGeneration = 0;
     this.protocolCleanup = installHugoSmpProtocolHandlers(bot._client, {
-      onKnownPacks: (phase) => { this.diagnose("registry", "info", phase === "initial" ? "Initiale Registry wird synchronisiert" : "Registry für Welt-/Serverwechsel wird synchronisiert"); this.events.log("info", "protocol", phase === "initial" ? "Vollständige HugoSMP-Registry angefordert" : "Vollständige Registry für Welt-/Serverwechsel angefordert"); this.publish(); },
+      onKnownPacks: (phase) => { this.diagnose("registry", "info", phase === "initial" ? "Synchronizing initial registry" : "Synchronizing registry for world/server change"); this.events.log("info", "protocol", phase === "initial" ? "Requested full HugoSMP registry" : "Requested full registry for world/server change"); this.publish(); },
       onReconfiguration: () => {
         worldSwitchGeneration += 1;
         this.clearWorldReadyWait();
         this.clearAutoGuiJoinTimer();
         this.clearAutomationTimers();
-        this.worldTransition = { state: "configuring", startedAt: new Date().toISOString(), message: "Registry und Welt werden synchronisiert" };
-        this.diagnose("world-change", "info", "Welt-/Serverwechsel erkannt; Steuerung und Makros pausiert");
+        this.worldTransition = { state: "configuring", startedAt: new Date().toISOString(), message: "Synchronizing registry and world" };
+        this.diagnose("world-change", "info", "World/server change detected; controls and macros paused");
         bot.physicsEnabled = false;
         bot.clearControlStates();
         this.sneak = false;
         this.sell.detach();
         this.spawner.detach();
-        this.events.log("info", "protocol", "Welt-/Serverwechsel erkannt: Bewegung sicher angehalten");
+        this.events.log("info", "protocol", "World/server change detected: movement safely stopped");
         this.publish();
       },
       onReconfigurationFinished: () => {
         this.clearWorldReadyWait();
-        this.worldTransition = { state: "waiting_world", startedAt: this.worldTransition.startedAt ?? new Date().toISOString(), message: "Warte auf die neue Welt" };
-        this.diagnose("world-change", "info", "Konfiguration abgeschlossen; warte auf Spawn/Respawn");
+        this.worldTransition = { state: "waiting_world", startedAt: this.worldTransition.startedAt ?? new Date().toISOString(), message: "Waiting for the new world" };
+        this.diagnose("world-change", "info", "Configuration complete; waiting for spawn/respawn");
         const generation = worldSwitchGeneration;
         let armed = true;
         const cleanupListeners = () => {
@@ -250,12 +250,12 @@ export class BotService {
         bot.once("spawn", worldReady);
         bot.once("respawn", worldReady);
       },
-      onResourcePack: () => { this.diagnose("resource-pack", "info", "Server-Resource-Pack angeboten"); this.events.log("info", "protocol", "HugoSMP-Resource-Pack angeboten"); this.publish(); },
-      onPing: () => { this.events.log("info", "protocol", "HugoSMP-Konfigurations-Ping erkannt"); this.publish(); }
+      onResourcePack: () => { this.diagnose("resource-pack", "info", "Server resource pack offered"); this.events.log("info", "protocol", "HugoSMP resource pack offered"); this.publish(); },
+      onPing: () => { this.events.log("info", "protocol", "HugoSMP configuration ping detected"); this.publish(); }
     });
     this.connectTimer = setTimeout(() => {
       if (this.bot !== bot || this.connection === "online") return;
-      this.lastError = "Verbindungsaufbau nach 90 Sekunden abgebrochen";
+      this.lastError = "Connection attempt aborted after 90 seconds";
       this.diagnose("connect", "error", this.lastError);
       this.events.log("error", "bot", this.lastError);
       try { bot.end("Connection timeout"); }
@@ -269,38 +269,38 @@ export class BotService {
       const offer = resourcePackOffers.get(String(packId));
       if (!offer?.forced) {
         bot._client.write("resource_pack_receive", { uuid: String(packId), result: 1 });
-        this.diagnose("resource-pack", "ok", "Optionales Resource-Pack korrekt abgelehnt; Welt-Handshake wird fortgesetzt");
-        this.events.log("info", "protocol", "Optionales HugoSMP-Resource-Pack mit UUID korrekt abgelehnt");
+        this.diagnose("resource-pack", "ok", "Optional resource pack correctly declined; continuing the world handshake");
+        this.events.log("info", "protocol", "Optional HugoSMP resource pack with UUID correctly declined");
         this.publish();
         return;
       }
       try {
         bot._client.write("resource_pack_receive", { uuid: String(packId), result: 3 });
-        this.diagnose("resource-pack", "info", "Resource-Pack akzeptiert; Download gestartet");
-        this.events.log("info", "protocol", "HugoSMP-Resource-Pack akzeptiert");
+        this.diagnose("resource-pack", "info", "Resource pack accepted; download started");
+        this.events.log("info", "protocol", "HugoSMP resource pack accepted");
         const response = await fetch(url, { signal: AbortSignal.timeout(120_000) });
         if (!response.ok) throw new Error(`Download HTTP ${response.status}`);
         const length = Number(response.headers.get("content-length") ?? 0);
-        if (length > 256 * 1024 * 1024) throw new Error("Resource-Pack ist größer als 256 MB");
+        if (length > 256 * 1024 * 1024) throw new Error("Resource pack is larger than 256 MB");
         const bytes = await response.arrayBuffer();
         await new Promise((resolve) => setTimeout(resolve, 5_000));
         if (this.bot !== bot) return;
         const downloadedHash = createHash("sha1").update(Buffer.from(bytes)).digest("hex");
         if (offer.hash && downloadedHash.toLowerCase() !== offer.hash.toLowerCase()) {
-          throw new Error("Resource-Pack-Hash stimmt nicht mit dem Server-Angebot überein");
+          throw new Error("Resource pack hash does not match the server offer");
         }
         bot._client.write("resource_pack_receive", { uuid: String(packId), result: 4 });
-        this.diagnose("resource-pack", "info", `Resource-Pack heruntergeladen (${Math.round(bytes.byteLength / 1024)} KB); SHA-1 bestätigt`);
-        this.events.log("info", "protocol", "HugoSMP-Resource-Pack als heruntergeladen gemeldet");
+        this.diagnose("resource-pack", "info", `Resource pack downloaded (${Math.round(bytes.byteLength / 1024)} KB); SHA-1 confirmed`);
+        this.events.log("info", "protocol", "HugoSMP resource pack reported as downloaded");
         if (this.bot !== bot) return;
         bot._client.write("resource_pack_receive", { uuid: String(packId), result: 0 });
-        this.diagnose("resource-pack", "ok", "Resource-Pack erfolgreich geladen");
-        this.events.log("info", "protocol", "HugoSMP-Resource-Pack als geladen bestätigt");
+        this.diagnose("resource-pack", "ok", "Resource pack loaded successfully");
+        this.events.log("info", "protocol", "HugoSMP resource pack confirmed as loaded");
       } catch (error) {
         if (this.bot === bot) bot._client.write("resource_pack_receive", { uuid: String(packId), result: 2 });
         const message = error instanceof Error ? error.message : String(error);
-        this.diagnose("resource-pack", "error", `Resource-Pack fehlgeschlagen: ${message}`);
-        this.events.log("warn", "protocol", `Resource-Pack konnte nicht geladen werden: ${message}`);
+        this.diagnose("resource-pack", "error", `Resource pack failed: ${message}`);
+        this.events.log("warn", "protocol", `Resource pack could not be loaded: ${message}`);
       }
       this.publish();
     });
@@ -308,7 +308,7 @@ export class BotService {
     bot.once("spawn", () => {
       this.clearConnectTimer();
       this.connection = "online";
-      this.worldTransition = { state: "waiting_world", startedAt: new Date().toISOString(), message: "Welt wird stabilisiert" };
+      this.worldTransition = { state: "waiting_world", startedAt: new Date().toISOString(), message: "Stabilizing world" };
       this.joinedAt = new Date().toISOString();
       this.reconnectAttempt = 0;
       this.reconnectAt = null;
@@ -316,14 +316,14 @@ export class BotService {
       this.authPending = false;
       this.lastError = null;
       this.serverNotice = null;
-      this.diagnose("spawn", "info", `Spawn von ${connection.host} empfangen; Sicherheitsphase läuft`);
+      this.diagnose("spawn", "info", `Spawn received from ${connection.host}; safety phase in progress`);
       this.publish();
       this.clearWorldReadyWait();
       this.worldReadyTimer = setTimeout(() => {
         this.worldReadyTimer = null;
         if (this.bot !== bot || this.connection !== "online" || this.worldTransition.state !== "waiting_world") return;
         if (!this.isPlayReady()) {
-          this.lastError = "Minecraft-Play-State wurde nach dem Spawn nicht stabil";
+          this.lastError = "Minecraft play state did not stabilize after spawn";
           this.diagnose("spawn", "error", this.lastError);
           this.events.log("error", "bot", this.lastError);
           bot.end("World state timeout");
@@ -332,11 +332,11 @@ export class BotService {
         this.sell.attach(bot);
         this.spawner.attach(bot);
         bot.physicsEnabled = true;
-        this.worldTransition = { state: "stable", startedAt: null, message: "Welt bereit" };
+        this.worldTransition = { state: "stable", startedAt: null, message: "World ready" };
         this.setSneak(true);
-        this.diagnose("spawn", "ok", `Mit ${connection.host} verbunden und Welt stabil`);
-        this.events.log("info", "bot", `Mit ${connection.host} verbunden`);
-        void this.webhook.send("connect", "Bot verbunden", `**${bot.username}** ist HugoSMP beigetreten.`);
+      this.diagnose("spawn", "ok", `Connected to ${connection.host}; world is stable`);
+      this.events.log("info", "bot", `Connected to ${connection.host}`);
+      void this.webhook.send("connect", "Bot connected", `**${bot.username}** joined HugoSMP.`);
         if (bot.currentWindow) this.handleAutoGuiJoin(bot, bot.currentWindow);
         this.activateAutomations("join");
         this.publish();
@@ -347,11 +347,11 @@ export class BotService {
       this.events.emit("chat", { at: new Date().toISOString(), message });
       if (/welt wird in\s+\d+\s+sekunden.*neugestartet/i.test(message)) {
         this.scheduledReconnectDelayMs = 180_000;
-        this.worldTransition = { state: "configuring", startedAt: new Date().toISOString(), message: "Weltneustart erkannt; Reconnect in 3 Minuten" };
+        this.worldTransition = { state: "configuring", startedAt: new Date().toISOString(), message: "World restart detected; reconnecting in 3 minutes" };
         this.clearAutomationTimers();
         bot.physicsEnabled = false;
         bot.clearControlStates();
-        try { bot.end("Weltneustart erkannt"); } catch { this.handleEnd(bot, "Weltneustart erkannt"); }
+        try { bot.end("World restart detected"); } catch { this.handleEnd(bot, "World restart detected"); }
       }
     });
     bot.on("windowOpen", (window) => {
@@ -368,13 +368,13 @@ export class BotService {
       if (this.worldTransition.state === "stable") {
         this.clearAutoGuiJoinTimer();
         this.clearAutomationTimers();
-        this.worldTransition = { state: "waiting_world", startedAt: new Date().toISOString(), message: "Respawn wird stabilisiert" };
+        this.worldTransition = { state: "waiting_world", startedAt: new Date().toISOString(), message: "Stabilizing respawn" };
         bot.physicsEnabled = false;
         bot.clearControlStates();
         this.sneak = false;
         this.sell.detach();
         this.spawner.detach();
-        this.diagnose("world-change", "info", "Respawn-/Dimensionswechsel erkannt; Steuerung und Makros pausiert");
+      this.diagnose("world-change", "info", "Respawn/dimension change detected; controls and macros paused");
         this.publish();
         this.waitForWorldStability(bot);
       }
@@ -386,21 +386,21 @@ export class BotService {
       const normalized = message.toLowerCase();
       if (/wartung|maintenance/.test(normalized)) this.serverNotice = { type: "maintenance", message, detectedAt: new Date().toISOString() };
       else if (/restart|reboot|neustart|server.*start/.test(normalized)) this.serverNotice = { type: "restart", message, detectedAt: new Date().toISOString() };
-      if (this.serverNotice) this.events.log("warn", "monitor", `${this.serverNotice.type === "restart" ? "Serverneustart" : "Wartung"} erkannt`);
-      this.events.log("warn", "bot", `Gekickt: ${message}`);
-      void this.webhook.send("kick", "Bot gekickt", message);
+    if (this.serverNotice) this.events.log("warn", "monitor", `${this.serverNotice.type === "restart" ? "Server restart" : "Maintenance"} detected`);
+    this.events.log("warn", "bot", `Kicked: ${message}`);
+    void this.webhook.send("kick", "Bot kicked", message);
     });
     bot.on("error", (error) => { this.lastError = error.message; this.diagnose("connection", "error", error.message); this.events.log("error", "bot", error.message); this.publish(); });
     bot.once("end", (reason) => this.handleEnd(bot, reason));
   }
 
   authenticate(): void {
-    if (this.connection === "online") throw new Error("Account ist bereits verbunden und angemeldet");
-    if (this.authPromise || this.authPending) throw new Error("Microsoft-Anmeldung läuft bereits");
+    if (this.connection === "online") throw new Error("Account is already connected and authenticated");
+    if (this.authPromise || this.authPending) throw new Error("Microsoft authentication is already in progress");
     const username = this.config.get().connection.username.trim();
-    if (!username) throw new Error("Microsoft-Konto ist in Settings nicht konfiguriert");
+    if (!username) throw new Error("Microsoft account is not configured in Settings");
     if (this.tokenVault.hasTokens()) {
-      this.events.log("info", "auth", "Microsoft-Anmeldung ist bereits gespeichert");
+      this.events.log("info", "auth", "Microsoft authentication is already saved");
       this.publish();
       return;
     }
@@ -411,7 +411,7 @@ export class BotService {
     this.authPending = true;
     this.authCode = null;
     this.lastError = null;
-    this.events.log("info", "auth", `Microsoft-Anmeldung für ${username} gestartet`);
+    this.events.log("info", "auth", `Microsoft authentication started for ${username}`);
     this.publish();
 
     const flow = new Authflow(username, profilesFolder, {
@@ -424,17 +424,17 @@ export class BotService {
         userCode: data.user_code,
         expiresAt: new Date(Date.now() + data.expires_in * 1000).toISOString()
       };
-      this.events.log("info", "auth", `Microsoft-Gerätecode bereit: ${data.user_code}`);
+      this.events.log("info", "auth", `Microsoft device code ready: ${data.user_code}`);
       this.publish();
     });
 
     this.authPromise = flow.getMinecraftJavaToken({ fetchProfile: true, fetchCertificates: true })
       .then(({ profile }) => {
-        if (!profile?.name) throw new Error("Microsoft-Konto besitzt kein verfügbares Minecraft-Java-Profil");
+        if (!profile?.name) throw new Error("Microsoft account has no available Minecraft Java profile");
         this.authPending = false;
         this.authCode = null;
         this.lastError = null;
-        this.events.log("info", "auth", `Microsoft-Anmeldung erfolgreich: ${profile.name}`);
+      this.events.log("info", "auth", `Microsoft authentication successful: ${profile.name}`);
         this.tokenVault.seal();
         this.publish();
       })
@@ -442,7 +442,7 @@ export class BotService {
         this.authPending = false;
         this.authCode = null;
         this.lastError = error instanceof Error ? error.message : String(error);
-        this.events.log("error", "auth", `Microsoft-Anmeldung fehlgeschlagen: ${this.lastError}`);
+        this.events.log("error", "auth", `Microsoft authentication failed: ${this.lastError}`);
         this.tokenVault.seal();
         this.publish();
       })
@@ -464,9 +464,9 @@ export class BotService {
     this.sell.detach();
     this.spawner.detach();
     if (bot) {
-      try { bot.quit("Dashboard stop"); } catch { /* Socket ist bereits geschlossen. */ }
-      this.events.log("info", "bot", "Verbindung über Dashboard beendet");
-      void this.webhook.send("disconnect", "Bot getrennt", `**${bot.username || this.config.get().connection.username}** wurde über das Dashboard getrennt.`);
+      try { bot.quit("Dashboard stop"); } catch { /* Socket is already closed. */ }
+      this.events.log("info", "bot", "Connection stopped from the dashboard");
+      void this.webhook.send("disconnect", "Bot disconnected", `**${bot.username || this.config.get().connection.username}** was disconnected from the dashboard.`);
     }
     this.connection = "offline";
     this.reconnectAt = null;
@@ -494,20 +494,20 @@ export class BotService {
   }
 
   sendChat(message: string): void {
-    if (!this.isPlayReady()) throw new Error(this.connection === "online" ? "Weltwechsel läuft – Chat ist kurz pausiert" : "Bot ist nicht online");
+    if (!this.isPlayReady()) throw new Error(this.connection === "online" ? "World change in progress – chat is temporarily paused" : "Bot is not online");
     const controlLock = this.currentControlLock();
-    if (controlLock.locked) throw new Error(`Chat gesperrt: ${controlLock.reason}`);
+    if (controlLock.locked) throw new Error(`Chat locked: ${controlLock.reason}`);
     const bot = this.bot!;
     const trimmed = message.trim();
-    if (!trimmed) throw new Error("Nachricht ist leer");
-    if (trimmed.length > 256) throw new Error(`Nachricht ist zu lang (${trimmed.length}/256 Zeichen)`);
+    if (!trimmed) throw new Error("Message is empty");
+    if (trimmed.length > 256) throw new Error(`Message is too long (${trimmed.length}/256 characters)`);
     bot.chat(trimmed);
   }
 
   async control(input: Record<string, unknown>): Promise<void> {
-    if (!this.isPlayReady()) throw new Error(this.connection === "online" ? "Weltwechsel läuft – Steuerung ist kurz pausiert" : "Bot ist nicht online");
+    if (!this.isPlayReady()) throw new Error(this.connection === "online" ? "World change in progress – controls are temporarily paused" : "Bot is not online");
     const controlLock = this.currentControlLock();
-    if (controlLock.locked) throw new Error(`Manuelle Steuerung gesperrt: ${controlLock.reason}`);
+    if (controlLock.locked) throw new Error(`Manual controls locked: ${controlLock.reason}`);
     const bot = this.bot!;
     const action = String(input.action ?? "");
     this.manualControlActive = true;
@@ -515,9 +515,9 @@ export class BotService {
     try {
       if (action === "move") {
         const direction = String(input.direction ?? "forward");
-        if (!["forward", "back", "left", "right"].includes(direction)) throw new Error("Ungültige Bewegungsrichtung");
+        if (!["forward", "back", "left", "right"].includes(direction)) throw new Error("Invalid movement direction");
         const requestedBlocks = Number(input.blocks ?? 1);
-        if (!Number.isFinite(requestedBlocks)) throw new Error("Ungültige Bewegungsdistanz");
+        if (!Number.isFinite(requestedBlocks)) throw new Error("Invalid movement distance");
         const blocks = Math.max(1, Math.min(20, requestedBlocks));
         bot.setControlState(direction as "forward" | "back" | "left" | "right", true);
         await new Promise((resolve) => setTimeout(resolve, blocks * 300));
@@ -529,7 +529,7 @@ export class BotService {
       } else if (action === "look") {
         const yawDegrees = Number(input.yaw ?? 0);
         const pitchDegrees = Number(input.pitch ?? 0);
-        if (!Number.isFinite(yawDegrees) || !Number.isFinite(pitchDegrees)) throw new Error("Ungültiger Blickwinkel");
+        if (!Number.isFinite(yawDegrees) || !Number.isFinite(pitchDegrees)) throw new Error("Invalid view angle");
         const yaw = Math.max(-180, Math.min(180, yawDegrees)) * Math.PI / 180;
         const pitch = Math.max(-90, Math.min(90, pitchDegrees)) * Math.PI / 180;
         await bot.look(yaw, pitch, true);
@@ -541,25 +541,25 @@ export class BotService {
         if (this.bot === bot && this.isPlayReady()) bot.deactivateItem();
         } else if (action === "hotbar") {
         const requestedSlot = Number(input.slot ?? 0);
-        if (!Number.isInteger(requestedSlot)) throw new Error("Ungültiger Hotbar-Slot");
+        if (!Number.isInteger(requestedSlot)) throw new Error("Invalid hotbar slot");
           bot.setQuickBarSlot(Math.max(0, Math.min(8, requestedSlot)));
         } else if (action === "inventoryClick") {
           const slot = Number(input.slot);
-          if (!Number.isInteger(slot) || slot < 0 || slot > 89) throw new Error("Ungültiger Inventar-Slot");
+          if (!Number.isInteger(slot) || slot < 0 || slot > 89) throw new Error("Invalid inventory slot");
           const button = String(input.mouseButton ?? "left") === "right" ? 1 : 0;
           await bot.clickWindow(slot, button, this.readBoolean(input.shift) ? 1 : 0);
         } else if (action === "dropSlot") {
           const slot = Number(input.slot);
-          if (!Number.isInteger(slot) || slot < 0 || slot > 89) throw new Error("Ungültiger Inventar-Slot");
+          if (!Number.isInteger(slot) || slot < 0 || slot > 89) throw new Error("Invalid inventory slot");
           const item = bot.currentWindow?.slots[slot] ?? bot.inventory.slots[slot];
-          if (!item) throw new Error("Dieser Slot ist leer");
+          if (!item) throw new Error("This slot is empty");
           if (this.readBoolean(input.stack)) await bot.tossStack(item);
           else await bot.toss(item.type, item.metadata ?? 0, 1);
         } else if (action === "offhand") {
           const slot = Number(input.slot);
-          if (!Number.isInteger(slot) || slot < 0 || slot > 89) throw new Error("Ungültiger Inventar-Slot");
+          if (!Number.isInteger(slot) || slot < 0 || slot > 89) throw new Error("Invalid inventory slot");
           const item = bot.currentWindow?.slots[slot] ?? bot.inventory.slots[slot];
-          if (!item) throw new Error("Dieser Slot ist leer");
+          if (!item) throw new Error("This slot is empty");
           await bot.equip(item, "off-hand");
         } else if (action === "closeWindow") {
         if (bot.currentWindow) bot.closeWindow(bot.currentWindow);
@@ -664,10 +664,10 @@ export class BotService {
     const authenticationIncomplete = this.authPending && !this.tokenVault.hasTokens();
     this.authCode = null;
     this.authPending = false;
-    this.events.log("warn", "bot", `Verbindung beendet: ${reason}`);
-    this.diagnose("disconnect", this.intentionalStop ? "info" : "warn", `Verbindung beendet: ${reason}`);
+    this.events.log("warn", "bot", `Connection ended: ${reason}`);
+    this.diagnose("disconnect", this.intentionalStop ? "info" : "warn", `Connection ended: ${reason}`);
     this.tokenVault.seal();
-    void this.webhook.send("disconnect", "Bot getrennt", `**${username}** wurde getrennt: ${reason}`);
+    void this.webhook.send("disconnect", "Bot disconnected", `**${username}** was disconnected: ${reason}`);
     if (!this.intentionalStop && !authenticationIncomplete) {
       const lastError = this.lastError ?? "";
       const proxySessionBlocked = /bereits.*(?:server|hugosmp)|already.*(?:server|online)|server nicht wechseln|cannot.*switch.*server/i.test(lastError);
@@ -675,7 +675,7 @@ export class BotService {
       this.scheduleReconnect(this.scheduledReconnectDelayMs ?? (proxySessionBlocked ? 5_000 : rateLimited ? 60_000 : reachedServerLogin ? 60_000 : 0));
       this.scheduledReconnectDelayMs = null;
     }
-    else if (authenticationIncomplete) this.events.log("warn", "auth", "Microsoft-Anmeldung wurde nicht abgeschlossen. Bitte einen neuen Code anfordern.");
+    else if (authenticationIncomplete) this.events.log("warn", "auth", "Microsoft authentication was not completed. Request a new code.");
     this.publish();
   }
 
@@ -688,7 +688,7 @@ export class BotService {
     this.connection = "reconnecting";
     this.reconnectAt = new Date(Date.now() + delay).toISOString();
     this.events.log("info", "bot", `Reconnect ${this.reconnectAttempt} in ${delay / 1000}s`);
-    this.diagnose("reconnect", "info", `Versuch ${this.reconnectAttempt} in ${delay / 1000}s geplant`);
+    this.diagnose("reconnect", "info", `Attempt ${this.reconnectAttempt} scheduled in ${delay / 1000}s`);
     this.reconnectTimer = setTimeout(() => this.connectSafely("Automatischer Reconnect"), delay);
   }
 
@@ -699,7 +699,7 @@ export class BotService {
       this.connection = "offline";
       this.reconnectAt = null;
       this.lastError = error instanceof Error ? error.message : String(error);
-      this.events.log("error", "bot", `${source} fehlgeschlagen: ${this.lastError}`);
+      this.events.log("error", "bot", `${source} failed: ${this.lastError}`);
       this.publish();
     }
   }
@@ -742,23 +742,23 @@ export class BotService {
     const availableSlots = window.slots.slice(0, window.inventoryStart).flatMap((item, slot) => item ? [slot] : []);
     const decision = decideAutoGuiJoin(title, availableSlots, connection);
     if (!decision.allowed) {
-      if (connection.autoGuiJoinEnabled && title.toLocaleLowerCase("de-DE").includes(connection.autoGuiJoinTitleIncludes.trim().toLocaleLowerCase("de-DE"))) {
-        this.diagnose("auto-gui-join", "warn", `${decision.reason}; kein Klick ausgeführt`);
+      if (connection.autoGuiJoinEnabled && title.toLocaleLowerCase("en-US").includes(connection.autoGuiJoinTitleIncludes.trim().toLocaleLowerCase("en-US"))) {
+        this.diagnose("auto-gui-join", "warn", `${decision.reason}; no click performed`);
       }
       return;
     }
     const controlLock = this.currentControlLock();
     if (controlLock.locked) {
-      this.diagnose("auto-gui-join", "warn", `Kein Klick: ${controlLock.reason}`);
+      this.diagnose("auto-gui-join", "warn", `No click: ${controlLock.reason}`);
       return;
     }
     const scheduledConfig = { ...connection };
     const delay = connection.autoGuiJoinDelayMs;
-    this.diagnose("auto-gui-join", "info", `Passendes Fenster „${title}“ erkannt; Slot ${connection.autoGuiJoinSlot} in ${delay} ms`);
+    this.diagnose("auto-gui-join", "info", `Matching window "${title}" detected; slot ${connection.autoGuiJoinSlot} in ${delay} ms`);
     this.autoGuiJoinTimer = setTimeout(() => {
       this.autoGuiJoinTimer = null;
       if (this.bot !== bot || bot.currentWindow !== window || !this.isPlayReady()) {
-        this.diagnose("auto-gui-join", "info", "Fenster vor dem Klick geschlossen oder Verbindung nicht mehr bereit");
+        this.diagnose("auto-gui-join", "info", "Window closed before the click or connection is no longer ready");
         this.publish();
         return;
       }
@@ -767,8 +767,8 @@ export class BotService {
       const currentDecision = decideAutoGuiJoin(readableMinecraftReason(window.title), currentSlots, currentConnection);
       const currentLock = this.currentControlLock();
       if (!sameAutoGuiJoinConfig(currentConnection, scheduledConfig) || !currentDecision.allowed || currentLock.locked) {
-        const reason = !sameAutoGuiJoinConfig(currentConnection, scheduledConfig) ? "Konfiguration wurde geändert" : currentLock.locked ? currentLock.reason : currentDecision.reason;
-        this.diagnose("auto-gui-join", "warn", `${reason}; geplanter Klick verworfen`);
+        const reason = !sameAutoGuiJoinConfig(currentConnection, scheduledConfig) ? "Configuration changed" : currentLock.locked ? currentLock.reason : currentDecision.reason;
+        this.diagnose("auto-gui-join", "warn", `${reason}; scheduled click discarded`);
         this.publish();
         return;
       }
@@ -776,8 +776,8 @@ export class BotService {
       void bot.clickWindow(currentConnection.autoGuiJoinSlot, 0, 0).then(() => {
         if (this.bot !== bot) return;
         this.autoGuiJoinCompleted = true;
-        this.diagnose("auto-gui-join", "ok", `Slot ${currentConnection.autoGuiJoinSlot} geklickt`);
-        this.events.log("info", "gui", `Auto-GUI-Join: Slot ${currentConnection.autoGuiJoinSlot} geklickt`);
+        this.diagnose("auto-gui-join", "ok", `Clicked slot ${currentConnection.autoGuiJoinSlot}`);
+        this.events.log("info", "gui", `Auto-GUI join: clicked slot ${currentConnection.autoGuiJoinSlot}`);
       }).catch((error: unknown) => {
         if (this.bot !== bot) return;
         this.diagnose("auto-gui-join", "error", error instanceof Error ? error.message : String(error));
@@ -812,10 +812,10 @@ export class BotService {
         this.sell.attach(bot);
         this.spawner.attach(bot);
         bot.physicsEnabled = true;
-        this.worldTransition = { state: "stable", startedAt: null, message: "Welt bereit" };
+        this.worldTransition = { state: "stable", startedAt: null, message: "World ready" };
         this.setSneak(true);
-        this.diagnose("world-change", "ok", "Neue Welt ist stabil; Steuerung und Makros freigegeben");
-        this.events.log("info", "protocol", "Welt-/Serverwechsel abgeschlossen: Bewegung wieder aktiviert");
+        this.diagnose("world-change", "ok", "New world is stable; controls and macros enabled");
+        this.events.log("info", "protocol", "World/server change complete: movement enabled again");
         if (bot.currentWindow) this.handleAutoGuiJoin(bot, bot.currentWindow);
         this.activateAutomations("worldChange");
         this.publish();
@@ -823,8 +823,8 @@ export class BotService {
       }
       if (!delayedWarningReported && Date.now() - startedAt >= 20_000) {
         delayedWarningReported = true;
-        this.diagnose("world-change", "warn", "Neue Welt benötigt länger als 20 Sekunden; Verbindung bleibt bestehen und Automationen bleiben pausiert");
-        this.events.log("warn", "protocol", "Weltwechsel dauert länger; Client wartet weiter, ohne sich auszuloggen");
+        this.diagnose("world-change", "warn", "New world is taking longer than 20 seconds; connection remains active and automation stays paused");
+        this.events.log("warn", "protocol", "World change is taking longer; client continues waiting without logging out");
         this.publish();
       }
       this.worldReadyTimer = setTimeout(check, 500);
@@ -844,7 +844,7 @@ export class BotService {
     const command = event === "join" ? cfg.joinCommand : cfg.worldChangeCommand;
     if (command.trim()) {
       this.bot.chat(command.trim());
-      this.events.log("info", "automation", `${event === "join" ? "Join" : "World-Change"}-Befehl gesendet`);
+      this.events.log("info", "automation", `${event === "join" ? "Join" : "World-change"} command sent`);
     }
     this.clearAutomationTimers();
     this.scheduleAntiAfk();
@@ -859,7 +859,7 @@ export class BotService {
       this.antiAfkTimer = null;
       if (this.bot && this.isPlayReady() && !this.currentControlLock().locked) {
         this.bot.swingArm("right");
-        this.events.log("info", "anti-afk", "Zufällige Aktivität ausgeführt");
+        this.events.log("info", "anti-afk", "Random activity performed");
       }
       this.scheduleAntiAfk();
     }, Math.round(seconds * 1000));
@@ -873,7 +873,7 @@ export class BotService {
       this.spamTimer = null;
       if (this.bot && this.isPlayReady() && !this.currentControlLock().locked) {
         this.bot.chat(cfg.spamMessage.trim());
-        this.events.log("info", "chat-timer", "Geplante Nachricht gesendet");
+        this.events.log("info", "chat-timer", "Scheduled message sent");
       }
       this.scheduleSpam();
     }, cfg.spamIntervalSeconds * 1000);
@@ -888,7 +888,7 @@ export class BotService {
   }
 
   private readBoolean(value: unknown): boolean {
-    if (typeof value !== "boolean") throw new Error("Ungültiger Schalterwert");
+    if (typeof value !== "boolean") throw new Error("Invalid switch value");
     return value;
   }
 

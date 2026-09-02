@@ -88,10 +88,10 @@ export class MultiBotManager {
   }
   login(accountId: string): void {
     this.sync(); const account = this.config.get().accounts.find((item) => item.id === accountId); const bot = this.bots.get(accountId);
-    if (!account || !bot) throw new Error("Account nicht gefunden");
-    if (account.paused) throw new Error("Account ist pausiert. Bitte zuerst fortsetzen");
-    if (!account.username.trim()) throw new Error("Bitte zuerst die Microsoft-E-Mail-Adresse beim Account eintragen");
-    if (["connecting", "reconnecting"].includes(bot.snapshot().connection)) throw new Error("Verbindungsaufbau läuft bereits");
+    if (!account || !bot) throw new Error("Account not found");
+    if (account.paused) throw new Error("Account is paused. Resume it first");
+    if (!account.username.trim()) throw new Error("Enter the Microsoft email address for this account first");
+    if (["connecting", "reconnecting"].includes(bot.snapshot().connection)) throw new Error("Connection attempt is already running");
     bot.authenticate();
   }
   sendChat(message: string, accountId?: string): void { this.routedBot(accountId).sendChat(message); }
@@ -99,7 +99,7 @@ export class MultiBotManager {
   takeOver(accountId?: string): boolean {
     const target = this.routedBot(accountId);
     const stopped = target.sell.cancel() || target.spawner.cancel();
-    if (!stopped) throw new Error("Für diesen Account läuft kein Makro");
+    if (!stopped) throw new Error("No macro is running for this account");
     return true;
   }
   runSell(accountIds?: string[]): void { this.runMacro("sell", accountIds); }
@@ -108,13 +108,13 @@ export class MultiBotManager {
 
   async logout(accountId: string): Promise<void> {
     const account = this.config.get().accounts.find((item) => item.id === accountId);
-    if (!account) throw new Error("Account nicht gefunden");
+    if (!account) throw new Error("Account not found");
     this.bots.get(accountId)?.stop();
     const accountsRoot = resolve(this.dataDir, "accounts");
     const authDirectory = resolve(accountsRoot, accountId, "auth");
-    if (!authDirectory.startsWith(`${accountsRoot}\\`) && !authDirectory.startsWith(`${accountsRoot}/`)) throw new Error("Ungültiger Accountpfad");
+    if (!authDirectory.startsWith(`${accountsRoot}\\`) && !authDirectory.startsWith(`${accountsRoot}/`)) throw new Error("Invalid account path");
     await rm(authDirectory, { recursive: true, force: true });
-    this.events.log("info", "auth", `Microsoft-Anmeldung für ${account.name} entfernt`);
+    this.events.log("info", "auth", `Microsoft authentication removed for ${account.name}`);
     this.events.state(this.snapshot());
   }
 
@@ -127,14 +127,14 @@ export class MultiBotManager {
 
   private primary(): BotService {
     const bot = this.bots.values().next().value as BotService | undefined;
-    if (!bot) throw new Error("Kein Account konfiguriert");
+    if (!bot) throw new Error("No account configured");
     return bot;
   }
   private routedBot(accountId?: string): BotService {
     const snapshots = [...this.bots.values()].map((bot) => bot.snapshot());
     const selectedId = selectRoutedAccountId(snapshots, accountId);
     const bot = this.bots.get(selectedId);
-    if (!bot) throw new Error("Account nicht gefunden");
+    if (!bot) throw new Error("Account not found");
     return bot;
   }
 
@@ -144,7 +144,7 @@ export class MultiBotManager {
     const status = this.bots.get(accountId)?.snapshot().connection;
     if (!reconnect && status !== "offline") return;
     this.connectionQueue.push({ accountId, reconnect });
-    this.events.log("info", "queue", `Account ${accountId} zur Verbindungswarteschlange hinzugefügt`);
+    this.events.log("info", "queue", `Account ${accountId} added to the connection queue`);
   }
 
   private assertNoDuplicateDirectProfile(accountId: string): void {
@@ -158,7 +158,7 @@ export class MultiBotManager {
       const other = root.accounts.find((account) => account.id === otherId);
       if (!other || other.proxyId || other.serverId === requested.serverId) continue;
       const otherServer = root.servers.find((server) => server.id === other.serverId);
-      if (otherServer?.host === requestedServer.host && otherServer.port === requestedServer.port) throw new Error(`Doppelte Direktverbindung blockiert: ${requestedServer.host}:${requestedServer.port} läuft bereits über ein anderes Serverprofil`);
+      if (otherServer?.host === requestedServer.host && otherServer.port === requestedServer.port) throw new Error(`Duplicate direct connection blocked: ${requestedServer.host}:${requestedServer.port} is already used by another server profile`);
     }
   }
 
@@ -173,7 +173,7 @@ export class MultiBotManager {
       if (next.reconnect) bot.reconnect();
       else bot.connect();
     } catch (error) {
-      this.events.log("error", "queue", `Verbindung für ${next.accountId} fehlgeschlagen: ${error instanceof Error ? error.message : String(error)}`);
+      this.events.log("error", "queue", `Connection for ${next.accountId} failed: ${error instanceof Error ? error.message : String(error)}`);
       this.activeConnection = null;
       this.scheduleQueuePump();
     }
@@ -201,10 +201,10 @@ export class MultiBotManager {
   private runMacro(kind: "sell" | "spawner", accountIds?: string[]): void {
     const selected = accountIds === undefined ? null : new Set(accountIds);
     const online = [...this.bots.entries()].filter(([id, bot]) => (!selected || selected.has(id)) && bot.snapshot().connection === "online");
-    if (!online.length) throw new Error("Kein ausgewählter Account ist online");
+    if (!online.length) throw new Error("No selected account is online");
     const targets = online.filter(([, bot]) => !bot.snapshot().controlLock.locked);
-    if (!targets.length) throw new Error(`Makro gesperrt: ${online[0]![1].snapshot().controlLock.reason ?? "Account ist beschäftigt"}`);
-    for (const [id, bot] of online) if (bot.snapshot().controlLock.locked) this.events.log("warn", "macro", `${this.accountName(id)} übersprungen: ${bot.snapshot().controlLock.reason}`);
+    if (!targets.length) throw new Error(`Macro locked: ${online[0]![1].snapshot().controlLock.reason ?? "Account is busy"}`);
+    for (const [id, bot] of online) if (bot.snapshot().controlLock.locked) this.events.log("warn", "macro", `${this.accountName(id)} skipped: ${bot.snapshot().controlLock.reason}`);
     for (const [, bot] of targets) void bot[kind].runNow();
   }
 

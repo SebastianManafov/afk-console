@@ -5,7 +5,7 @@ import type { MacroRuntime, MacroStatus } from "./types.js";
 export type BotWindow = NonNullable<Bot["currentWindow"]>;
 
 export class MacroCancelledError extends Error {
-  constructor() { super("Makro wurde für die manuelle Übernahme beendet"); this.name = "MacroCancelledError"; }
+  constructor() { super("Macro ended for manual takeover"); this.name = "MacroCancelledError"; }
 }
 
 export abstract class MacroBase {
@@ -46,7 +46,7 @@ export abstract class MacroBase {
     this.cancellation += 1;
     this.runtime.startedAt = null;
     this.setState(this.runtime.enabled ? "waiting" : "off", this.runtime.enabled ? "TAKEN_OVER" : "OFF");
-    this.events.log("warn", this.name, "Lauf für manuelle Übernahme beendet");
+    this.events.log("warn", this.name, "Run ended for manual takeover");
     return true;
   }
 
@@ -84,7 +84,7 @@ export abstract class MacroBase {
   }
 
   protected async click(slot: number, mode: 0 | 1 = 0): Promise<void> {
-    if (!this.bot) throw new Error("Bot ist nicht verbunden");
+    if (!this.bot) throw new Error("Bot is not connected");
     const generation = this.cancellation;
     await this.bot.clickWindow(slot, 0, mode);
     if (generation !== this.cancellation) throw new MacroCancelledError();

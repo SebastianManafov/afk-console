@@ -29,10 +29,10 @@ test("Ein geplanter Auto-GUI-Klick wird nach jeder Konfigurationsänderung verwo
 });
 
 test("Weltwechsel und Makros sperren manuelle Steuerung", () => {
-  assert.deepEqual(determineControlLock("configuring", macro("off"), macro("off")), { locked: true, reason: "Welt-/Serverwechsel läuft" });
-  assert.deepEqual(determineControlLock("stable", macro("running"), macro("off")), { locked: true, reason: "Sell-Makro läuft" });
-  assert.deepEqual(determineControlLock("stable", macro("off"), macro("running")), { locked: true, reason: "Spawner-Makro läuft" });
-  assert.deepEqual(determineControlLock("stable", macro("off"), macro("off"), true), { locked: true, reason: "Manuelle Steuerung läuft" });
+  assert.deepEqual(determineControlLock("configuring", macro("off"), macro("off")), { locked: true, reason: "World/server change in progress" });
+  assert.deepEqual(determineControlLock("stable", macro("running"), macro("off")), { locked: true, reason: "Sell macro is running" });
+  assert.deepEqual(determineControlLock("stable", macro("off"), macro("running")), { locked: true, reason: "Spawner macro is running" });
+  assert.deepEqual(determineControlLock("stable", macro("off"), macro("off"), true), { locked: true, reason: "Manual controls are active" });
   assert.deepEqual(determineControlLock("stable", macro("waiting"), macro("success")), { locked: false, reason: null });
 });
 

@@ -46,7 +46,7 @@ Open `http://localhost:3000`, sign in, create a server and Microsoft account, th
 
 ## GitHub Codespaces
 
-Open **Code → Codespaces → Create codespace on main**, then run the Quickstart commands. When RCC reports `Dashboard läuft auf Port 3000`, open port `3000` from the **Ports** panel and keep its visibility **Private**.
+Open **Code → Codespaces → Create codespace on main**, then run the Quickstart commands. When RCC reports `Dashboard running on port 3000`, open port `3000` from the **Ports** panel and keep its visibility **Private**.
 
 The Minecraft connection uses the Codespace host's public egress address—not the IP of a powered-off laptop. Codespaces can stop after inactivity and is intended for testing rather than guaranteed 24/7 hosting.
 

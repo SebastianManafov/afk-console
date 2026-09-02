@@ -12,12 +12,12 @@ export interface AutoGuiJoinConfig {
 export function decideAutoGuiJoin(title: string, availableSlots: number[], config: {
   autoGuiJoinEnabled: boolean; autoGuiJoinTitleIncludes: string; autoGuiJoinSlot: number;
 }): AutoGuiJoinDecision {
-  if (!config.autoGuiJoinEnabled) return { allowed: false, reason: "Auto-GUI-Join ist deaktiviert" };
-  const expected = config.autoGuiJoinTitleIncludes.trim().toLocaleLowerCase("de-DE");
-  if (!expected) return { allowed: false, reason: "Kein sicherer Fenstertitel konfiguriert" };
-  if (!title.toLocaleLowerCase("de-DE").includes(expected)) return { allowed: false, reason: "Fenstertitel passt nicht" };
-  if (!availableSlots.includes(config.autoGuiJoinSlot)) return { allowed: false, reason: `Slot ${config.autoGuiJoinSlot} ist leer` };
-  return { allowed: true, reason: "Fenster und Slot passen" };
+  if (!config.autoGuiJoinEnabled) return { allowed: false, reason: "Auto-GUI join is disabled" };
+  const expected = config.autoGuiJoinTitleIncludes.trim().toLocaleLowerCase("en-US");
+  if (!expected) return { allowed: false, reason: "No safe window title configured" };
+  if (!title.toLocaleLowerCase("en-US").includes(expected)) return { allowed: false, reason: "Window title does not match" };
+  if (!availableSlots.includes(config.autoGuiJoinSlot)) return { allowed: false, reason: `Slot ${config.autoGuiJoinSlot} is empty` };
+  return { allowed: true, reason: "Window and slot match" };
 }
 
 export function sameAutoGuiJoinConfig(left: AutoGuiJoinConfig, right: AutoGuiJoinConfig): boolean {
@@ -33,10 +33,10 @@ export function determineControlLock(
   spawner: MacroRuntime,
   manualControlActive = false
 ): BotSnapshot["controlLock"] {
-  if (worldState !== "stable") return { locked: true, reason: "Welt-/Serverwechsel läuft" };
-  if (manualControlActive) return { locked: true, reason: "Manuelle Steuerung läuft" };
-  if (sell.status === "running") return { locked: true, reason: "Sell-Makro läuft" };
-  if (spawner.status === "running") return { locked: true, reason: "Spawner-Makro läuft" };
+  if (worldState !== "stable") return { locked: true, reason: "World/server change in progress" };
+  if (manualControlActive) return { locked: true, reason: "Manual controls are active" };
+  if (sell.status === "running") return { locked: true, reason: "Sell macro is running" };
+  if (spawner.status === "running") return { locked: true, reason: "Spawner macro is running" };
   return { locked: false, reason: null };
 }
 

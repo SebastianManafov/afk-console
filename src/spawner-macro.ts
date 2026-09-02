@@ -70,11 +70,11 @@ export class SpawnerMacro extends MacroBase {
       this.setState("running", "FIND_SPAWNER");
       await this.bot.waitForChunksToLoad();
       const block = this.bot.findBlock({ matching: (candidate) => candidate.name.includes("spawner"), maxDistance: 8 });
-      if (!block) throw new Error("Kein Spawner-Block im Umkreis von 8 Blöcken gefunden");
+      if (!block) throw new Error("No spawner block found within 8 blocks");
       this.setState("running", "OPEN_SPAWNER");
       this.waitingForGui = true;
       await this.bot.activateBlock(block);
-      this.timer = setTimeout(() => { if (this.waitingForGui) void this.handleFailure(new Error("Spawner-GUI wurde nicht geöffnet")); }, 6000);
+      this.timer = setTimeout(() => { if (this.waitingForGui) void this.handleFailure(new Error("Spawner GUI did not open")); }, 6000);
     } catch (error) { await this.handleFailure(error); }
   }
 
@@ -85,10 +85,10 @@ export class SpawnerMacro extends MacroBase {
     const title = readableTitle.toLowerCase();
     const layoutMatches = window.inventoryStart === 54 && [cfg.sellAllSlot, cfg.pageLeftSlot, cfg.pageRightSlot, cfg.dropAllSlot].every((slot) => Boolean(window.slots[slot]));
     if (!title.includes(cfg.guiTitleIncludes.toLowerCase()) && !layoutMatches) {
-      this.events.log("warn", "spawner", `Unerwartetes GUI ignoriert: ${readableTitle} / ${window.inventoryStart} Slots`);
+      this.events.log("warn", "spawner", `Unexpected GUI ignored: ${readableTitle} / ${window.inventoryStart} slots`);
       return;
     }
-    if (!title.includes(cfg.guiTitleIncludes.toLowerCase())) this.events.log("info", "spawner", `Spawner-GUI über Layout erkannt: 0–44 Inhalt, Steuerung ${cfg.sellAllSlot}/${cfg.pageLeftSlot}/${cfg.pageRightSlot}/${cfg.dropAllSlot}`);
+    if (!title.includes(cfg.guiTitleIncludes.toLowerCase())) this.events.log("info", "spawner", `Spawner GUI detected by layout: slots 0–44 contain items, controls ${cfg.sellAllSlot}/${cfg.pageLeftSlot}/${cfg.pageRightSlot}/${cfg.dropAllSlot}`);
     if (this.timer) clearTimeout(this.timer);
     this.waitingForGui = false;
     this.busy = true;
@@ -99,15 +99,15 @@ export class SpawnerMacro extends MacroBase {
       this.logWindow(window);
       const arrow = cfg.arrowAbort ? await this.preflightPages(window) : null;
       if (arrow) {
-        const message = `Arrow-Filter: ${arrow.count}× ${arrow.name} in Slot ${arrow.slot} erkannt. Lauf ohne Drop All beendet.`;
+        const message = `Arrow filter: ${arrow.count}× ${arrow.name} in slot ${arrow.slot} detected. Run ended without Drop All.`;
         this.setState("blocked", "ARROW_FILTER_ABORT", message);
         this.events.log("warn", "spawner", message);
-        await this.webhook.send("arrowAbort", "Spawner-Lauf gestoppt", message);
+        await this.webhook.send("arrowAbort", "Spawner run stopped", message);
         return;
       }
       if (cfg.mode === "PAGE_FULL" && !this.isPageFull(window)) {
         this.setState("waiting", "WAIT_FOR_FULL_PAGE");
-        this.events.log("info", "spawner", "Spawner-Seite ist noch nicht voll");
+      this.events.log("info", "spawner", "Spawner page is not full yet");
         return;
       }
       if (cfg.skeletonFilter) await this.processFilteredPages(window);
@@ -117,8 +117,8 @@ export class SpawnerMacro extends MacroBase {
         spawnerWindowClosed = true;
         await this.deliverBonesToHighestOrder(cfg);
       }
-      this.succeed(cfg.orderEnabled ? "Spawner verarbeitet und Bones an höchste Order geliefert" : "Spawner Drop All ausgeführt");
-      await this.webhook.send("macroSuccess", "Spawner erfolgreich", cfg.orderEnabled ? "Spawner wurde verarbeitet und alle verfügbaren Bones wurden an die höchste Order geliefert." : "Drop All wurde ohne erkannte Pfeile ausgeführt.");
+      this.succeed(cfg.orderEnabled ? "Spawner processed and bones delivered to the highest order" : "Spawner Drop All executed");
+      await this.webhook.send("macroSuccess", "Spawner successful", cfg.orderEnabled ? "Spawner was processed and all available bones were delivered to the highest order." : "Drop All was executed without detected arrows.");
     } catch (error) {
       if (this.isCancelled(error)) { takenOver = true; return; }
       await this.handleFailure(error);
@@ -185,7 +185,7 @@ export class SpawnerMacro extends MacroBase {
       if (this.contentSignature(window) === previous) break;
       pagesNavigated += 1;
     }
-    if (operations >= 512) throw new Error("Spawner-Filter hat das Sicherheitslimit erreicht");
+    if (operations >= 512) throw new Error("Spawner filter reached the safety limit");
     if (sawAnyItems) {
       this.setState("running", "SELL_REMAINING_SLOT_45");
       await this.click(this.controlSlot("sellAllSlot", cfg));
@@ -204,7 +204,7 @@ export class SpawnerMacro extends MacroBase {
     const slot = this.controlSlot("dropAllSlot", cfg);
     this.setState("running", `CLICK_DROP_ALL_SLOT_${slot}`);
     const button = window.slots[slot];
-    if (!button) throw new Error(`Drop-All-Slot ${slot} ist leer`);
+    if (!button) throw new Error(`Drop-All slot ${slot} is empty`);
     this.events.log("info", "spawner", `Drop All: Slot ${slot}, Item ${button.name}`);
     await this.click(slot);
     await this.wait(cfg.clickDelayMs);
@@ -232,25 +232,25 @@ export class SpawnerMacro extends MacroBase {
   private logWindow(window: BotWindow): void {
     const cfg = this.config.get().spawner;
     const controls = [this.controlSlot("sellAllSlot", cfg), this.controlSlot("pageLeftSlot", cfg), this.controlSlot("pageRightSlot", cfg), this.controlSlot("dropAllSlot", cfg)]
-      .map((slot) => `${slot}=${window.slots[slot]?.name ?? "leer"}`)
+      .map((slot) => `${slot}=${window.slots[slot]?.name ?? "empty"}`)
       .join(", ");
-    this.events.log("info", "spawner", `GUI erkannt: ${readableMinecraftReason(window.title)}; ${controls}`);
+    this.events.log("info", "spawner", `GUI detected: ${readableMinecraftReason(window.title)}; ${controls}`);
   }
 
   private async waitForTeleport(x: number, y: number, z: number): Promise<void> {
     for (let attempt = 0; attempt < 30; attempt += 1) {
       await this.wait(250);
-      if (!this.bot) throw new Error("Verbindung während Teleport verloren");
+      if (!this.bot) throw new Error("Connection lost during teleport");
       const p = this.bot.entity.position;
       if (Math.hypot(p.x - x, p.y - y, p.z - z) > 3) return;
     }
-    throw new Error("Teleport zu /home spawner nicht erkannt");
+    throw new Error("Teleport to /home spawner was not detected");
   }
 
   private async teleport(command: string, phase: string): Promise<void> {
     if (!this.bot || !command.trim()) return;
     this.setState("running", `TELEPORT_${phase}`); const start = this.bot.entity.position.clone(); this.bot.chat(command);
-    try { await this.waitForTeleport(start.x, start.y, start.z); } catch { this.events.log("warn", "spawner", `${command}: keine Positionsänderung erkannt, Ablauf wird fortgesetzt`); }
+    try { await this.waitForTeleport(start.x, start.y, start.z); } catch { this.events.log("warn", "spawner", `${command}: no position change detected; continuing`); }
   }
 
   private async movementSequence(ms: number): Promise<void> {
@@ -259,9 +259,9 @@ export class SpawnerMacro extends MacroBase {
   }
 
   private async deliverBonesToHighestOrder(cfg: AppConfig["spawner"]): Promise<void> {
-    if (!this.bot) throw new Error("Verbindung vor Bone-Order verloren");
+    if (!this.bot) throw new Error("Connection lost before bone order");
     const bones = this.bot.inventory.items().filter((item) => /^(minecraft:)?bone$/i.test(item.name)).reduce((sum, item) => sum + item.count, 0);
-    if (!bones) { this.events.log("info", "spawner", "Bone-Order übersprungen: keine Bones im Inventar"); return; }
+    if (!bones) { this.events.log("info", "spawner", "Bone order skipped: no bones in inventory"); return; }
     await this.teleport(cfg.homeTopCommand, "ORDER_HOME_TOP");
     await this.waitHuman(cfg);
     this.setState("running", "OPEN_BONE_ORDER");
@@ -270,33 +270,33 @@ export class SpawnerMacro extends MacroBase {
     const orderWindow = await orderWindowPromise;
     const orderTitle = readableMinecraftReason(orderWindow.title);
     const orderLayoutMatches = orderWindow.inventoryStart === 54 && Boolean(orderWindow.slots[cfg.orderPageLeftSlot]) && Boolean(orderWindow.slots[cfg.orderPageRightSlot]);
-    if (cfg.orderGuiTitleIncludes && !orderTitle.toLowerCase().includes(cfg.orderGuiTitleIncludes.toLowerCase()) && !orderLayoutMatches) throw new Error(`Unerwartetes Order-GUI: ${orderTitle}`);
+    if (cfg.orderGuiTitleIncludes && !orderTitle.toLowerCase().includes(cfg.orderGuiTitleIncludes.toLowerCase()) && !orderLayoutMatches) throw new Error(`Unexpected order GUI: ${orderTitle}`);
     const highestSlot = cfg.orderAutoDetect ? await this.findHighestOrderSlot(orderWindow, cfg) : cfg.orderHighestSlot;
     this.setState("running", `SELECT_HIGHEST_BONE_ORDER_SLOT_${highestSlot}`);
-    this.events.log("info", "spawner", `Bone-Order: ${bones} Bones, höchste Order in Slot ${highestSlot}`);
+    this.events.log("info", "spawner", `Bone order: ${bones} bones, highest order in slot ${highestSlot}`);
     await this.waitHuman(cfg);
     const deliveryWindowPromise = this.waitForNextWindow(7_500);
     try { await this.click(highestSlot); } catch (error) { void deliveryWindowPromise.catch(() => {}); throw error; }
     const activeWindow = await deliveryWindowPromise;
     const deliveryTitle = readableMinecraftReason(activeWindow.title);
     const deliveryLayoutMatches = activeWindow.inventoryStart === 9 && Boolean(activeWindow.slots[cfg.orderDeliverAllSlot]);
-    if (cfg.orderDeliverGuiTitleIncludes && !deliveryTitle.toLowerCase().includes(cfg.orderDeliverGuiTitleIncludes.toLowerCase()) && !deliveryLayoutMatches) throw new Error(`Unerwartetes Liefer-GUI: ${deliveryTitle}`);
+    if (cfg.orderDeliverGuiTitleIncludes && !deliveryTitle.toLowerCase().includes(cfg.orderDeliverGuiTitleIncludes.toLowerCase()) && !deliveryLayoutMatches) throw new Error(`Unexpected delivery GUI: ${deliveryTitle}`);
     await this.waitHuman(cfg);
     const deliverSlot = cfg.orderAutoDetect ? this.findDeliverAllSlot(activeWindow, cfg.orderDeliverAllSlot) : cfg.orderDeliverAllSlot;
-    if (!activeWindow.slots[deliverSlot]) throw new Error(`Deliver-All-Slot ${deliverSlot} ist leer`);
+    if (!activeWindow.slots[deliverSlot]) throw new Error(`Deliver-All slot ${deliverSlot} is empty`);
     this.setState("running", `DELIVER_ALL_BONES_SLOT_${deliverSlot}`);
     await this.waitHuman(cfg);
     await this.click(deliverSlot);
     await this.waitHuman(cfg);
-    this.events.log("info", "spawner", `Alle verfügbaren Bones an Order geliefert (Slot ${deliverSlot})`);
+    this.events.log("info", "spawner", `All available bones delivered to the order (slot ${deliverSlot})`);
   }
 
   private waitForNextWindow(timeoutMs: number): Promise<BotWindow> {
     const bot = this.bot;
-    if (!bot) return Promise.reject(new Error("Bot ist nicht verbunden"));
+    if (!bot) return Promise.reject(new Error("Bot is not connected"));
     return new Promise((resolve, reject) => {
       const onOpen = (window: BotWindow) => { clearTimeout(timer); resolve(window); };
-      const timer = setTimeout(() => { bot.removeListener("windowOpen", onOpen); reject(new Error("Bone-Order-GUI wurde nicht geöffnet")); }, timeoutMs);
+      const timer = setTimeout(() => { bot.removeListener("windowOpen", onOpen); reject(new Error("Bone order GUI did not open")); }, timeoutMs);
       bot.once("windowOpen", onOpen);
     });
   }
@@ -322,10 +322,10 @@ export class SpawnerMacro extends MacroBase {
       previous = current; navigated += 1;
     }
     while (navigated > 0) { await this.click(cfg.orderPageLeftSlot); await this.waitHuman(cfg); navigated -= 1; }
-    if (!best) throw new Error("Keine aktive Bone-Order im Bereich Slot 0–35 gefunden");
+    if (!best) throw new Error("No active bone order found in slots 0–35");
     for (let page = 0; page < best.page; page += 1) { await this.click(cfg.orderPageRightSlot); await this.waitHuman(cfg); }
-    if (!best.priced) this.events.log("warn", "spawner", `Keine Preis-Lore erkannt; erster Bone-Slot ${best.slot} auf Seite ${best.page + 1}`);
-    else this.events.log("info", "spawner", `Höchste Bone-Order auf Seite ${best.page + 1}, Slot ${best.slot}, Preiswert ${best.value}`);
+    if (!best.priced) this.events.log("warn", "spawner", `No price lore detected; using first bone slot ${best.slot} on page ${best.page + 1}`);
+    else this.events.log("info", "spawner", `Highest bone order on page ${best.page + 1}, slot ${best.slot}, price value ${best.value}`);
     return best.slot;
   }
 
@@ -336,7 +336,7 @@ export class SpawnerMacro extends MacroBase {
   private findDeliverAllSlot(window: BotWindow, fallback: number): number {
     const found = window.slots.slice(0, window.inventoryStart).map((item, slot) => ({ slot, label: `${item?.displayName ?? ""} ${item?.name ?? ""}`.toLowerCase() }))
       .find((item) => /deliver.*all|all.*deliver|alles.*liefer|alle.*knochen|ganzes.*inventar|whole.*inventory|submit.*all/.test(item.label));
-    if (!found) this.events.log("warn", "spawner", `Ganzes Inventar nicht per Text erkannt; orange Fallback-Schaltfläche Slot ${fallback}`);
+    if (!found) this.events.log("warn", "spawner", `Full inventory action not recognized by text; using orange fallback button in slot ${fallback}`);
     return found?.slot ?? fallback;
   }
 
@@ -355,7 +355,7 @@ export class SpawnerMacro extends MacroBase {
       pageRightSlot: arrowSlots.at(-1) ?? cfg.pageRightSlot,
       dropAllSlot: find([/drop.*all/, /alles.*drop/, /alles.*fallen/], cfg.dropAllSlot)
     };
-    this.events.log("info", "spawner", `GUI-Autoerkennung: Sell ${detected.sellAllSlot}, Links ${detected.pageLeftSlot}, Rechts ${detected.pageRightSlot}, Drop ${detected.dropAllSlot}`);
+    this.events.log("info", "spawner", `GUI auto-detection: Sell ${detected.sellAllSlot}, left ${detected.pageLeftSlot}, right ${detected.pageRightSlot}, Drop ${detected.dropAllSlot}`);
     return detected;
   }
 
@@ -365,7 +365,7 @@ export class SpawnerMacro extends MacroBase {
     if (this.isCancelled(error)) return;
     this.waitingForGui = false;
     this.fail(error);
-    await this.webhook.send("macroError", "Spawner-Fehler", error instanceof Error ? error.message : String(error));
+    await this.webhook.send("macroError", "Spawner error", error instanceof Error ? error.message : String(error));
     this.scheduleNext();
   }
 

@@ -129,7 +129,7 @@ export class ConfigStore {
 
   constructor(dataDir: string, encryptionSecret = process.env.CONFIG_ENCRYPTION_KEY || process.env.SESSION_SECRET || "") {
     this.file = join(dataDir, "config.json");
-    if (encryptionSecret && encryptionSecret.length < 32) throw new Error("CONFIG_ENCRYPTION_KEY muss mindestens 32 Zeichen lang sein");
+    if (encryptionSecret && encryptionSecret.length < 32) throw new Error("CONFIG_ENCRYPTION_KEY must be at least 32 characters long");
     this.encryptionKey = encryptionSecret ? createHash("sha256").update(encryptionSecret).digest() : null;
   }
 
@@ -189,54 +189,54 @@ export class ConfigStore {
   }
 
   private validate(value: AppConfig): void {
-    if (!value.connection.profileName.trim()) throw new Error("Profilname fehlt");
-    if (!value.servers.length || !value.accounts.length) throw new Error("Mindestens ein Server und Account sind erforderlich");
-    for (const id of [...value.servers.map((item) => item.id), ...value.accounts.map((item) => item.id), ...value.proxies.map((item) => item.id)]) if (typeof id !== "string" || !/^[a-z0-9_-]+$/i.test(id)) throw new Error("Profil-ID enthält ungültige Zeichen");
-    if (new Set(value.servers.map((item) => item.id)).size !== value.servers.length || new Set(value.accounts.map((item) => item.id)).size !== value.accounts.length || new Set(value.proxies.map((item) => item.id)).size !== value.proxies.length) throw new Error("Doppelte Profil-ID");
-    for (const server of value.servers) if (typeof server.name !== "string" || !server.name.trim()) throw new Error("Servername fehlt");
-    for (const account of value.accounts) if (typeof account.name !== "string" || !account.name.trim()) throw new Error("Accountname fehlt");
-    for (const account of value.accounts) if (!value.servers.some((server) => server.id === account.serverId)) throw new Error(`Serverprofil für ${account.name} fehlt`);
-    for (const account of value.accounts) if (account.proxyId && !value.proxies.some((proxy) => proxy.id === account.proxyId)) throw new Error(`Proxyprofil für ${account.name} fehlt`);
-    for (const account of value.accounts) if (account.username && !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(account.username)) throw new Error(`Ungültige Microsoft-E-Mail für ${account.name}`);
-    for (const account of value.accounts) if (!account.reconnectDelaysSeconds.length || account.reconnectDelaysSeconds.some((delay) => !Number.isInteger(delay) || delay < 1 || delay > 3600)) throw new Error(`Ungültige Reconnect-Regeln für ${account.name}`);
-    for (const proxy of value.proxies) if (typeof proxy.name !== "string" || !proxy.name.trim() || typeof proxy.host !== "string" || !proxy.host.trim() || !Number.isInteger(proxy.port) || proxy.port < 1 || proxy.port > 65535) throw new Error(`Ungültiger Proxy ${proxy.name ?? ""}`);
+    if (!value.connection.profileName.trim()) throw new Error("Profile name is missing");
+    if (!value.servers.length || !value.accounts.length) throw new Error("At least one server and account are required");
+    for (const id of [...value.servers.map((item) => item.id), ...value.accounts.map((item) => item.id), ...value.proxies.map((item) => item.id)]) if (typeof id !== "string" || !/^[a-z0-9_-]+$/i.test(id)) throw new Error("Profile ID contains invalid characters");
+    if (new Set(value.servers.map((item) => item.id)).size !== value.servers.length || new Set(value.accounts.map((item) => item.id)).size !== value.accounts.length || new Set(value.proxies.map((item) => item.id)).size !== value.proxies.length) throw new Error("Duplicate profile ID");
+    for (const server of value.servers) if (typeof server.name !== "string" || !server.name.trim()) throw new Error("Server name is missing");
+    for (const account of value.accounts) if (typeof account.name !== "string" || !account.name.trim()) throw new Error("Account name is missing");
+    for (const account of value.accounts) if (!value.servers.some((server) => server.id === account.serverId)) throw new Error(`Server profile for ${account.name} is missing`);
+    for (const account of value.accounts) if (account.proxyId && !value.proxies.some((proxy) => proxy.id === account.proxyId)) throw new Error(`Proxy profile for ${account.name} is missing`);
+    for (const account of value.accounts) if (account.username && !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(account.username)) throw new Error(`Invalid Microsoft email for ${account.name}`);
+    for (const account of value.accounts) if (!account.reconnectDelaysSeconds.length || account.reconnectDelaysSeconds.some((delay) => !Number.isInteger(delay) || delay < 1 || delay > 3600)) throw new Error(`Invalid reconnect rules for ${account.name}`);
+    for (const proxy of value.proxies) if (typeof proxy.name !== "string" || !proxy.name.trim() || typeof proxy.host !== "string" || !proxy.host.trim() || !Number.isInteger(proxy.port) || proxy.port < 1 || proxy.port > 65535) throw new Error(`Invalid proxy ${proxy.name ?? ""}`);
     for (const server of value.servers) {
-      if (!/^[a-z0-9.-]+$/i.test(server.host)) throw new Error(`Ungültige Serveradresse für ${server.name}`);
-      if (!Number.isInteger(server.port) || server.port < 1 || server.port > 65535) throw new Error(`Ungültiger Serverport für ${server.name}`);
-      if (!SUPPORTED_MINECRAFT_VERSIONS.includes(server.version as SupportedMinecraftVersion)) throw new Error(`Nicht unterstützte Minecraft-Version für ${server.name}`);
-      if (server.autoGuiJoinEnabled && !server.autoGuiJoinTitleIncludes.trim()) throw new Error(`Auto-GUI-Titel fehlt für ${server.name}`);
-      if (!Number.isInteger(server.autoGuiJoinSlot) || server.autoGuiJoinSlot < 0 || server.autoGuiJoinSlot > 89) throw new Error(`Ungültiger Auto-GUI-Slot für ${server.name}`);
-      if (!Number.isInteger(server.autoGuiJoinDelayMs) || server.autoGuiJoinDelayMs < 100 || server.autoGuiJoinDelayMs > 10_000) throw new Error(`Ungültige Auto-GUI-Verzögerung für ${server.name}`);
-      if (server.antiAfkMinSeconds < 10 || server.antiAfkMaxSeconds < server.antiAfkMinSeconds || server.antiAfkMaxSeconds > 3600) throw new Error(`Ungültiges Anti-AFK-Intervall für ${server.name}`);
-      if (server.spamIntervalSeconds < 10 || server.spamIntervalSeconds > 86_400) throw new Error(`Ungültiges Chat-Timer-Intervall für ${server.name}`);
-      for (const command of [server.joinCommand, server.worldChangeCommand, server.spamMessage]) if (command.length > 256) throw new Error(`Automationsnachricht für ${server.name} ist zu lang`);
+      if (!/^[a-z0-9.-]+$/i.test(server.host)) throw new Error(`Invalid server address for ${server.name}`);
+      if (!Number.isInteger(server.port) || server.port < 1 || server.port > 65535) throw new Error(`Invalid server port for ${server.name}`);
+      if (!SUPPORTED_MINECRAFT_VERSIONS.includes(server.version as SupportedMinecraftVersion)) throw new Error(`Unsupported Minecraft version for ${server.name}`);
+      if (server.autoGuiJoinEnabled && !server.autoGuiJoinTitleIncludes.trim()) throw new Error(`Auto-GUI title is missing for ${server.name}`);
+      if (!Number.isInteger(server.autoGuiJoinSlot) || server.autoGuiJoinSlot < 0 || server.autoGuiJoinSlot > 89) throw new Error(`Invalid Auto-GUI slot for ${server.name}`);
+      if (!Number.isInteger(server.autoGuiJoinDelayMs) || server.autoGuiJoinDelayMs < 100 || server.autoGuiJoinDelayMs > 10_000) throw new Error(`Invalid Auto-GUI delay for ${server.name}`);
+      if (server.antiAfkMinSeconds < 10 || server.antiAfkMaxSeconds < server.antiAfkMinSeconds || server.antiAfkMaxSeconds > 3600) throw new Error(`Invalid anti-AFK interval for ${server.name}`);
+      if (server.spamIntervalSeconds < 10 || server.spamIntervalSeconds > 86_400) throw new Error(`Invalid chat timer interval for ${server.name}`);
+      for (const command of [server.joinCommand, server.worldChangeCommand, server.spamMessage]) if (command.length > 256) throw new Error(`Automation message for ${server.name} is too long`);
     }
-    if (!/^[a-z0-9.-]+$/i.test(value.connection.host)) throw new Error("Ungültige Serveradresse");
-    if (!Number.isInteger(value.connection.port) || value.connection.port < 1 || value.connection.port > 65535) throw new Error("Ungültiger Serverport");
-    if (!SUPPORTED_MINECRAFT_VERSIONS.includes(value.connection.version as SupportedMinecraftVersion)) throw new Error("Nicht unterstützte Minecraft-Version");
-    if (!value.connection.reconnectDelaysSeconds.length || value.connection.reconnectDelaysSeconds.some((delay) => !Number.isInteger(delay) || delay < 1 || delay > 3600)) throw new Error("Ungültige Reconnect-Regeln");
-    if (value.connection.autoGuiJoinEnabled && !value.connection.autoGuiJoinTitleIncludes.trim()) throw new Error("Auto-GUI-Titel fehlt");
-    if (!Number.isInteger(value.connection.autoGuiJoinSlot) || value.connection.autoGuiJoinSlot < 0 || value.connection.autoGuiJoinSlot > 89) throw new Error("Ungültiger Auto-GUI-Slot");
-    if (!Number.isInteger(value.connection.autoGuiJoinDelayMs) || value.connection.autoGuiJoinDelayMs < 100 || value.connection.autoGuiJoinDelayMs > 10_000) throw new Error("Ungültige Auto-GUI-Verzögerung");
+    if (!/^[a-z0-9.-]+$/i.test(value.connection.host)) throw new Error("Invalid server address");
+    if (!Number.isInteger(value.connection.port) || value.connection.port < 1 || value.connection.port > 65535) throw new Error("Invalid server port");
+    if (!SUPPORTED_MINECRAFT_VERSIONS.includes(value.connection.version as SupportedMinecraftVersion)) throw new Error("Unsupported Minecraft version");
+    if (!value.connection.reconnectDelaysSeconds.length || value.connection.reconnectDelaysSeconds.some((delay) => !Number.isInteger(delay) || delay < 1 || delay > 3600)) throw new Error("Invalid reconnect rules");
+    if (value.connection.autoGuiJoinEnabled && !value.connection.autoGuiJoinTitleIncludes.trim()) throw new Error("Auto-GUI title is missing");
+    if (!Number.isInteger(value.connection.autoGuiJoinSlot) || value.connection.autoGuiJoinSlot < 0 || value.connection.autoGuiJoinSlot > 89) throw new Error("Invalid Auto-GUI slot");
+    if (!Number.isInteger(value.connection.autoGuiJoinDelayMs) || value.connection.autoGuiJoinDelayMs < 100 || value.connection.autoGuiJoinDelayMs > 10_000) throw new Error("Invalid Auto-GUI delay");
     const macroConfigs = [
       { label: "global", sell: value.sell, spawner: value.spawner },
       ...value.accounts.map((account) => ({ label: account.name, sell: account.sell ?? value.sell, spawner: account.spawner ?? value.spawner }))
     ];
     for (const { label, sell, spawner } of macroConfigs) {
-      if (spawner.minIntervalMinutes < 1 || spawner.maxIntervalMinutes < spawner.minIntervalMinutes) throw new Error(`Ungültiges Spawner-Intervall (${label})`);
-      if (spawner.dropAllSlot < 0 || spawner.contentLastSlot < 0) throw new Error(`Ungültige Slot-Konfiguration (${label})`);
-      if ([spawner.orderHighestSlot, spawner.orderDeliverAllSlot, spawner.orderContentLastSlot, spawner.orderPageLeftSlot, spawner.orderPageRightSlot].some((slot) => slot < 0 || slot > 89)) throw new Error(`Ungültige Order-Slots (${label})`);
-      if (spawner.orderMaxPages < 1 || spawner.orderMaxPages > 100) throw new Error(`Ungültige Order-Seitenzahl (${label})`);
-      if (spawner.orderMinDelayMs < 100 || spawner.orderMaxDelayMs < spawner.orderMinDelayMs || spawner.orderMaxDelayMs > 10_000) throw new Error(`Ungültige Order-Pausen (${label})`);
-      if (sell.minPauseMs < 0 || sell.maxPauseMs < sell.minPauseMs) throw new Error(`Ungültige Sell-Pausen (${label})`);
-      if (sell.contentLastSlot < 0 || sell.contentLastSlot > 89 || sell.confirmSlot !== sell.contentLastSlot + 1) throw new Error(`Ungültige Sell-Slots (${label})`);
-      if (!sell.guiTitleIncludes.trim()) throw new Error(`Sell-GUI-Titel fehlt (${label})`);
+      if (spawner.minIntervalMinutes < 1 || spawner.maxIntervalMinutes < spawner.minIntervalMinutes) throw new Error(`Invalid spawner interval (${label})`);
+      if (spawner.dropAllSlot < 0 || spawner.contentLastSlot < 0) throw new Error(`Invalid slot configuration (${label})`);
+      if ([spawner.orderHighestSlot, spawner.orderDeliverAllSlot, spawner.orderContentLastSlot, spawner.orderPageLeftSlot, spawner.orderPageRightSlot].some((slot) => slot < 0 || slot > 89)) throw new Error(`Invalid order slots (${label})`);
+      if (spawner.orderMaxPages < 1 || spawner.orderMaxPages > 100) throw new Error(`Invalid order page count (${label})`);
+      if (spawner.orderMinDelayMs < 100 || spawner.orderMaxDelayMs < spawner.orderMinDelayMs || spawner.orderMaxDelayMs > 10_000) throw new Error(`Invalid order delays (${label})`);
+      if (sell.minPauseMs < 0 || sell.maxPauseMs < sell.minPauseMs) throw new Error(`Invalid sell delays (${label})`);
+      if (sell.contentLastSlot < 0 || sell.contentLastSlot > 89 || sell.confirmSlot !== sell.contentLastSlot + 1) throw new Error(`Invalid sell slots (${label})`);
+      if (!sell.guiTitleIncludes.trim()) throw new Error(`Sell GUI title is missing (${label})`);
       for (const time of [sell.scheduleStart, sell.scheduleEnd, spawner.scheduleStart, spawner.scheduleEnd]) {
-        if (!/^([01]\d|2[0-3]):[0-5]\d$/.test(time)) throw new Error(`Ungültiges Makro-Zeitfenster (${label})`);
+        if (!/^([01]\d|2[0-3]):[0-5]\d$/.test(time)) throw new Error(`Invalid macro time window (${label})`);
       }
     }
     if (value.webhook.url && !/^https:\/\/(discord(?:app)?\.com|discord\.com)\/api\/webhooks\//i.test(value.webhook.url)) {
-      throw new Error("Nur Discord-Webhook-URLs werden unterstützt");
+      throw new Error("Only Discord webhook URLs are supported");
     }
   }
 
@@ -251,7 +251,7 @@ export class ConfigStore {
   }
 
   private encrypt(value: string): string {
-    if (!this.encryptionKey) throw new Error("CONFIG_ENCRYPTION_KEY oder SESSION_SECRET wird zum Speichern des Webhooks benötigt");
+    if (!this.encryptionKey) throw new Error("CONFIG_ENCRYPTION_KEY or SESSION_SECRET is required to save the webhook");
     const iv = randomBytes(12);
     const cipher = createCipheriv("aes-256-gcm", this.encryptionKey, iv);
     const encrypted = Buffer.concat([cipher.update(value, "utf8"), cipher.final()]);
@@ -259,9 +259,9 @@ export class ConfigStore {
   }
 
   private decrypt(value: string): string {
-    if (!this.encryptionKey) throw new Error("Webhook ist verschlüsselt, aber der Verschlüsselungsschlüssel fehlt");
+    if (!this.encryptionKey) throw new Error("Webhook is encrypted, but the encryption key is missing");
     const [, version, iv, tag, encrypted] = value.split(":");
-    if (version !== "v1" || !iv || !tag || !encrypted) throw new Error("Ungültiges Webhook-Verschlüsselungsformat");
+    if (version !== "v1" || !iv || !tag || !encrypted) throw new Error("Invalid webhook encryption format");
     const decipher = createDecipheriv("aes-256-gcm", this.encryptionKey, Buffer.from(iv, "base64url"));
     decipher.setAuthTag(Buffer.from(tag, "base64url"));
     return Buffer.concat([decipher.update(Buffer.from(encrypted, "base64url")), decipher.final()]).toString("utf8");

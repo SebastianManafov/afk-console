@@ -18,7 +18,7 @@ function reportViewerState (label, extra = {}) {
 }
 for (const worker of viewer.world.workers || []) {
   const onmessage = worker.onmessage
-  worker.onerror = (event) => reportViewerState('worker error', { message: event?.message || 'unbekannter Worker-Fehler', filename: event?.filename, lineno: event?.lineno })
+  worker.onerror = (event) => reportViewerState('worker error', { message: event?.message || 'unknown worker error', filename: event?.filename, lineno: event?.lineno })
   worker.onmessageerror = (event) => reportViewerState('worker message error', { data: event?.data })
   worker.onmessage = (event) => {
     const message = event?.data
@@ -53,7 +53,7 @@ viewer.world.addColumn = (x, z, chunk) => {
 const socket = io({ path: '/pov-viewer/socket.io' })
 socket.on('viewerDiagnostics', (data) => {
   if (data.stage === 'chunk' || data.stage === 'init') viewerDiagnostics.chunks = data.loaded || viewerDiagnostics.chunks
-  if (data.stage === 'error') status.textContent = `POV-Fehler: ${data.message}`
+  if (data.stage === 'error') status.textContent = `POV error: ${data.message}`
   reportViewerState(`server ${data.stage}`, data)
 })
 const keys = new Set()
@@ -159,16 +159,16 @@ renderer.domElement.addEventListener('wheel', (event) => {
   socket.emit('botAction', { action: 'hotbar', slot: selectedSlot })
 }, { passive: true })
 
-socket.on('connect', () => { status.textContent = 'Live verbunden' })
-socket.on('disconnect', () => { status.textContent = 'Verbindung getrennt' })
+socket.on('connect', () => { status.textContent = 'Live connected' })
+socket.on('disconnect', () => { status.textContent = 'Connection lost' })
 socket.on('viewerUnavailable', (message) => {
-  status.textContent = `${message} \u00b7 neuer Versuch \u2026`
+  status.textContent = `${message} \u00b7 retrying \u2026`
   setTimeout(() => { socket.disconnect(); socket.connect() }, 2000)
 })
 socket.on('version', (version) => {
   itemRenderVersion = String(version)
-  if (!version) { status.textContent = 'POV wartet auf die Minecraft-Version'; return }
-  if (!viewer.setVersion(version)) { status.textContent = `Viewer unterst\u00fctzt ${version} nicht`; return }
+  if (!version) { status.textContent = 'POV is waiting for the Minecraft version'; return }
+  if (!viewer.setVersion(version)) { status.textContent = `Viewer does not support ${version}`; return }
   viewer.listen(socket)
 })
 socket.on('position', ({ pos, yaw: botYaw, pitch: botPitch }) => {
@@ -205,7 +205,7 @@ socket.on('chatLine', (message) => {
   chatOverlay.append(line); while (chatOverlay.children.length > 8) chatOverlay.firstChild.remove()
   setTimeout(() => line.remove(), 12500)
 })
-socket.on('controlError', (message) => { status.textContent = `Steuerung: ${message}` })
+socket.on('controlError', (message) => { status.textContent = `Controls: ${message}` })
 
 function itemLabel(item) {
   if (!item) return ''

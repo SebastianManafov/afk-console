@@ -48,12 +48,12 @@ export function startServer(config: ConfigStore, events: AppEvents, bot: MultiBo
       if (request.url === "/api/login" && request.method === "POST") {
         const address = request.socket.remoteAddress || "unknown";
         const now = Date.now(); const attempt = loginAttempts.get(address);
-        if (attempt && attempt.resetAt > now && attempt.count >= 5) return json(response, 429, { error: "Zu viele Loginversuche. Bitte in 15 Minuten erneut versuchen" });
+        if (attempt && attempt.resetAt > now && attempt.count >= 5) return json(response, 429, { error: "Too many login attempts. Please try again in 15 minutes" });
         const body = await readJson(request);
         const role = auth.loginRole(String(body.password ?? ""));
         if (!role || (role === "admin" && !auth.verifyTotp(String(body.totp ?? "")))) {
           loginAttempts.set(address, { count: attempt && attempt.resetAt > now ? attempt.count + 1 : 1, resetAt: now + 15 * 60_000 });
-          return json(response, 401, { error: "Passwort oder Zwei-Faktor-Code ist falsch" });
+          return json(response, 401, { error: "Password or two-factor code is incorrect" });
         }
         loginAttempts.delete(address);
         auth.setCookie(response, role);
@@ -65,17 +65,17 @@ export function startServer(config: ConfigStore, events: AppEvents, bot: MultiBo
       }
       if (request.url?.startsWith("/api/")) {
         const role = auth.role(request);
-        if (!role) return json(response, 401, { error: "Nicht angemeldet" });
+        if (!role) return json(response, 401, { error: "Not authenticated" });
         return await handleApi(request, response, config, events, bot, webhook);
       }
       if (request.url?.startsWith("/pov-viewer/textures/") || request.url?.startsWith("/pov-viewer/blocksStates/") || request.url === "/pov-viewer/worker.js") {
-        if (!auth.isAuthenticated(request)) return json(response, 401, { error: "Nicht angemeldet" });
+        if (!auth.isAuthenticated(request)) return json(response, 401, { error: "Not authenticated" });
         const relative = request.url.replace(/^\/pov-viewer\//, "");
         const localAsset = join(localViewerAssetsDir, relative);
         if ((await stat(localAsset).catch(() => null))?.isFile()) return await serveStaticPath(request, response, localViewerAssetsDir, relative);
         return await serveStaticPath(request, response, viewerAssetsDir, relative);
       }
-      if (request.url?.startsWith("/pov-viewer/") && !auth.isAuthenticated(request)) return json(response, 401, { error: "Nicht angemeldet" });
+      if (request.url?.startsWith("/pov-viewer/") && !auth.isAuthenticated(request)) return json(response, 401, { error: "Not authenticated" });
       await serveStatic(request, response, publicDir);
     } catch (error) {
       events.log("error", "server", (error as Error).message);
@@ -104,19 +104,19 @@ export function startServer(config: ConfigStore, events: AppEvents, bot: MultiBo
     path: "/pov-viewer/socket.io",
     allowRequest: (request, callback) => callback(null, auth.isAuthenticated(request))
   });
-  viewerSockets.use((socket, next) => auth.isAuthenticated(socket.request) ? next() : next(new Error("Nicht angemeldet")));
+  viewerSockets.use((socket, next) => auth.isAuthenticated(socket.request) ? next() : next(new Error("Not authenticated")));
   viewerSockets.on("connection", async (socket) => {
     const requestedAccountId = typeof socket.handshake.query.accountId === "string" ? socket.handshake.query.accountId : undefined;
     const target = bot.viewerBot(requestedAccountId);
-    if (!target?.entity?.position) { socket.emit("viewerUnavailable", "Kein Bot ist online"); return; }
+    if (!target?.entity?.position) { socket.emit("viewerUnavailable", "No bot is online"); return; }
     const minecraftVersion = typeof target.version === "string" ? target.version.trim() : "";
-    if (!minecraftVersion) { socket.emit("viewerUnavailable", "Minecraft-Version ist noch nicht verfügbar"); return; }
+    if (!minecraftVersion) { socket.emit("viewerUnavailable", "Minecraft version is not available yet"); return; }
     const viewerVersion = viewerRenderVersion(minecraftVersion);
     if (!viewerVersion) {
-      socket.emit("viewerUnavailable", `POV unterstützt ${minecraftVersion} derzeit nicht`);
+      socket.emit("viewerUnavailable", `POV does not support ${minecraftVersion} yet`);
       return;
     }
-    events.log("info", "viewer", `POV startet: Minecraft ${minecraftVersion}, Renderprofil ${viewerVersion}, Position ${Math.round(target.entity.position.x)},${Math.round(target.entity.position.y)},${Math.round(target.entity.position.z)}`);
+    events.log("info", "viewer", `POV starting: Minecraft ${minecraftVersion}, render profile ${viewerVersion}, position ${Math.round(target.entity.position.x)},${Math.round(target.entity.position.y)},${Math.round(target.entity.position.z)}`);
     socket.emit("version", viewerVersion);
     socket.emit("selfEntity", {
       id: target.entity.id,
@@ -133,20 +133,20 @@ export function startServer(config: ConfigStore, events: AppEvents, bot: MultiBo
     let unloadedChunkCount = 0;
     viewerEmitter.on("loadChunk", ({ x, z, chunk }: { x: number; z: number; chunk: string }) => {
       loadedChunkCount += 1;
-      let details = "unbekanntes Format";
+      let details = "unknown format";
       try {
         const parsed = JSON.parse(chunk) as { minY?: number; worldHeight?: number; sections?: unknown[] };
-        details = `minY=${parsed.minY ?? "?"}, Höhe=${parsed.worldHeight ?? "?"}, Sektionen=${parsed.sections?.length ?? "?"}, ${chunk.length} Bytes`;
+        details = `minY=${parsed.minY ?? "?"}, height=${parsed.worldHeight ?? "?"}, sections=${parsed.sections?.length ?? "?"}, ${chunk.length} bytes`;
       } catch (error) {
-        details = `JSON-Fehler ${(error as Error).message}`;
+        details = `JSON error ${(error as Error).message}`;
       }
-      if (loadedChunkCount <= 3 || loadedChunkCount % 25 === 0) events.log("info", "viewer", `POV-Chunk ${loadedChunkCount} geladen bei ${x},${z}: ${details}`);
+      if (loadedChunkCount <= 3 || loadedChunkCount % 25 === 0) events.log("info", "viewer", `POV chunk ${loadedChunkCount} loaded at ${x},${z}: ${details}`);
       if (loadedChunkCount <= 3 || loadedChunkCount % 25 === 0) socket.emit("viewerDiagnostics", { stage: "chunk", loaded: loadedChunkCount, x, z, details });
       socket.emit("loadChunk", { x, z, chunk });
     });
     viewerEmitter.on("unloadChunk", ({ x, z }: { x: number; z: number }) => {
       unloadedChunkCount += 1;
-      events.log("info", "viewer", `POV-Chunk entladen bei ${x},${z} (gesamt ${unloadedChunkCount})`);
+      events.log("info", "viewer", `POV chunk unloaded at ${x},${z} (total ${unloadedChunkCount})`);
       socket.emit("viewerDiagnostics", { stage: "unload", unloaded: unloadedChunkCount, x, z });
       socket.emit("unloadChunk", { x, z });
     });
@@ -185,14 +185,14 @@ export function startServer(config: ConfigStore, events: AppEvents, bot: MultiBo
       await worldView.init(target.entity.position);
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
-      events.log("error", "viewer", `POV-Chunkinitialisierung fehlgeschlagen: ${message}`);
+      events.log("error", "viewer", `POV chunk initialization failed: ${message}`);
       socket.emit("viewerDiagnostics", { stage: "error", message });
       socket.removeAllListeners("mouseClick");
       worldView.removeListenersFromBot(target);
       return;
     }
     const initializedChunks = Object.keys(worldView.loadedChunks ?? {}).length;
-    events.log("info", "viewer", `POV-Chunkinitialisierung abgeschlossen: ${loadedChunkCount} gesendet, ${initializedChunks} im WorldView geladen`);
+    events.log("info", "viewer", `POV chunk initialization complete: ${loadedChunkCount} sent, ${initializedChunks} loaded in WorldView`);
     socket.emit("viewerDiagnostics", { stage: "init", loaded: loadedChunkCount, initialized: initializedChunks, unloaded: unloadedChunkCount });
     sendPosition();
     sendHud();
@@ -253,7 +253,7 @@ export function startServer(config: ConfigStore, events: AppEvents, bot: MultiBo
   const port = options.port ?? Number(process.env.PORT || 3000);
   server.listen(port, options.host ?? "0.0.0.0", () => {
     const address = server.address();
-    events.log("info", "server", `Dashboard läuft auf Port ${address && typeof address !== "string" ? address.port : port}`);
+    events.log("info", "server", `Dashboard running on port ${address && typeof address !== "string" ? address.port : port}`);
   });
   return server;
 }
@@ -278,21 +278,21 @@ async function handleApi(
     return json(response, 200, { config: value });
   }
   if (request.url === "/api/webhook/test" && request.method === "POST") {
-    const sent = await webhook.send("test", "Webhook-Test", "Die Benachrichtigungen des Remote Console Client (RCC)s funktionieren.");
-    return json(response, sent ? 200 : 400, sent ? { sent } : { sent, error: "Webhook ist nicht konfiguriert oder konnte nicht erreicht werden" });
+    const sent = await webhook.send("test", "Webhook test", "Remote Console Client (RCC) notifications are working.");
+    return json(response, sent ? 200 : 400, sent ? { sent } : { sent, error: "Webhook is not configured or could not be reached" });
   }
   if (request.url === "/api/proxy/test" && request.method === "POST") {
     const { proxyId, serverId } = await readJson(request);
     const proxy = config.get().proxies.find((item) => item.id === proxyId);
     const target = config.get().servers.find((item) => item.id === serverId) ?? config.get().servers[0];
-    if (!proxy || !target) throw new Error("Proxy oder Serverprofil fehlt");
+    if (!proxy || !target) throw new Error("Proxy or server profile is missing");
     const latencyMs = await testHttpProxy(proxy, target.host, target.port);
     return json(response, 200, { ok: true, latencyMs });
   }
   if (request.url === "/api/server/test" && request.method === "POST") {
     const { serverId } = await readJson(request);
     const target = config.get().servers.find((item) => item.id === serverId);
-    if (!target) throw new Error("Serverprofil fehlt");
+    if (!target) throw new Error("Server profile is missing");
     const latencyMs = await testTcpTarget(target.host, target.port);
     return json(response, 200, { ok: true, latencyMs });
   }
@@ -301,7 +301,7 @@ async function handleApi(
     const current = config.get();
     const value = await config.update({ sell: { ...current.sell, enabled: false }, spawner: { ...current.spawner, enabled: false }, accounts: current.accounts.map((account) => ({ ...account, sell: account.sell ? { ...account.sell, enabled: false } : null, spawner: account.spawner ? { ...account.spawner, enabled: false } : null })) });
     bot.applyConfig();
-    events.log("warn", "safety", "Not-Aus ausgeführt: Bot getrennt und Makros deaktiviert");
+    events.log("warn", "safety", "Emergency stop executed: bot disconnected and macros disabled");
     return json(response, 200, { ok: true, config: value });
   }
   if (request.url === "/api/account/logout" && request.method === "POST") {
@@ -314,14 +314,14 @@ async function handleApi(
   }
   if (request.url === "/api/account/pause" && request.method === "POST") {
     const body = await readJson(request); const accountId = String(body.accountId ?? ""); const paused = Boolean(body.paused); const current = config.get();
-    if (!current.accounts.some((account) => account.id === accountId)) throw new Error("Account nicht gefunden");
+    if (!current.accounts.some((account) => account.id === accountId)) throw new Error("Account not found");
     if (paused) bot.stop([accountId]);
     const value = await config.update({ accounts: current.accounts.map((account) => account.id === accountId ? { ...account, paused } : account) }); bot.applyConfig();
     return json(response, 200, { ok: true, config: value });
   }
   if (request.url === "/api/account" && request.method === "DELETE") {
     const body = await readJson(request); const accountId = String(body.accountId ?? "");
-    const current = config.get(); if (current.accounts.length <= 1) throw new Error("Der letzte Account kann nicht gelöscht werden");
+    const current = config.get(); if (current.accounts.length <= 1) throw new Error("The last account cannot be deleted");
     await bot.logout(accountId);
     const value = await config.update({ accounts: current.accounts.filter((account) => account.id !== accountId) }); bot.applyConfig();
     return json(response, 200, { ok: true, config: value });
@@ -339,20 +339,20 @@ async function handleApi(
     const snapshots = new Map((bot.snapshot().bots ?? []).map((item) => [item.accountId, item]));
     const plans = config.get().accounts.filter((account) => selected.has(account.id)).map((account) => {
       const sell = account.sell ?? config.get().sell; const spawner = account.spawner ?? config.get().spawner; const snapshot = snapshots.get(account.id);
-      const order = spawner.orderEnabled ? [spawner.homeTopCommand, spawner.orderCommand, spawner.orderAutoDetect ? `Bone-Orders auf bis zu ${spawner.orderMaxPages} Seiten prüfen` : `Bone-Order Slot ${spawner.orderHighestSlot}`, `Alle Bones liefern (Slot ${spawner.orderDeliverAllSlot}, ${spawner.orderMinDelayMs}-${spawner.orderMaxDelayMs} ms)`] : [];
-      return { accountId: account.id, name: account.name, online: snapshot?.connection === "online", inventoryItems: snapshot?.inventory.length ?? 0, sell: [`Command ${sell.command}`, `Pause ${sell.minPauseMs}-${sell.maxPauseMs} ms`, `Zeitfenster ${sell.scheduleStart}-${sell.scheduleEnd}`], spawner: [spawner.homeTopCommand, spawner.homeBottomCommand, `W → S → D (${spawner.movementStepMs} ms)`, "Spawner rechtsklicken", spawner.autoDetectSlots ? "GUI-Slots automatisch erkennen" : `Slots ${spawner.sellAllSlot}/${spawner.pageLeftSlot}/${spawner.pageRightSlot}/${spawner.dropAllSlot}`, spawner.arrowAbort ? "Arrow Guard prüfen" : "Arrow Guard deaktiviert", ...order, spawner.afkHomeCommand] };
+      const order = spawner.orderEnabled ? [spawner.homeTopCommand, spawner.orderCommand, spawner.orderAutoDetect ? `Check bone orders on up to ${spawner.orderMaxPages} pages` : `Bone-order slot ${spawner.orderHighestSlot}`, `Deliver all bones (slot ${spawner.orderDeliverAllSlot}, ${spawner.orderMinDelayMs}-${spawner.orderMaxDelayMs} ms)`] : [];
+      return { accountId: account.id, name: account.name, online: snapshot?.connection === "online", inventoryItems: snapshot?.inventory.length ?? 0, sell: [`Command ${sell.command}`, `Pause ${sell.minPauseMs}-${sell.maxPauseMs} ms`, `Schedule ${sell.scheduleStart}-${sell.scheduleEnd}`], spawner: [spawner.homeTopCommand, spawner.homeBottomCommand, `W → S → D (${spawner.movementStepMs} ms)`, "Right-click spawner", spawner.autoDetectSlots ? "Auto-detect GUI slots" : `Slots ${spawner.sellAllSlot}/${spawner.pageLeftSlot}/${spawner.pageRightSlot}/${spawner.dropAllSlot}`, spawner.arrowAbort ? "Check Arrow Guard" : "Arrow Guard disabled", ...order, spawner.afkHomeCommand] };
     });
     return json(response, 200, { plans });
   }
-  json(response, 404, { error: "Nicht gefunden" });
+  json(response, 404, { error: "Not found" });
 }
 
 export function httpStatusForError(error: unknown): number {
   const message = error instanceof Error ? error.message : String(error);
-  if (/Request zu groß/i.test(message)) return 413;
-  if (/Zu viele Loginversuche/i.test(message)) return 429;
-  if (/nicht online|kein ausgewählter Account ist online|pausiert|Verbindungsaufbau läuft bereits|accountId ist erforderlich|läuft kein Makro/i.test(message)) return 409;
-  if (error instanceof SyntaxError || /Ungültig|fehlt|nicht gefunden|nicht konfiguriert|letzte Account|kann nicht gelöscht/i.test(message)) return 400;
+  if (/Request too large|Request zu groß/i.test(message)) return 413;
+  if (/Too many login attempts|Zu viele Loginversuche/i.test(message)) return 429;
+  if (/not online|no selected account is online|paused|connection attempt is already running|accountId is required|no macro is running|nicht online|kein ausgewählter Account ist online|pausiert|Verbindungsaufbau läuft bereits|accountId ist erforderlich|läuft kein Makro/i.test(message)) return 409;
+  if (error instanceof SyntaxError || /Invalid|missing|not found|not configured|last account|cannot be deleted|Ungültig|fehlt|nicht gefunden|nicht konfiguriert|letzte Account|kann nicht gelöscht/i.test(message)) return 400;
   return 500;
 }
 
@@ -392,7 +392,7 @@ async function readJson(request: IncomingMessage): Promise<Record<string, any>> 
   for await (const chunk of request) {
     const buffer = Buffer.from(chunk);
     size += buffer.length;
-    if (size > 100_000) throw new Error("Request zu groß");
+    if (size > 100_000) throw new Error("Request too large");
     chunks.push(buffer);
   }
   if (!chunks.length) return {};
@@ -403,22 +403,22 @@ async function serveStatic(request: IncomingMessage, response: ServerResponse, p
   const pathname = new URL(request.url || "/", "http://localhost").pathname;
   const relative = pathname === "/" ? "index.html" : pathname.endsWith("/") ? `${pathname.slice(1)}index.html` : pathname.slice(1);
   const file = normalize(join(publicDir, relative));
-  if (!file.startsWith(normalize(publicDir))) return json(response, 403, { error: "Verboten" });
+  if (!file.startsWith(normalize(publicDir))) return json(response, 403, { error: "Forbidden" });
   try {
     const info = await stat(file);
     if (!info.isFile()) throw new Error("not file");
     response.writeHead(200, { "Content-Type": contentTypes[extname(file)] || "application/octet-stream" });
     createReadStream(file).pipe(response);
   } catch {
-    json(response, 404, { error: "Nicht gefunden" });
+    json(response, 404, { error: "Not found" });
   }
 }
 
 async function serveStaticPath(request: IncomingMessage, response: ServerResponse, root: string, relative: string): Promise<void> {
   const file = normalize(join(root, relative));
-  if (!file.startsWith(normalize(root))) return json(response, 403, { error: "Verboten" });
+  if (!file.startsWith(normalize(root))) return json(response, 403, { error: "Forbidden" });
   const info = await stat(file).catch(() => null);
-  if (!info?.isFile()) return json(response, 404, { error: "Nicht gefunden" });
+  if (!info?.isFile()) return json(response, 404, { error: "Not found" });
   response.statusCode = 200;
   response.setHeader("content-type", contentTypes[extname(file)] ?? "application/octet-stream");
   response.setHeader("vary", "Accept-Encoding");
