@@ -1,5 +1,6 @@
 import { createReadStream } from "node:fs";
 import { createRequire } from "node:module";
+import { EventEmitter } from "node:events";
 import { access, mkdir, stat } from "node:fs/promises";
 import { constants as fsConstants } from "node:fs";
 import { createServer, request as httpRequest, type IncomingMessage, type Server, type ServerResponse } from "node:http";
@@ -25,6 +26,12 @@ const contentTypes: Record<string, string> = {
 
 const require = createRequire(import.meta.url);
 const { WorldView } = require("prismarine-viewer/viewer/lib/worldView") as { WorldView: new (world: unknown, viewDistance: number, position: unknown, emitter: unknown) => any };
+
+export function viewerRenderVersion(minecraftVersion: string): string | null {
+  const version = minecraftVersion.trim();
+  if (version.startsWith("26.1") || version.startsWith("1.21.")) return "1.21.4";
+  return null;
+}
 
 export function startServer(config: ConfigStore, events: AppEvents, bot: MultiBotManager, webhook: WebhookNotifier, options: { port?: number; host?: string } = {}): Server {
   const auth = new DashboardAuth();
@@ -103,11 +110,12 @@ export function startServer(config: ConfigStore, events: AppEvents, bot: MultiBo
     if (!target?.entity?.position) { socket.emit("viewerUnavailable", "Kein Bot ist online"); return; }
     const minecraftVersion = typeof target.version === "string" ? target.version.trim() : "";
     if (!minecraftVersion) { socket.emit("viewerUnavailable", "Minecraft-Version ist noch nicht verfügbar"); return; }
-    if (!minecraftVersion.startsWith("1.21.")) {
+    const viewerVersion = viewerRenderVersion(minecraftVersion);
+    if (!viewerVersion) {
       socket.emit("viewerUnavailable", `POV unterstützt ${minecraftVersion} derzeit nicht`);
       return;
     }
-    const viewerVersion = "1.21.4";
+    events.log("info", "viewer", `POV startet: Minecraft ${minecraftVersion}, Renderprofil ${viewerVersion}, Position ${Math.round(target.entity.position.x)},${Math.round(target.entity.position.y)},${Math.round(target.entity.position.z)}`);
     socket.emit("version", viewerVersion);
     socket.emit("selfEntity", {
       id: target.entity.id,
@@ -119,7 +127,30 @@ export function startServer(config: ConfigStore, events: AppEvents, bot: MultiBo
       yaw: target.entity.yaw,
       pitch: target.entity.pitch
     });
-    const worldView = new WorldView(target.world, 6, target.entity.position, socket);
+    const viewerEmitter = new EventEmitter();
+    let loadedChunkCount = 0;
+    let unloadedChunkCount = 0;
+    viewerEmitter.on("loadChunk", ({ x, z, chunk }: { x: number; z: number; chunk: string }) => {
+      loadedChunkCount += 1;
+      let details = "unbekanntes Format";
+      try {
+        const parsed = JSON.parse(chunk) as { minY?: number; worldHeight?: number; sections?: unknown[] };
+        details = `minY=${parsed.minY ?? "?"}, Höhe=${parsed.worldHeight ?? "?"}, Sektionen=${parsed.sections?.length ?? "?"}, ${chunk.length} Bytes`;
+      } catch (error) {
+        details = `JSON-Fehler ${(error as Error).message}`;
+      }
+      if (loadedChunkCount <= 3 || loadedChunkCount % 25 === 0) events.log("info", "viewer", `POV-Chunk ${loadedChunkCount} geladen bei ${x},${z}: ${details}`);
+      socket.emit("viewerDiagnostics", { stage: "chunk", loaded: loadedChunkCount, x, z, details });
+      socket.emit("loadChunk", { x, z, chunk });
+    });
+    viewerEmitter.on("unloadChunk", ({ x, z }: { x: number; z: number }) => {
+      unloadedChunkCount += 1;
+      events.log("info", "viewer", `POV-Chunk entladen bei ${x},${z} (gesamt ${unloadedChunkCount})`);
+      socket.emit("viewerDiagnostics", { stage: "unload", unloaded: unloadedChunkCount, x, z });
+      socket.emit("unloadChunk", { x, z });
+    });
+    socket.on("mouseClick", (click: unknown) => viewerEmitter.emit("mouseClick", click));
+    const worldView = new WorldView(target.world, 6, target.entity.position, viewerEmitter);
     const activeControls = new Set<"forward" | "back" | "left" | "right" | "jump" | "sneak" | "sprint">();
     let lastLookAt = 0;
     const releaseControls = () => {
@@ -148,7 +179,19 @@ export function startServer(config: ConfigStore, events: AppEvents, bot: MultiBo
       void worldView.updatePosition(target.entity.position);
     };
     worldView.listenToBot(target);
-    await worldView.init(target.entity.position);
+    try {
+      await worldView.init(target.entity.position);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      events.log("error", "viewer", `POV-Chunkinitialisierung fehlgeschlagen: ${message}`);
+      socket.emit("viewerDiagnostics", { stage: "error", message });
+      socket.removeAllListeners("mouseClick");
+      worldView.removeListenersFromBot(target);
+      return;
+    }
+    const initializedChunks = Object.keys(worldView.loadedChunks ?? {}).length;
+    events.log("info", "viewer", `POV-Chunkinitialisierung abgeschlossen: ${loadedChunkCount} gesendet, ${initializedChunks} im WorldView geladen`);
+    socket.emit("viewerDiagnostics", { stage: "init", loaded: loadedChunkCount, initialized: initializedChunks, unloaded: unloadedChunkCount });
     sendPosition();
     sendHud();
     const hudInterval = setInterval(sendHud, 500);
@@ -200,6 +243,7 @@ export function startServer(config: ConfigStore, events: AppEvents, bot: MultiBo
       target.removeListener("playerLeft", sendHud);
       target.removeListener("messagestr", sendChat);
       clearInterval(hudInterval);
+      socket.removeAllListeners("mouseClick");
       worldView.removeListenersFromBot(target);
     });
   });

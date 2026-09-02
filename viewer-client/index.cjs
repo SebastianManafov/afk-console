@@ -9,6 +9,27 @@ renderer.setSize(window.innerWidth, window.innerHeight)
 renderer.outputEncoding = THREE.sRGBEncoding
 document.body.prepend(renderer.domElement)
 const viewer = new Viewer(renderer)
+const viewerDiagnostics = { chunks: 0, geometries: 0, emptyGeometries: 0, finished: 0 }
+function reportViewerState (label, extra = {}) {
+  const loadedChunks = Object.keys(viewer.world.loadedChunks || {}).length
+  const meshes = Object.keys(viewer.world.sectionMeshs || {}).length
+  console.info('[POV]', label, { ...viewerDiagnostics, loadedChunks, meshes, ...extra })
+}
+for (const worker of viewer.world.workers || []) {
+  const onmessage = worker.onmessage
+  worker.onmessage = (event) => {
+    const message = event?.data
+    if (message?.type === 'geometry') {
+      viewerDiagnostics.geometries += 1
+      const positions = message.geometry?.positions?.length || 0
+      if (positions === 0) viewerDiagnostics.emptyGeometries += 1
+      if (viewerDiagnostics.geometries <= 3 || viewerDiagnostics.geometries % 25 === 0) reportViewerState('worker geometry', { key: message.key, positions })
+    } else if (message?.type === 'sectionFinished') {
+      viewerDiagnostics.finished += 1
+    }
+    onmessage?.(event)
+  }
+}
 // PrismarineJS's 1.21.4 viewer only marks the legacy Y 0..255 range dirty
 // when a chunk arrives. Modern Java worlds extend from -64 through 319, so a
 // bot outside the legacy range otherwise receives valid chunks that never get
@@ -28,6 +49,11 @@ viewer.world.addColumn = (x, z, chunk) => {
   }
 }
 const socket = io({ path: '/pov-viewer/socket.io' })
+socket.on('viewerDiagnostics', (data) => {
+  if (data.stage === 'chunk') viewerDiagnostics.chunks = data.loaded || viewerDiagnostics.chunks
+  if (data.stage === 'error') status.textContent = `POV-Fehler: ${data.message}`
+  reportViewerState(`server ${data.stage}`, data)
+})
 const keys = new Set()
 let freecam = false
 let yaw = 0
