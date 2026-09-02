@@ -41,7 +41,7 @@ test("Offline-Dashboard: Login, State, Health, Preview und Sicherheitsfehler", {
     assert.equal((await fetch(`${baseUrl}/pov-viewer/`)).status, 401);
     const viewerPage = await fetch(`${baseUrl}/pov-viewer/`, { headers });
     assert.equal(viewerPage.status, 200);
-    assert.match(await viewerPage.text(), /WASD · Maus/);
+    assert.match(await viewerPage.text(), /WASD · Mouse/);
     const viewerBundle = await fetch(`${baseUrl}/pov-viewer/index.js`, { headers });
     assert.equal(viewerBundle.status, 200);
     assert.ok(Number(viewerBundle.headers.get("content-length") ?? 0) > 0 || (await viewerBundle.arrayBuffer()).byteLength > 1_000_000);
@@ -101,6 +101,7 @@ test("Offline-Dashboard: Login, State, Health, Preview und Sicherheitsfehler", {
     assert.equal(rateLimited.status, 429);
   } finally {
     bot.stop();
+    server.closeAllConnections();
     await new Promise<void>((resolve) => server.close(() => resolve()));
     if (previousPassword === undefined) delete process.env.DASHBOARD_PASSWORD; else process.env.DASHBOARD_PASSWORD = previousPassword;
     if (previousSecret === undefined) delete process.env.SESSION_SECRET; else process.env.SESSION_SECRET = previousSecret;

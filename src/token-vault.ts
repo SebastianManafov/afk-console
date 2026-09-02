@@ -5,7 +5,7 @@ import { basename, dirname, join } from "node:path";
 export class TokenVault {
   private readonly key: Buffer;
   constructor(private readonly directory: string, secret = process.env.CONFIG_ENCRYPTION_KEY || process.env.SESSION_SECRET || "") {
-    if (secret.length < 32) throw new Error("Token-Verschlüsselung benötigt einen Schlüssel mit mindestens 32 Zeichen");
+    if (secret.length < 32) throw new Error("Token encryption requires a key with at least 32 characters");
     this.key = createHash("sha256").update(secret).digest();
   }
 
@@ -43,7 +43,7 @@ export class TokenVault {
           }
         };
         visit(value);
-      } catch { /* Cacheformate ohne JSON werden ignoriert. */ }
+      } catch { /* Cache formats without JSON are ignored. */ }
     }
     return Number.isFinite(best) ? new Date(best).toISOString() : null;
   }
@@ -59,7 +59,7 @@ export class TokenVault {
     return `enc:v1:${iv.toString("base64url")}:${cipher.getAuthTag().toString("base64url")}:${encrypted.toString("base64url")}`;
   }
   private decrypt(value: string): Buffer {
-    const [, version, iv, tag, data] = value.split(":"); if (version !== "v1" || !iv || !tag || !data) throw new Error(`Ungültiger Token-Tresor: ${basename(this.directory)}`);
+    const [, version, iv, tag, data] = value.split(":"); if (version !== "v1" || !iv || !tag || !data) throw new Error(`Invalid token vault: ${basename(this.directory)}`);
     const decipher = createDecipheriv("aes-256-gcm", this.key, Buffer.from(iv, "base64url")); decipher.setAuthTag(Buffer.from(tag, "base64url"));
     return Buffer.concat([decipher.update(Buffer.from(data, "base64url")), decipher.final()]);
   }

@@ -8,8 +8,8 @@ const snapshot = (accountId: string, connection: BotSnapshot["connection"]): Bot
 test("Chat und Steuerung werden mit accountId eindeutig geroutet", () => {
   const bots = [snapshot("eins", "online"), snapshot("zwei", "online")];
   assert.equal(selectRoutedAccountId(bots, "zwei"), "zwei");
-  assert.throws(() => selectRoutedAccountId(bots), /accountId ist erforderlich/);
-  assert.throws(() => selectRoutedAccountId(bots, "fehlt"), /Account nicht gefunden/);
+  assert.throws(() => selectRoutedAccountId(bots), /accountId is required/);
+  assert.throws(() => selectRoutedAccountId(bots, "fehlt"), /Account not found/);
 });
 
 test("Ohne accountId bleibt genau ein Online-Account abwärtskompatibel", () => {

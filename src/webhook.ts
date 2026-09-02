@@ -42,7 +42,7 @@ export class WebhookNotifier {
       if (!response.ok) throw new Error(`HTTP ${response.status}`);
       return true;
     } catch (error) {
-      this.events.log("error", "webhook", `Webhook fehlgeschlagen: ${(error as Error).message}`);
+      this.events.log("error", "webhook", `Webhook failed: ${(error as Error).message}`);
       return false;
     }
   }

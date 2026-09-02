@@ -31,7 +31,7 @@ test("Lokale Passwörter dürfen 8 Zeichen haben, Produktion verlangt 12", () =>
     process.env.NODE_ENV = "development";
     assert.equal(new DashboardAuth().verifyPassword("Test123!"), true);
     process.env.NODE_ENV = "production";
-    assert.throws(() => new DashboardAuth(), /mindestens 12 Zeichen/);
+    assert.throws(() => new DashboardAuth(), /must be at least 12 characters/);
   } finally {
     if (previous.password === undefined) delete process.env.DASHBOARD_PASSWORD; else process.env.DASHBOARD_PASSWORD = previous.password;
     if (previous.secret === undefined) delete process.env.SESSION_SECRET; else process.env.SESSION_SECRET = previous.secret;

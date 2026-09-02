@@ -1,9 +1,10 @@
 const $ = (id) => document.getElementById(id)
+document.documentElement.lang = 'en'
 const worldRestartPrefs = JSON.parse(localStorage.getItem('rcc-world-restart') || '{}')
 if ($('worldRestartEnabled')) $('worldRestartEnabled').checked = worldRestartPrefs.enabled === true
-if ($('worldRestartMessage')) $('worldRestartMessage').value = worldRestartPrefs.message || 'Die Welt wird in ... Sekunden neugestartet'
+if ($('worldRestartMessage')) $('worldRestartMessage').value = worldRestartPrefs.message || 'The world will restart in ... seconds'
 if ($('worldRestartWait')) $('worldRestartWait').value = worldRestartPrefs.waitMinutes || 3
-$('saveMacros')?.addEventListener('click', () => { localStorage.setItem('rcc-world-restart', JSON.stringify({ enabled: $('worldRestartEnabled')?.checked === true, message: $('worldRestartMessage')?.value || '', waitMinutes: Number($('worldRestartWait')?.value || 3) })); toast('World-restart reconnect gespeichert') })
+$('saveMacros')?.addEventListener('click', () => { localStorage.setItem('rcc-world-restart', JSON.stringify({ enabled: $('worldRestartEnabled')?.checked === true, message: $('worldRestartMessage')?.value || '', waitMinutes: Number($('worldRestartWait')?.value || 3) })); toast('World-restart reconnect saved') })
 let state = null
 let config = null
 let socket = null
@@ -28,12 +29,12 @@ function setEmailHidden(accountId, hidden) {
 }
 
 document.querySelector('#sellScheduleEnd').closest('.form-grid').insertAdjacentHTML('beforeend', '<label>Sell GUI title<input id="sellGuiTitle"></label><label>Content last slot<input id="sellContentLastSlot" type="number" min="0" max="89"></label><label>Confirm slot<input id="sellConfirmSlot" type="number" min="0" max="89"></label>')
-document.querySelector('#spawnerScheduleEnd').closest('.form-grid').insertAdjacentHTML('beforeend', '<label>Home oben<input id="spawnerHomeTop"></label><label>Home unten<input id="spawnerHomeBottom"></label><label>Home AFK<input id="spawnerHomeAfk"></label><label>W/S/D duration (ms)<input id="spawnerMovementMs" type="number" min="50" max="5000"></label><label class="inline-check"><input id="spawnerAutoDetect" type="checkbox"> Auto-detect GUI slots</label><label class="inline-check"><input id="spawnerOrderEnabled" type="checkbox"> Deliver bones to highest order</label><label>Order command<input id="spawnerOrderCommand"></label><label>Order list title<input id="spawnerOrderTitle"></label><label>Delivery GUI title<input id="spawnerOrderDeliverTitle"></label><label>Highest order fallback slot<input id="spawnerOrderHighestSlot" type="number" min="0" max="89"></label><label>Whole inventory slot<input id="spawnerOrderDeliverSlot" type="number" min="0" max="89"></label><label>Order content last slot<input id="spawnerOrderContentLastSlot" type="number" min="0" max="89"></label><label>Order page left slot<input id="spawnerOrderPageLeftSlot" type="number" min="0" max="89"></label><label>Order page right slot<input id="spawnerOrderPageRightSlot" type="number" min="0" max="89"></label><label>Max order pages<input id="spawnerOrderMaxPages" type="number" min="1" max="100"></label><label>Human delay min (ms)<input id="spawnerOrderDelayMin" type="number" min="100" max="10000"></label><label>Human delay max (ms)<input id="spawnerOrderDelayMax" type="number" min="100" max="10000"></label><label class="inline-check"><input id="spawnerOrderAutoDetect" type="checkbox"> Auto-detect highest order and whole inventory</label>')
+document.querySelector('#spawnerScheduleEnd').closest('.form-grid').insertAdjacentHTML('beforeend', '<label>Home top<input id="spawnerHomeTop"></label><label>Home bottom<input id="spawnerHomeBottom"></label><label>AFK home<input id="spawnerHomeAfk"></label><label>W/S/D duration (ms)<input id="spawnerMovementMs" type="number" min="50" max="5000"></label><label class="inline-check"><input id="spawnerAutoDetect" type="checkbox"> Auto-detect GUI slots</label><label class="inline-check"><input id="spawnerOrderEnabled" type="checkbox"> Deliver bones to highest order</label><label>Order command<input id="spawnerOrderCommand"></label><label>Order list title<input id="spawnerOrderTitle"></label><label>Delivery GUI title<input id="spawnerOrderDeliverTitle"></label><label>Highest order fallback slot<input id="spawnerOrderHighestSlot" type="number" min="0" max="89"></label><label>Whole inventory slot<input id="spawnerOrderDeliverSlot" type="number" min="0" max="89"></label><label>Order content last slot<input id="spawnerOrderContentLastSlot" type="number" min="0" max="89"></label><label>Order page left slot<input id="spawnerOrderPageLeftSlot" type="number" min="0" max="89"></label><label>Order page right slot<input id="spawnerOrderPageRightSlot" type="number" min="0" max="89"></label><label>Max order pages<input id="spawnerOrderMaxPages" type="number" min="1" max="100"></label><label>Human delay min (ms)<input id="spawnerOrderDelayMin" type="number" min="100" max="10000"></label><label>Human delay max (ms)<input id="spawnerOrderDelayMax" type="number" min="100" max="10000"></label><label class="inline-check"><input id="spawnerOrderAutoDetect" type="checkbox"> Auto-detect highest order and whole inventory</label>')
 const spawnerGrid = document.querySelector('#spawnerMode').closest('.form-grid')
 const importantSpawnerFields = new Set(['spawnerMode', 'spawnerDropItem', 'spawnerMin', 'spawnerMax', 'spawnerOrderEnabled'])
 const spawnerAdvanced = document.createElement('details')
 spawnerAdvanced.className = 'advanced-settings'
-spawnerAdvanced.innerHTML = '<summary>Erweiterte Einstellungen</summary><p>Befehle, GUI-Erkennung, Slots, Zeitplan und Delays. Die Standardwerte passen zum bekannten HugoSMP-Aufbau.</p><div class="form-grid advanced-grid"></div>'
+spawnerAdvanced.innerHTML = '<summary>Advanced settings</summary><p>Commands, GUI detection, slots, schedule, and delays. The defaults match the known HugoSMP setup.</p><div class="form-grid advanced-grid"></div>'
 const spawnerAdvancedGrid = spawnerAdvanced.querySelector('.advanced-grid')
 for (const label of [...spawnerGrid.children]) {
   const input = label.querySelector('input,select')
@@ -41,13 +42,13 @@ for (const label of [...spawnerGrid.children]) {
 }
 spawnerGrid.after(spawnerAdvanced)
 document.querySelector('[data-view="macros"] .toolbar').insertAdjacentHTML('afterend', '<div id="macroTargets" class="panel macro-targets"><b>Apply to accounts</b><div id="macroTargetChecks" class="check-list horizontal"></div><button id="previewMacros" class="btn dark">Preview without clicks</button></div><pre id="macroPreview" class="panel preview-output hidden"></pre>')
-document.querySelector('.danger-zone').insertAdjacentHTML('beforebegin', '<div class="panel"><div class="section-heading"><div><h2>AFK automation</h2><p>Join- und Weltwechselbefehle, natürliche Aktivität und geplante Chat-Nachrichten.</p></div><span class="section-badge">Per server</span></div><div class="form-grid"><label>Join command<input id="settingJoinCommand" maxlength="256" placeholder="/server survival"></label><label>World-change command<input id="settingWorldCommand" maxlength="256" placeholder="/server survival"></label><label>Chat timer message<input id="settingSpamMessage" maxlength="256" placeholder="/server survival"></label><label>Chat interval (sec)<input id="settingSpamInterval" type="number" min="10" max="86400"></label><label>Anti-AFK min (sec)<input id="settingAntiAfkMin" type="number" min="10" max="3600"></label><label>Anti-AFK max (sec)<input id="settingAntiAfkMax" type="number" min="10" max="3600"></label></div><div class="check-list horizontal"><label><input id="settingAntiAfk" type="checkbox"> Random anti-AFK activity</label><label><input id="settingSpamEnabled" type="checkbox"> Enable chat timer</label></div></div>')
-document.querySelector('.danger-zone').insertAdjacentHTML('beforebegin', '<div class="panel"><div class="section-heading"><div><h2>System check</h2><p>Prüft die lokale Laufzeitkonfiguration, ohne Minecraft zu verbinden.</p></div><button id="runSystemCheck" class="btn dark">Check now</button></div><div id="systemCheckOutput" class="connection-health"><span class="health-chip">Noch nicht geprüft</span></div></div>')
+document.querySelector('.danger-zone').insertAdjacentHTML('beforebegin', '<div class="panel"><div class="section-heading"><div><h2>AFK automation</h2><p>Join and world-change commands, natural activity, and scheduled chat messages.</p></div><span class="section-badge">Per server</span></div><div class="form-grid"><label>Join command<input id="settingJoinCommand" maxlength="256" placeholder="/server survival"></label><label>World-change command<input id="settingWorldCommand" maxlength="256" placeholder="/server survival"></label><label>Chat timer message<input id="settingSpamMessage" maxlength="256" placeholder="/server survival"></label><label>Chat interval (sec)<input id="settingSpamInterval" type="number" min="10" max="86400"></label><label>Anti-AFK min (sec)<input id="settingAntiAfkMin" type="number" min="10" max="3600"></label><label>Anti-AFK max (sec)<input id="settingAntiAfkMax" type="number" min="10" max="3600"></label></div><div class="check-list horizontal"><label><input id="settingAntiAfk" type="checkbox"> Random anti-AFK activity</label><label><input id="settingSpamEnabled" type="checkbox"> Enable chat timer</label></div></div>')
+document.querySelector('.danger-zone').insertAdjacentHTML('beforebegin', '<div class="panel"><div class="section-heading"><div><h2>System check</h2><p>Checks the local runtime configuration without connecting to Minecraft.</p></div><button id="runSystemCheck" class="btn dark">Check now</button></div><div id="systemCheckOutput" class="connection-health"><span class="health-chip">Not checked yet</span></div></div>')
 
 async function api(path, options = {}) {
   let response
   try { response = await fetch(path, { headers: { 'content-type': 'application/json' }, ...options }) }
-  catch { throw new Error('Dashboard-Server nicht erreichbar. Bitte den lokalen Server neu starten.') }
+  catch { throw new Error('Dashboard server unreachable. Please restart the local server.') }
   const body = await response.json().catch(() => ({}))
   if (!response.ok) throw new Error(body.error || `HTTP ${response.status}`)
   return body
@@ -151,14 +152,14 @@ function renderState() {
   const transition = operationalState.worldTransition || { state: 'stable', message: '' }
   const worldLoading = online && transition.state !== 'stable'
   $('worldLoadingPanel').classList.toggle('hidden', !worldLoading)
-  if (worldLoading) $('worldLoadingText').textContent = `${transition.message || 'Neue Welt wird geladen'} · Steuerung und Makros pausiert`
+  if (worldLoading) $('worldLoadingText').textContent = `${transition.message || 'Loading new world'} · controls and macros paused`
   const authBot = bots.find((bot) => bot.authCode) || (state.authCode ? state : null)
   const auth = authBot?.authCode
   $('authPanel').classList.toggle('hidden', !auth)
   currentAuthAccountId = authBot?.accountId || null
   if (auth) { const account = config.accounts.find((item) => item.id === authBot.accountId); $('authAccountName').textContent = account?.name || authBot.username || 'Account'; $('authCode').textContent = auth.userCode; $('authLink').href = auth.verificationUri; $('authExpires').textContent = formatDuration(Math.max(0, Math.ceil((Date.parse(auth.expiresAt) - Date.now()) / 1000))) }
   $('serverNotice').classList.toggle('hidden', !operationalState.serverNotice)
-  if (operationalState.serverNotice) { $('serverNoticeTitle').textContent = operationalState.serverNotice.type === 'restart' ? 'Serverneustart erkannt' : 'Wartung erkannt'; $('serverNoticeText').textContent = operationalState.serverNotice.message }
+  if (operationalState.serverNotice) { $('serverNoticeTitle').textContent = operationalState.serverNotice.type === 'restart' ? 'Server restart detected' : 'Maintenance detected'; $('serverNoticeText').textContent = operationalState.serverNotice.message }
   $('connect').disabled = bots.every((bot) => bot.connection !== 'offline')
   $('stop').disabled = bots.every((bot) => bot.connection === 'offline')
   const macroSnapshot = selectedMacroSnapshot() || state
@@ -170,7 +171,7 @@ function renderState() {
   $('sellRuntime').textContent = sellRuntime.startedAt ? formatDuration(Math.floor((Date.now() - Date.parse(sellRuntime.startedAt)) / 1000)) : '—'
   $('spawnerRuntime').textContent = spawnerRuntime.startedAt ? formatDuration(Math.floor((Date.now() - Date.parse(spawnerRuntime.startedAt)) / 1000)) : '—'
   $('sellError').textContent = sellRuntime.error || ''; $('spawnerError').textContent = spawnerRuntime.error || ''
-  $('nextRun').textContent = spawnerRuntime.nextRun ? new Date(spawnerRuntime.nextRun).toLocaleString('de-DE', { day: '2-digit', hour: '2-digit', minute: '2-digit' }) : '—'
+  $('nextRun').textContent = spawnerRuntime.nextRun ? new Date(spawnerRuntime.nextRun).toLocaleString('en-US', { day: '2-digit', hour: '2-digit', minute: '2-digit' }) : '—'
   const selectedMacroTargets = [...document.querySelectorAll('.macro-target:checked')].map((input) => botForAccount(input.value)).filter(Boolean)
   const runnableMacroTargets = selectedMacroTargets.length ? selectedMacroTargets : $('macroAccountSelect').value === 'global' ? [] : [macroSnapshot]
   const hasOnlineMacroTarget = runnableMacroTargets.some((bot) => bot?.connection === 'online')
@@ -225,11 +226,11 @@ function renderDiagnostics() {
   select.value = bots.some((bot) => (bot.accountId || 'primary') === previous) ? previous : (bots[0]?.accountId || 'primary')
   const bot = bots.find((item) => (item.accountId || 'primary') === select.value) || bots[0]
   if (!bot) return
-  const transition = bot.worldTransition || { state: 'stable', message: 'Bereit' }
+  const transition = bot.worldTransition || { state: 'stable', message: 'Ready' }
   const lock = bot.controlLock || { locked: false, reason: null }
-  $('connectionHealth').innerHTML = `<span class="health-chip">Status: <b>${escapeHtml(labelStatus(bot.connection))}</b></span><span class="health-chip">Welt: <b>${escapeHtml(transition.message)}</b></span><span class="health-chip ${lock.locked ? 'locked' : ''}">Steuerung: <b>${escapeHtml(lock.locked ? lock.reason : 'frei')}</b></span>`
+  $('connectionHealth').innerHTML = `<span class="health-chip">Status: <b>${escapeHtml(labelStatus(bot.connection))}</b></span><span class="health-chip">World: <b>${escapeHtml(transition.message)}</b></span><span class="health-chip ${lock.locked ? 'locked' : ''}">Controls: <b>${escapeHtml(lock.locked ? lock.reason : 'available')}</b></span>`
   const entries = [...(bot.diagnostics || [])].reverse()
-  $('diagnosticTimeline').innerHTML = entries.length ? entries.map((entry) => `<div class="diagnostic-entry ${escapeHtml(entry.status)}"><time>${new Date(entry.at).toLocaleTimeString('de-DE')}</time><b>${escapeHtml(entry.stage)}</b><span>${escapeHtml(entry.message)}</span></div>`).join('') : '<div class="empty-row">Noch keine Diagnoseereignisse.</div>'
+  $('diagnosticTimeline').innerHTML = entries.length ? entries.map((entry) => `<div class="diagnostic-entry ${escapeHtml(entry.status)}"><time>${new Date(entry.at).toLocaleTimeString('en-US')}</time><b>${escapeHtml(entry.stage)}</b><span>${escapeHtml(entry.message)}</span></div>`).join('') : '<div class="empty-row">No diagnostic events yet.</div>'
 }
 
 function connectionFromProfiles(servers = config.servers, accounts = config.accounts, base = config.connection) {
@@ -318,7 +319,7 @@ function renderProfiles() {
       const row = document.createElement('tr')
       row.innerHTML = `<td><span class="server-gem">${escapeHtml(server.name.slice(0, 1).toUpperCase())}</span></td><td><b>${escapeHtml(server.name)}</b></td><td><span class="status ${onlineCount ? 'online' : 'offline'}">${onlineCount}/${users.length}</span></td><td>${users.length}</td><td><code>${escapeHtml(server.host)}:${server.port}</code></td><td>${escapeHtml(server.version)}</td><td><div class="row-actions"><button class="btn dark open-server">Open</button><button class="btn dark test-server">Test</button><button class="btn dark edit-profile">Edit</button><button class="btn red delete-profile">Delete</button></div></td>`
       row.querySelector('.open-server').onclick = () => showPage('connect')
-      row.querySelector('.test-server').onclick = async () => { try { const result = await api('/api/server/test', { method: 'POST', body: JSON.stringify({ serverId: server.id }) }); toast(`Server erreichbar · ${result.latencyMs} ms · kein Minecraft-Login`) } catch (error) { toast(error.message, true) } }
+      row.querySelector('.test-server').onclick = async () => { try { const result = await api('/api/server/test', { method: 'POST', body: JSON.stringify({ serverId: server.id }) }); toast(`Server reachable · ${result.latencyMs} ms · no Minecraft login`) } catch (error) { toast(error.message, true) } }
       row.querySelector('.edit-profile').onclick = () => openProfileDialog('server', server)
       row.querySelector('.delete-profile').onclick = () => deleteServerProfile(server)
       $('serversTable').append(row)
@@ -332,22 +333,22 @@ function renderProfiles() {
       const proxyOptions = `<option value="">Direct</option>` + config.proxies.map((item) => `<option value="${escapeHtml(item.id)}" ${item.id === account.proxyId ? 'selected' : ''}>${escapeHtml(item.name)}</option>`).join('')
       const row = document.createElement('tr')
       const tokenWarning = bot?.authExpiresAt && Date.parse(bot.authExpiresAt) - Date.now() < 900_000 ? '<small class="token-warning">Token renewal soon</small>' : ''
-      const connectionAction = bot?.authenticating ? 'Microsoft Login läuft …' : bot?.connection === 'online' ? 'Reconnect' : bot?.authenticated ? 'Connect' : 'Microsoft Login'
+      const connectionAction = bot?.authenticating ? 'Microsoft login running …' : bot?.connection === 'online' ? 'Reconnect' : bot?.authenticated ? 'Connect' : 'Microsoft login'
       const connectionError = bot?.lastError ? `<small class="connection-error">${escapeHtml(bot.lastError)}</small>` : ''
-      const loginDisabledReason = account.paused ? 'Pausierte Accounts müssen zuerst fortgesetzt werden' : bot?.authenticating ? 'Microsoft-Anmeldung läuft bereits' : ['connecting', 'reconnecting'].includes(status) ? 'Verbindungsaufbau läuft bereits' : ''
+      const loginDisabledReason = account.paused ? 'Paused accounts must be resumed first' : bot?.authenticating ? 'Microsoft authentication is already running' : ['connecting', 'reconnecting'].includes(status) ? 'Connection attempt is already running' : ''
       const emailHidden = hiddenEmailAccountIds.has(account.id)
       const visibleEmail = account.username || 'Not configured'
-      row.innerHTML = `<td><span class="player-head">${escapeHtml(account.name.slice(0, 1).toUpperCase())}</span></td><td><b>${escapeHtml(account.name)}</b><span class="email-visibility"><small class="account-email">${escapeHtml(emailHidden ? maskedEmail(visibleEmail) : visibleEmail)}</small><button type="button" class="email-toggle" aria-pressed="${emailHidden}" title="E-Mail ${emailHidden ? 'einblenden' : 'ausblenden'}">${emailHidden ? 'Einblenden' : 'Ausblenden'}</button></span></td><td><select class="server-assignment">${serverOptions}</select></td><td><select class="proxy-assignment">${proxyOptions}</select></td><td><span class="status ${account.paused ? 'offline' : status}">${account.paused ? 'Paused' : labelStatus(status)}</span>${connectionError}</td><td><span class="status ${bot?.authenticated ? 'online' : bot?.authenticating ? 'connecting' : 'offline'}">${bot?.authenticated ? 'Signed in' : bot?.authenticating ? 'Waiting for Microsoft' : 'Login required'}</span>${tokenWarning}</td><td><div class="reconnect-rule"><label><input class="reconnect-enabled" type="checkbox" ${account.reconnectEnabled ? 'checked' : ''}> Auto reconnect</label><input class="reconnect-delays" value="${escapeHtml(account.reconnectDelaysSeconds.join(','))}" title="Seconds, comma separated"></div><div class="account-actions"><button class="btn dark account-edit">Edit</button><button class="btn dark account-pause">${account.paused ? 'Resume' : 'Pause'}</button><button class="btn green account-login" ${loginDisabledReason ? `disabled title="${escapeHtml(loginDisabledReason)}"` : ''}>${connectionAction}</button><button class="btn dark account-logout" ${bot?.authenticated && !bot?.authenticating ? '' : 'disabled'}>Logout</button><button class="btn red account-delete" ${config.accounts.length <= 1 ? 'disabled title="Der letzte Account kann nicht gelöscht werden"' : ''}>Delete</button></div></td>`
+      row.innerHTML = `<td><span class="player-head">${escapeHtml(account.name.slice(0, 1).toUpperCase())}</span></td><td><b>${escapeHtml(account.name)}</b><span class="email-visibility"><small class="account-email">${escapeHtml(emailHidden ? maskedEmail(visibleEmail) : visibleEmail)}</small><button type="button" class="email-toggle" aria-pressed="${emailHidden}" title="Email ${emailHidden ? 'show' : 'hide'}">${emailHidden ? 'Show' : 'Hide'}</button></span></td><td><select class="server-assignment">${serverOptions}</select></td><td><select class="proxy-assignment">${proxyOptions}</select></td><td><span class="status ${account.paused ? 'offline' : status}">${account.paused ? 'Paused' : labelStatus(status)}</span>${connectionError}</td><td><span class="status ${bot?.authenticated ? 'online' : bot?.authenticating ? 'connecting' : 'offline'}">${bot?.authenticated ? 'Signed in' : bot?.authenticating ? 'Waiting for Microsoft' : 'Login required'}</span>${tokenWarning}</td><td><div class="reconnect-rule"><label><input class="reconnect-enabled" type="checkbox" ${account.reconnectEnabled ? 'checked' : ''}> Auto reconnect</label><input class="reconnect-delays" value="${escapeHtml(account.reconnectDelaysSeconds.join(','))}" title="Seconds, comma separated"></div><div class="account-actions"><button class="btn dark account-edit">Edit</button><button class="btn dark account-pause">${account.paused ? 'Resume' : 'Pause'}</button><button class="btn green account-login" ${loginDisabledReason ? `disabled title="${escapeHtml(loginDisabledReason)}"` : ''}>${connectionAction}</button><button class="btn dark account-logout" ${bot?.authenticated && !bot?.authenticating ? '' : 'disabled'}>Logout</button><button class="btn red account-delete" ${config.accounts.length <= 1 ? 'disabled title="The last account cannot be deleted"' : ''}>Delete</button></div></td>`
       row.querySelector('.email-toggle').onclick = (event) => {
         const hidden = !hiddenEmailAccountIds.has(account.id)
         setEmailHidden(account.id, hidden)
         row.querySelector('.account-email').textContent = hidden ? maskedEmail(visibleEmail) : visibleEmail
-        event.currentTarget.textContent = hidden ? 'Einblenden' : 'Ausblenden'
-        event.currentTarget.title = `E-Mail ${hidden ? 'einblenden' : 'ausblenden'}`
+        event.currentTarget.textContent = hidden ? 'Show' : 'Hide'
+        event.currentTarget.title = `Email ${hidden ? 'show' : 'hide'}`
         event.currentTarget.setAttribute('aria-pressed', String(hidden))
       }
-      row.querySelector('.server-assignment').onchange = (event) => switchAccountConnection(account.id, { serverId: event.target.value }, bot?.connection === 'online', 'Serverprofil')
-      row.querySelector('.proxy-assignment').onchange = (event) => switchAccountConnection(account.id, { proxyId: event.target.value || null }, bot?.connection === 'online', 'Proxyprofil')
+      row.querySelector('.server-assignment').onchange = (event) => switchAccountConnection(account.id, { serverId: event.target.value }, bot?.connection === 'online', 'Server profile')
+      row.querySelector('.proxy-assignment').onchange = (event) => switchAccountConnection(account.id, { proxyId: event.target.value || null }, bot?.connection === 'online', 'Proxy profile')
       row.querySelector('.account-login').onclick = () => bot?.authenticated ? connectAccounts([account.id], bot.connection === 'online') : loginMicrosoftAccount(account.id)
       row.querySelector('.account-edit').onclick = () => openProfileDialog('account', account)
       row.querySelector('.account-pause').onclick = () => pauseAccount(account.id, !account.paused)
@@ -366,7 +367,7 @@ function renderProfiles() {
     config.accounts.forEach((account) => {
       const bot = botMap.get(account.id); const server = config.servers.find((item) => item.id === account.serverId); const proxy = config.proxies.find((item) => item.id === account.proxyId); const status = bot?.connection || 'offline'; const row = document.createElement('tr')
       const selected = selectedConnectAccountIds.has(account.id) && !account.paused
-      row.innerHTML = `<td><span class="player-head">${escapeHtml(account.name.slice(0, 1).toUpperCase())}</span></td><td><b>${escapeHtml(account.name)}</b>${account.paused ? '<small class="block token-warning">Paused</small>' : ''}</td><td><span class="status ${account.paused ? 'offline' : status}">${account.paused ? 'Paused' : labelStatus(status)}</span></td><td>${escapeHtml(server?.name || 'Missing')}</td><td>${escapeHtml(proxy?.name || 'Direct')}</td><td>${account.sell || account.spawner ? 'Individual' : 'Global'}</td><td><input class="account-select" data-account-id="${escapeHtml(account.id)}" type="checkbox" ${selected ? 'checked' : ''} ${account.paused ? 'disabled title="Account ist pausiert"' : ''}></td>`
+      row.innerHTML = `<td><span class="player-head">${escapeHtml(account.name.slice(0, 1).toUpperCase())}</span></td><td><b>${escapeHtml(account.name)}</b>${account.paused ? '<small class="block token-warning">Paused</small>' : ''}</td><td><span class="status ${account.paused ? 'offline' : status}">${account.paused ? 'Paused' : labelStatus(status)}</span></td><td>${escapeHtml(server?.name || 'Missing')}</td><td>${escapeHtml(proxy?.name || 'Direct')}</td><td>${account.sell || account.spawner ? 'Individual' : 'Global'}</td><td><input class="account-select" data-account-id="${escapeHtml(account.id)}" type="checkbox" ${selected ? 'checked' : ''} ${account.paused ? 'disabled title="Account is paused"' : ''}></td>`
       row.querySelector('.account-select').onchange = (event) => { if (event.target.checked) selectedConnectAccountIds.add(account.id); else selectedConnectAccountIds.delete(account.id) }
       $('connectAccounts').append(row)
     })
@@ -390,22 +391,22 @@ function fillSlots(container, slots, bySlot) {
   container.innerHTML = ''
   slots.forEach((slot, index) => {
     const item = bySlot.get(slot); const element = document.createElement('button'); element.className = `slot ${index === 0 && slots.length === 9 ? 'hot-selected' : ''}`
-    element.title = item ? `${item.displayName} · ${item.name} · Slot ${slot}` : `Empty · Slot ${slot}`
+    element.title = item ? `${item.displayName} · ${item.name} · Slot ${slot}` : `Empty · slot ${slot}`
     if (item) element.innerHTML = `<b>${escapeHtml(item.displayName)}</b><span>${item.count}</span>`
     if (slots.length === 9) element.onclick = () => {
       const mode = $('inventoryActionMode')?.value || 'inspect'
       if (mode === 'drop-one' || mode === 'drop-stack') {
-        if (!item) return toast('Dieser Slot ist leer', true)
-        if (mode === 'drop-stack' && !confirm(`${item.count}× ${item.displayName} wirklich droppen?`)) return
+        if (!item) return toast('This slot is empty', true)
+        if (mode === 'drop-stack' && !confirm(`${item.count}× ${item.displayName} drop entire stack?`)) return
         return control({ action: 'dropSlot', slot, stack: mode === 'drop-stack' })
       }
       return control({ action: 'hotbar', slot: index })
     }
     else element.onclick = async () => {
       const mode = $('inventoryActionMode').value
-      if (mode === 'inspect') return toast(item ? `${item.displayName} · ${item.count} · Slot ${slot}` : `Slot ${slot} ist leer`)
-      if (!item) return toast('Dieser Slot ist leer', true)
-      if (mode === 'drop-stack' && !confirm(`${item.count}× ${item.displayName} wirklich droppen?`)) return
+      if (mode === 'inspect') return toast(item ? `${item.displayName} · ${item.count} · slot ${slot}` : `Slot ${slot} is empty`)
+      if (!item) return toast('This slot is empty', true)
+      if (mode === 'drop-stack' && !confirm(`${item.count}× ${item.displayName} drop entire stack?`)) return
       if (mode === 'shift') return control({ action: 'inventoryClick', slot, shift: true })
       if (mode === 'offhand') return control({ action: 'offhand', slot })
       return control({ action: 'dropSlot', slot, stack: mode === 'drop-stack' })
@@ -418,22 +419,22 @@ function escapeHtml(value) { const div = document.createElement('div'); div.text
 function labelStatus(value) { return ({ online: 'Online', connecting: 'Connecting', reconnecting: 'Reconnecting', offline: 'Offline' })[value] || value }
 function formatDuration(seconds) { const s = Math.max(0, Number(seconds) || 0); const h = Math.floor(s / 3600); const m = Math.floor(s % 3600 / 60); return h ? `${h}h ${m}m` : `${m}m ${s % 60}s` }
 function addChat(entry, system = false) { logEntries.push({ ...entry, system }); if (logEntries.length > 500) logEntries.shift(); renderConsole() }
-function renderConsole() { if (!$('chat')) return; const filter = $('logFilter')?.value || 'all'; const accountId = $('chatAccountSelect')?.value; const account = config?.accounts?.find((item) => item.id === accountId); const visible = logEntries.filter((entry) => (!accountId || entry.accountId === accountId || (!entry.accountId && account && entry.message.includes(`[${account.name}/`))) && (filter === 'all' || (filter === 'chat' ? !entry.system : ['warn', 'error'].includes(entry.level)))); $('chat').innerHTML = ''; visible.forEach((entry) => { const row = document.createElement('p'); row.className = `log-${entry.level || 'info'}`; row.textContent = `${new Date(entry.at).toLocaleTimeString('de-DE')} ${entry.system ? 'SYSTEM ' : ''}${entry.message}`; $('chat').append(row) }); $('chat').scrollTop = $('chat').scrollHeight }
+function renderConsole() { if (!$('chat')) return; const filter = $('logFilter')?.value || 'all'; const accountId = $('chatAccountSelect')?.value; const account = config?.accounts?.find((item) => item.id === accountId); const visible = logEntries.filter((entry) => (!accountId || entry.accountId === accountId || (!entry.accountId && account && entry.message.includes(`[${account.name}/`))) && (filter === 'all' || (filter === 'chat' ? !entry.system : ['warn', 'error'].includes(entry.level)))); $('chat').innerHTML = ''; visible.forEach((entry) => { const row = document.createElement('p'); row.className = `log-${entry.level || 'info'}`; row.textContent = `${new Date(entry.at).toLocaleTimeString('en-US')} ${entry.system ? 'SYSTEM ' : ''}${entry.message}`; $('chat').append(row) }); $('chat').scrollTop = $('chat').scrollHeight }
 async function control(body) { try { await api('/api/bot/control', { method: 'POST', body: JSON.stringify({ ...body, accountId: activeControlAccountId }) }) } catch (error) { toast(error.message, true) } }
-$('runSystemCheck').onclick = async () => { try { const result = await api('/api/system-check'); const labels = { nodeVersion: 'Node', provider: 'Runtime', dataDirConfigured: 'Data dir', dataWritable: 'Writable', autoConnectAllowed: 'Auto-connect', sessionSecretConfigured: 'Session secret', encryptionKeyDedicated: 'Encryption key' }; $('systemCheckOutput').innerHTML = Object.entries(result).map(([key, value]) => `<span class="health-chip ${value === false ? 'locked' : ''}">${escapeHtml(labels[key] || key)}: <b>${escapeHtml(String(value))}</b></span>`).join('') } catch (error) { toast(error.message, true) } }
-$('takeOver').onclick = async () => { try { await api('/api/bot/take-over', { method: 'POST', body: JSON.stringify({ accountId: activeControlAccountId }) }); toast('Makro beendet · manuelle Steuerung frei') } catch (error) { toast(error.message, true) } }
+  $('runSystemCheck').onclick = async () => { try { const result = await api('/api/system-check'); const labels = { nodeVersion: 'Node', provider: 'Runtime', dataDirConfigured: 'Data directory configured', dataWritable: 'Writable', autoConnectAllowed: 'Auto-connect', sessionSecretConfigured: 'Session secret', encryptionKeyDedicated: 'Dedicated encryption key' }; $('systemCheckOutput').innerHTML = Object.entries(result).map(([key, value]) => `<span class="health-chip ${value === false ? 'locked' : ''}">${escapeHtml(labels[key] || key)}: <b>${escapeHtml(String(value))}</b></span>`).join('') } catch (error) { toast(error.message, true) } }
+$('takeOver').onclick = async () => { try { await api('/api/bot/take-over', { method: 'POST', body: JSON.stringify({ accountId: activeControlAccountId }) }); toast('Macro ended · manual controls available') } catch (error) { toast(error.message, true) } }
 $('chatAccountSelect').addEventListener('change', renderConsole)
 $('diagnosticAccount').onchange = renderDiagnostics
 $('copyDiagnostics').onclick = async () => {
   const bots = state.bots?.length ? state.bots : [state]
   const bot = bots.find((item) => (item.accountId || 'primary') === $('diagnosticAccount').value) || bots[0]
   const account = config.accounts.find((item) => item.id === bot?.accountId)
-  const report = [`RCC Diagnose · ${account?.name || bot?.username || 'Account'}`, `Status: ${bot?.connection}`, `Server: ${bot?.server}`, `Welt: ${bot?.worldTransition?.message || 'unbekannt'}`, `Steuerung: ${bot?.controlLock?.locked ? bot.controlLock.reason : 'frei'}`, '', ...(bot?.diagnostics || []).map((entry) => `${entry.at} [${entry.status.toUpperCase()}] ${entry.stage}: ${entry.message}`)].join('\n')
-  try { await navigator.clipboard.writeText(report); toast('Diagnose kopiert') } catch { toast('Kopieren wurde vom Browser blockiert', true) }
+  const report = [`RCC diagnostics · ${account?.name || bot?.username || 'Account'}`, `Status: ${bot?.connection}`, `Server: ${bot?.server}`, `World: ${bot?.worldTransition?.message || 'unknown'}`, `Controls: ${bot?.controlLock?.locked ? bot.controlLock.reason : 'available'}`, '', ...(bot?.diagnostics || []).map((entry) => `${entry.at} [${entry.status.toUpperCase()}] ${entry.stage}: ${entry.message}`)].join('\n')
+  try { await navigator.clipboard.writeText(report); toast('Diagnostics copied') } catch { toast('Copying was blocked by the browser', true) }
 }
 function selectedAccountIds() { return [...document.querySelectorAll('.account-select:checked:not(:disabled)')].map((input) => input.dataset.accountId) }
-function selectedAccountsOrWarn() { const ids = selectedAccountIds(); if (!ids.length) { toast('Bitte mindestens einen Account auswählen.', true); return null } return ids }
-function macroTargetIds(requireSelection = false) { const checked = [...document.querySelectorAll('.macro-target:checked')].map((input) => input.value); if (checked.length) return checked; const selected = $('macroAccountSelect').value; if (selected !== 'global') return [selected]; if (requireSelection) { toast('Bitte zuerst mindestens einen Makro-Account auswählen.', true); return null } return config.accounts.map((account) => account.id) }
+function selectedAccountsOrWarn() { const ids = selectedAccountIds(); if (!ids.length) { toast('Select at least one account first.', true); return null } return ids }
+function macroTargetIds(requireSelection = false) { const checked = [...document.querySelectorAll('.macro-target:checked')].map((input) => input.value); if (checked.length) return checked; const selected = $('macroAccountSelect').value; if (selected !== 'global') return [selected]; if (requireSelection) { toast('Select at least one macro account first.', true); return null } return config.accounts.map((account) => account.id) }
 function applyFilter(input) {
   const scope = input.closest('.table-panel') || input.closest('.page')
   if (!scope) return
@@ -447,23 +448,23 @@ async function saveProfilePatch(patch) {
   const normalizedPatch = { ...patch, connection: connectionFromProfiles(servers, accounts, { ...config.connection, ...(patch.connection || {}) }) }
   const result = await api('/api/settings', { method: 'PUT', body: JSON.stringify(normalizedPatch) }); config = result.config; renderConfig(); renderState()
 }
-async function updateAccount(id, patch) { try { await saveProfilePatch({ accounts: config.accounts.map((account) => account.id === id ? { ...account, ...patch } : account) }); toast('Account aktualisiert'); return true } catch (error) { toast(error.message, true); return false } }
+async function updateAccount(id, patch) { try { await saveProfilePatch({ accounts: config.accounts.map((account) => account.id === id ? { ...account, ...patch } : account) }); toast('Account updated'); return true } catch (error) { toast(error.message, true); return false } }
 async function switchAccountConnection(accountId, patch, wasOnline, label) {
   if (!await updateAccount(accountId, patch)) return
-  toast(`${label} gespeichert${wasOnline ? ' · wird erst beim nächsten manuellen Connect verwendet' : ''}`)
+  toast(`${label} saved${wasOnline ? ' · takes effect on the next manual connection' : ''}`)
 }
-function confirmLiveConnection(reconnect = false) { return confirm(`${reconnect ? 'Neu verbinden' : 'Verbinden'} stellt jetzt eine echte Verbindung zum ausgewählten Minecraft-Server her. Fortfahren?`) }
+function confirmLiveConnection(reconnect = false) { return confirm(`${reconnect ? 'Reconnect' : 'Connect'} will now establish a real connection to the selected Minecraft server. Continue?`) }
 async function connectAccounts(accountIds, reconnect = false) {
   if (!confirmLiveConnection(reconnect)) return
   try {
     await api(reconnect ? '/api/bot/reconnect' : '/api/bot/connect', { method: 'POST', body: JSON.stringify({ accountIds }) })
-    toast(reconnect ? 'Neuverbinden gestartet' : 'Verbindung gestartet')
+    toast(reconnect ? 'Reconnect started' : 'Connection started')
   } catch (error) { toast(error.message, true) }
 }
-async function pauseAccount(accountId, paused) { try { const result = await api('/api/account/pause', { method: 'POST', body: JSON.stringify({ accountId, paused }) }); config = result.config; renderConfig(); renderState(); toast(paused ? 'Account pausiert' : 'Account fortgesetzt') } catch (error) { toast(error.message, true) } }
-async function loginMicrosoftAccount(accountId) { try { await api('/api/account/login', { method: 'POST', body: JSON.stringify({ accountId }) }); showPage('connect'); toast('Neuer Microsoft-Code wird erstellt …') } catch (error) { toast(error.message, true) } }
-async function logoutMicrosoftAccount(accountId, name) { if (!confirm(`Microsoft-Anmeldung für „${name}“ wirklich entfernen? Der OAuth-Token wird lokal gelöscht.`)) return; try { await api('/api/account/logout', { method: 'POST', body: JSON.stringify({ accountId }) }); toast('Microsoft-Anmeldung entfernt') } catch (error) { toast(error.message, true) } }
-async function deleteAccount(accountId, name) { if (!confirm(`Account „${name}“ samt lokalem OAuth-Token wirklich löschen?`)) return; try { const result = await api('/api/account', { method: 'DELETE', body: JSON.stringify({ accountId }) }); config = result.config; await saveProfilePatch({ accounts: config.accounts }); toast('Account gelöscht') } catch (error) { toast(error.message, true) } }
+async function pauseAccount(accountId, paused) { try { const result = await api('/api/account/pause', { method: 'POST', body: JSON.stringify({ accountId, paused }) }); config = result.config; renderConfig(); renderState(); toast(paused ? 'Account paused' : 'Account resumed') } catch (error) { toast(error.message, true) } }
+async function loginMicrosoftAccount(accountId) { try { await api('/api/account/login', { method: 'POST', body: JSON.stringify({ accountId }) }); showPage('connect'); toast('Creating a new Microsoft code …') } catch (error) { toast(error.message, true) } }
+async function logoutMicrosoftAccount(accountId, name) { if (!confirm(`Remove Microsoft authentication for “${name}”? The OAuth token will be deleted locally.`)) return; try { await api('/api/account/logout', { method: 'POST', body: JSON.stringify({ accountId }) }); toast('Microsoft authentication removed') } catch (error) { toast(error.message, true) } }
+async function deleteAccount(accountId, name) { if (!confirm(`Delete account “${name}” and its local OAuth token?`)) return; try { const result = await api('/api/account', { method: 'DELETE', body: JSON.stringify({ accountId }) }); config = result.config; await saveProfilePatch({ accounts: config.accounts }); toast('Account deleted') } catch (error) { toast(error.message, true) } }
 
 document.querySelectorAll('[data-page]').forEach((button) => button.addEventListener('click', () => showPage(button.dataset.page)))
 document.querySelectorAll('.configure-account,.configure-server').forEach((button) => button.addEventListener('click', () => showPage('settings')))
@@ -479,14 +480,14 @@ $('loginForm').addEventListener('submit', async (event) => { event.preventDefaul
 $('logout').onclick = async () => { await api('/api/logout', { method: 'POST' }); sessionStorage.removeItem('rcc-role'); location.reload() }
 $('connect').onclick = () => { const accountIds = selectedAccountsOrWarn(); if (accountIds) connectAccounts(accountIds) }
 $('stop').onclick = () => { const accountIds = selectedAccountsOrWarn(); if (accountIds) api('/api/bot/stop', { method: 'POST', body: JSON.stringify({ accountIds }) }).catch((error) => toast(error.message, true)) }
-$('settingsStop').onclick = () => { if (confirm('Alle verbundenen Bots trennen?')) api('/api/bot/stop', { method: 'POST', body: JSON.stringify({}) }).catch((error) => toast(error.message, true)) }
+$('settingsStop').onclick = () => { if (confirm('Disconnect all connected bots?')) api('/api/bot/stop', { method: 'POST', body: JSON.stringify({}) }).catch((error) => toast(error.message, true)) }
 $('reconnect').onclick = () => { const accountIds = selectedAccountsOrWarn(); if (accountIds) connectAccounts(accountIds, true) }
 $('cancelReconnect').onclick = () => {
-  if (!currentReconnectAccountId) return toast('Kein aktiver Reconnect gefunden.', true)
-  api('/api/bot/stop', { method: 'POST', body: JSON.stringify({ accountIds: [currentReconnectAccountId] }) }).then(() => toast('Reconnect für diesen Account abgebrochen')).catch((error) => toast(error.message, true))
+  if (!currentReconnectAccountId) return toast('No active reconnect found.', true)
+  api('/api/bot/stop', { method: 'POST', body: JSON.stringify({ accountIds: [currentReconnectAccountId] }) }).then(() => toast('Reconnect for this account cancelled')).catch((error) => toast(error.message, true))
 }
-$('copyAuthCode').onclick = async () => { try { await navigator.clipboard.writeText($('authCode').textContent); toast('Gerätecode kopiert') } catch { toast('Kopieren nicht möglich', true) } }
-$('refreshAuthCode').onclick = () => currentAuthAccountId ? loginMicrosoftAccount(currentAuthAccountId) : toast('Account nicht gefunden', true)
+$('copyAuthCode').onclick = async () => { try { await navigator.clipboard.writeText($('authCode').textContent); toast('Device code copied') } catch { toast('Copying is not available', true) } }
+$('refreshAuthCode').onclick = () => currentAuthAccountId ? loginMicrosoftAccount(currentAuthAccountId) : toast('Account not found', true)
 $('logFilter').onchange = renderConsole
 $('chatForm').addEventListener('submit', async (event) => { event.preventDefault(); try { await api('/api/bot/chat', { method: 'POST', body: JSON.stringify({ message: $('chatInput').value, accountId: activeControlAccountId }) }); $('chatInput').value = '' } catch (error) { toast(error.message, true) } })
 $('moveBtn').onclick = () => control({ action: 'move', direction: $('moveDirection').value, blocks: Number($('moveBlocks').value) })
@@ -522,8 +523,8 @@ $('addWebhook').onclick = () => $('webhookUrl').focus()
 function openProfileDialog(type, item = null) {
   editingProfileId = item?.id || null; $('profileType').value = type; $('profileForm').reset(); $('profileType').value = type
   const account = type === 'account'; const proxy = type === 'proxy'; const server = type === 'server'
-  $('profileDialogTitle').textContent = `${type === 'account' ? 'Account' : type === 'proxy' ? 'Proxy' : 'Server'} ${item ? 'bearbeiten' : 'hinzufügen'}`
-  $('profileDialogHint').textContent = account ? 'Erhält einen eigenen OAuth-Ordner und eigene Makroeinstellungen.' : proxy ? 'HTTP-CONNECT-Proxy; Zugangsdaten werden verschlüsselt.' : 'Minecraft Java Serverprofil.'
+  $('profileDialogTitle').textContent = `${item ? 'Edit' : 'Add'} ${type === 'account' ? 'account' : type === 'proxy' ? 'proxy' : 'server'}`
+  $('profileDialogHint').textContent = account ? 'Uses a separate OAuth folder and macro settings.' : proxy ? 'HTTP-CONNECT proxy; credentials are encrypted.' : 'Minecraft Java server profile.'
   document.querySelectorAll('.profile-server-field').forEach((field) => field.classList.toggle('hidden', account))
   document.querySelectorAll('.profile-port-field').forEach((field) => field.classList.toggle('hidden', account))
   document.querySelectorAll('.profile-version-field').forEach((field) => field.classList.toggle('hidden', !server))
@@ -541,21 +542,21 @@ $('addServerProfile').onclick = () => openProfileDialog('server')
 $('addAccountProfile').onclick = () => openProfileDialog('account')
 $('addProxyProfile').onclick = () => openProfileDialog('proxy')
 $('closeProfileDialog').onclick = $('cancelProfileDialog').onclick = () => $('profileDialog').close()
-async function deleteServerProfile(server) { if (config.servers.length <= 1) return toast('Der letzte Server kann nicht gelöscht werden.', true); if (config.accounts.some((account) => account.serverId === server.id)) return toast('Server ist noch einem Account zugewiesen.', true); if (!confirm(`Server „${server.name}“ löschen?`)) return; try { await saveProfilePatch({ servers: config.servers.filter((item) => item.id !== server.id) }); toast('Server gelöscht') } catch (error) { toast(error.message, true) } }
-async function deleteProxyProfile(proxy) { if (!confirm(`Proxy „${proxy.name}“ löschen und betroffene Accounts auf Direct stellen?`)) return; try { await saveProfilePatch({ proxies: config.proxies.filter((item) => item.id !== proxy.id), accounts: config.accounts.map((account) => account.proxyId === proxy.id ? { ...account, proxyId: null } : account) }); toast('Proxy gelöscht') } catch (error) { toast(error.message, true) } }
+async function deleteServerProfile(server) { if (config.servers.length <= 1) return toast('The last server cannot be deleted.', true); if (config.accounts.some((account) => account.serverId === server.id)) return toast('This server is still assigned to an account.', true); if (!confirm(`Delete server “${server.name}”?`)) return; try { await saveProfilePatch({ servers: config.servers.filter((item) => item.id !== server.id) }); toast('Server deleted') } catch (error) { toast(error.message, true) } }
+async function deleteProxyProfile(proxy) { if (!confirm(`Delete proxy “${proxy.name}” and switch affected accounts to Direct?`)) return; try { await saveProfilePatch({ proxies: config.proxies.filter((item) => item.id !== proxy.id), accounts: config.accounts.map((account) => account.proxyId === proxy.id ? { ...account, proxyId: null } : account) }); toast('Proxy deleted') } catch (error) { toast(error.message, true) } }
 $('profileForm').onsubmit = async (event) => {
   event.preventDefault(); const type = $('profileType').value; const name = $('profileInputName').value.trim()
   try {
     if (type === 'server') { const item = { id: editingProfileId || `server-${Date.now()}`, name, host: $('profileInputHost').value.trim(), port: Number($('profileInputPort').value), version: $('profileInputVersion').value.trim(), autoGuiJoinEnabled: $('profileAutoGuiEnabled').checked, autoGuiJoinTitleIncludes: $('profileAutoGuiTitle').value.trim(), autoGuiJoinSlot: Number($('profileAutoGuiSlot').value), autoGuiJoinDelayMs: Number($('profileAutoGuiDelay').value) }; await saveProfilePatch({ servers: editingProfileId ? config.servers.map((server) => server.id === editingProfileId ? item : server) : [...config.servers, item] }) }
     if (type === 'account') {
       const email = $('profileInputEmail').value.trim(); const previous = config.accounts.find((account) => account.id === editingProfileId)
-      if (previous && previous.username !== email && !confirm('Die E-Mail wurde geändert. Die bisherige Microsoft-Anmeldung wird dabei entfernt. Fortfahren?')) return
+      if (previous && previous.username !== email && !confirm('The email address changed. The existing Microsoft authentication will be removed. Continue?')) return
       if (previous && previous.username !== email) await api('/api/account/logout', { method: 'POST', body: JSON.stringify({ accountId: previous.id }) })
       const item = previous ? { ...previous, name, username: email } : { id: `account-${Date.now()}`, name, username: email, serverId: config.servers[0].id, proxyId: null, enabled: true, paused: false, autoConnect: false, reconnectEnabled: true, reconnectDelaysSeconds: [5, 15, 30, 60], sell: structuredClone(config.sell), spawner: structuredClone(config.spawner) }
       await saveProfilePatch({ accounts: previous ? config.accounts.map((account) => account.id === previous.id ? item : account) : [...config.accounts, item] })
     }
     if (type === 'proxy') { const previous = config.proxies.find((proxy) => proxy.id === editingProfileId); const item = { id: editingProfileId || `proxy-${Date.now()}`, name, host: $('profileInputHost').value.trim(), port: Number($('profileInputPort').value), username: $('profileInputUser').value.trim(), password: $('profileInputPassword').value || previous?.password || '' }; await saveProfilePatch({ proxies: editingProfileId ? config.proxies.map((proxy) => proxy.id === editingProfileId ? item : proxy) : [...config.proxies, item] }) }
-    $('profileDialog').close(); editingProfileId = null; toast('Profil gespeichert')
+    $('profileDialog').close(); editingProfileId = null; toast('Profile saved')
   } catch (error) { toast(error.message, true) }
 }
 $('saveWebhook').onclick = async () => {
@@ -571,8 +572,8 @@ function toggleTheme() { applyTheme(document.documentElement.dataset.theme === '
 $('themeToggle').onclick = $('settingsTheme').onclick = toggleTheme
 applyTheme(localStorage.getItem('rcc-theme') || 'dark')
 $('exportSettings').onclick = () => { const blob = new Blob([JSON.stringify(config, null, 2)], { type: 'application/json' }); const link = document.createElement('a'); link.href = URL.createObjectURL(blob); link.download = `rcc-backup-${new Date().toISOString().slice(0, 10)}.json`; link.click(); URL.revokeObjectURL(link.href) }
-$('importSettings').onchange = async (event) => { try { if (!confirm('Das Backup überschreibt die aktuelle Konfiguration. Wirklich fortfahren?')) return; const imported = JSON.parse(await event.target.files[0].text()); const result = await api('/api/settings', { method: 'PUT', body: JSON.stringify(imported) }); config = result.config; renderConfig(); toast('Backup importiert') } catch (error) { toast(error.message, true) } finally { event.target.value = '' } }
-$('emergencyStop').onclick = async () => { if (!confirm('Alle Bots trennen und sämtliche Makros sofort deaktivieren?')) return; try { const result = await api('/api/emergency-stop', { method: 'POST' }); config = result.config; renderConfig(); toast('Not-Aus ausgeführt') } catch (error) { toast(error.message, true) } }
+$('importSettings').onchange = async (event) => { try { if (!confirm('The backup will overwrite the current configuration. Continue?')) return; const imported = JSON.parse(await event.target.files[0].text()); const result = await api('/api/settings', { method: 'PUT', body: JSON.stringify(imported) }); config = result.config; renderConfig(); toast('Backup imported') } catch (error) { toast(error.message, true) } finally { event.target.value = '' } }
+$('emergencyStop').onclick = async () => { if (!confirm('Disconnect all bots and immediately disable all macros?')) return; try { const result = await api('/api/emergency-stop', { method: 'POST' }); config = result.config; renderConfig(); toast('Emergency stop executed') } catch (error) { toast(error.message, true) } }
 $('testWebhook').onclick = async () => { try { await api('/api/webhook/test', { method: 'POST' }); toast('Test webhook sent') } catch (error) { toast(error.message, true) } }
 
 $('saveConnection').onclick = async () => {
@@ -583,7 +584,7 @@ $('saveConnection').onclick = async () => {
     const accounts = [firstAccount, ...config.accounts.slice(1)]
     const connection = connectionFromProfiles(servers, accounts)
     const result = await api('/api/settings', { method: 'PUT', body: JSON.stringify({ connection, servers, accounts }) })
-    config = result.config; renderConfig(); renderState(); $('connectionMessage').textContent = connection.username ? 'Gespeichert. Microsoft Login kannst du jetzt unter Accounts starten.' : 'Connection profile saved.'; toast('Connection profile saved')
+    config = result.config; renderConfig(); renderState(); $('connectionMessage').textContent = connection.username ? 'Saved. You can now start Microsoft login under Accounts.' : 'Connection profile saved.'; toast('Connection profile saved')
   } catch (error) { $('connectionMessage').textContent = error.message; toast(error.message, true) }
 }
 $('saveConnection').textContent = 'Save connection profile'

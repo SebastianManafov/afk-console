@@ -60,11 +60,11 @@ export class SellMacro extends MacroBase {
       this.begin("SEND_SELL_COMMAND");
       this.waitingForGui = true;
       this.bot.chat(this.config.get().sell.command);
-      this.events.log("info", "sell", `${this.config.get().sell.command} gesendet`);
+      this.events.log("info", "sell", `${this.config.get().sell.command} sent`);
       this.schedule(5500);
     } catch (error) {
       this.waitingForGui = false; this.fail(error);
-      await this.webhook.send("macroError", "Sell-Fehler", error instanceof Error ? error.message : String(error));
+      await this.webhook.send("macroError", "Sell error", error instanceof Error ? error.message : String(error));
       this.schedule(1500);
     }
   }
@@ -76,22 +76,22 @@ export class SellMacro extends MacroBase {
     const title = readableTitle.toLowerCase();
     const layoutMatches = window.inventoryStart === cfg.confirmSlot + 1 && Boolean(window.slots[cfg.confirmSlot]);
     if (!title.includes(cfg.guiTitleIncludes.toLowerCase()) && !layoutMatches) {
-      this.events.log("warn", "sell", `Unerwartetes GUI ignoriert: ${readableTitle}`);
+      this.events.log("warn", "sell", `Unexpected GUI ignored: ${readableTitle}`);
       return;
     }
-    if (!title.includes(cfg.guiTitleIncludes.toLowerCase())) this.events.log("info", "sell", `Sell-GUI über Layout erkannt: Inventarstart ${window.inventoryStart}, Bestätigung ${cfg.confirmSlot}`);
+    if (!title.includes(cfg.guiTitleIncludes.toLowerCase())) this.events.log("info", "sell", `Sell GUI detected by layout: inventory start ${window.inventoryStart}, confirmation ${cfg.confirmSlot}`);
     this.waitingForGui = false;
     this.busy = true;
     try {
       const confirmed = await this.fillAndConfirm(window);
       if (confirmed) {
-        this.succeed("Sell-Durchlauf über 'Items verkaufen' abgeschlossen");
-        await this.webhook.send("macroSuccess", "Sell erfolgreich", "Der Sell-Durchlauf wurde abgeschlossen.");
+        this.succeed("Sell run using 'Sell items' completed");
+        await this.webhook.send("macroSuccess", "Sell successful", "The sell run was completed.");
       }
     } catch (error) {
       if (this.isCancelled(error)) return;
       this.fail(error);
-      await this.webhook.send("macroError", "Sell-Fehler", (error as Error).message);
+      await this.webhook.send("macroError", "Sell error", (error as Error).message);
     } finally {
       this.busy = false;
       this.bot?.closeWindow(window);
@@ -126,7 +126,7 @@ export class SellMacro extends MacroBase {
         this.strikes.set(item.name, strikes);
         if (strikes >= 3) {
           this.rejected.add(item.name);
-          this.events.log("warn", "sell", `${item.name} wurde nach drei Ablehnungen übersprungen`);
+          this.events.log("warn", "sell", `${item.name} was skipped after three rejections`);
         }
       } else {
         this.strikes.delete(item.name);
@@ -142,7 +142,7 @@ export class SellMacro extends MacroBase {
       this.setState("waiting", "WAIT_FOR_FULL_SELL_GUI");
       return false;
     }
-    if (!window.slots[cfg.confirmSlot]) throw new Error(`Sell-Bestätigung in Slot ${cfg.confirmSlot} fehlt`);
+    if (!window.slots[cfg.confirmSlot]) throw new Error(`Sell confirmation is missing in slot ${cfg.confirmSlot}`);
     this.setState("running", `CONFIRM_SLOT_${cfg.confirmSlot}`);
     await this.click(cfg.confirmSlot);
     await this.wait(cfg.confirmDelayMs);
@@ -170,7 +170,7 @@ export class SellMacro extends MacroBase {
     this.timer = setTimeout(() => {
       if (this.waitingForGui) {
         this.waitingForGui = false;
-        this.fail(new Error("Sell-GUI wurde nicht innerhalb von 5 Sekunden geöffnet"));
+        this.fail(new Error("Sell GUI did not open within 5 seconds"));
       }
       void this.runNow();
     }, ms);

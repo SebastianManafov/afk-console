@@ -14,9 +14,9 @@ export class DashboardAuth {
     this.password = process.env.DASHBOARD_PASSWORD || "";
     this.guestPassword = process.env.GUEST_PASSWORD || "";
     this.totpSecret = process.env.DASHBOARD_TOTP_SECRET ? this.decodeBase32(process.env.DASHBOARD_TOTP_SECRET) : null;
-    if (this.secret.length < 32) throw new Error("SESSION_SECRET muss mindestens 32 Zeichen lang sein");
+    if (this.secret.length < 32) throw new Error("SESSION_SECRET must be at least 32 characters long");
     const minimumPasswordLength = process.env.NODE_ENV === "production" ? 12 : 8;
-    if (this.password.length < minimumPasswordLength) throw new Error(`DASHBOARD_PASSWORD muss mindestens ${minimumPasswordLength} Zeichen lang sein`);
+    if (this.password.length < minimumPasswordLength) throw new Error(`DASHBOARD_PASSWORD must be at least ${minimumPasswordLength} characters long`);
   }
 
   verifyPassword(value: string): boolean {
@@ -82,7 +82,7 @@ export class DashboardAuth {
   private decodeBase32(value: string): Buffer {
     const alphabet = "ABCDEFGHIJKLMNOPQRSTUVWXYZ234567"; let bits = "";
     for (const char of value.toUpperCase().replace(/=|\s/g, "")) {
-      const index = alphabet.indexOf(char); if (index < 0) throw new Error("DASHBOARD_TOTP_SECRET ist kein gültiges Base32");
+      const index = alphabet.indexOf(char); if (index < 0) throw new Error("DASHBOARD_TOTP_SECRET is not valid Base32");
       bits += index.toString(2).padStart(5, "0");
     }
     return Buffer.from((bits.match(/.{8}/g) ?? []).map((byte) => parseInt(byte, 2)));
