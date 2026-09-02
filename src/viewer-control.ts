@@ -46,7 +46,7 @@ export type ViewerControlDenialReason =
   | "invalid_input";
 
 export const VIEWER_CONTROL_HEARTBEAT_MS = 1_000;
-export const VIEWER_CONTROL_LEASE_EXPIRY_MS = 3_000;
+export const VIEWER_CONTROL_LEASE_EXPIRY_MS = 5_000;
 
 export class ViewerControlDeniedError extends Error {
   readonly reason: ViewerControlDenialReason;

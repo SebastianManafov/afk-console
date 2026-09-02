@@ -4,7 +4,10 @@ import { createRequire } from "node:module";
 import { join } from "node:path";
 import { pathToFileURL } from "node:url";
 import test from "node:test";
-import { ViewerControlDeniedError, ViewerControlLease } from "../src/viewer-control.js";
+import { DEFAULT_CONFIG } from "../src/config.js";
+import { BotService } from "../src/bot-service.js";
+import { AppEvents } from "../src/events.js";
+import { VIEWER_CONTROL_HEARTBEAT_MS, VIEWER_CONTROL_LEASE_EXPIRY_MS, ViewerControlDeniedError, ViewerControlLease } from "../src/viewer-control.js";
 import { registerViewerControlHandlers } from "../src/viewer-control-socket.js";
 
 const require = createRequire(import.meta.url);
@@ -37,6 +40,107 @@ test("Viewer lease expiry timers can never retain a stale controller", () => {
   assert.equal(lease.owns("controller"), true);
   lease.forceRelease("test cleanup");
   assert.equal(lease.isActive, false);
+});
+
+test("viewer lease tolerates a delayed heartbeat and refreshes from active input", () => {
+  let now = 0;
+  const releases: string[] = [];
+  const lease = new ViewerControlLease((reason) => releases.push(reason), { now: () => now });
+  lease.acquire("controller");
+  assert.equal(VIEWER_CONTROL_HEARTBEAT_MS, 1_000);
+  assert.equal(VIEWER_CONTROL_LEASE_EXPIRY_MS, 5_000);
+
+  // The first three one-second ticks are dropped, but the controller is still
+  // within the five-second dead-man window when the next heartbeat arrives.
+  now = 4_000;
+  assert.equal(lease.heartbeat("controller"), true);
+  assert.equal(lease.isActive, true);
+
+  // A valid control packet refreshes the same lease without requiring a
+  // second heartbeat before the next expiry window.
+  now = 8_500;
+  assert.equal(lease.heartbeat("controller"), true);
+  assert.equal(lease.isActive, true);
+  now = 13_499;
+  assert.equal(lease.isActive, true);
+  now = 13_500;
+  assert.equal(lease.isActive, false);
+  assert.deepEqual(releases, ["heartbeat timeout"]);
+});
+
+test("BotService refreshes the active lease for valid viewer input", async () => {
+  const events = new AppEvents(false);
+  const previousEncryptionKey = process.env.CONFIG_ENCRYPTION_KEY;
+  process.env.CONFIG_ENCRYPTION_KEY = "viewer-control-test-key-12345678901234567890";
+  let service: BotService | null = null;
+  let internal: any;
+  const controlCalls: Array<[string, boolean]> = [];
+  try {
+    service = new BotService({ get: () => DEFAULT_CONFIG }, events, { send: async () => false } as any, process.cwd(), "account-a");
+    internal = service as any;
+    internal.bot = {
+      _client: { state: "play" },
+      entity: { position: { x: 0, y: 64, z: 0 } },
+      player: { ping: 0 },
+      username: "Synthetic viewer bot",
+      health: 20,
+      food: 20,
+      experience: { level: 0 },
+      inventory: { slots: [], items: () => [] },
+      currentWindow: null,
+      quickBarSlot: 0,
+      heldItem: null,
+      setControlState: (control: string, enabled: boolean) => controlCalls.push([control, enabled]),
+      clearControlStates: () => {},
+      stopDigging: () => {},
+      deactivateItem: () => {},
+      look: async () => {},
+      quit: () => {}
+    };
+    internal.connection = "online";
+    internal.worldTransition = { state: "stable", startedAt: null, message: "Ready" };
+    internal.publish = () => {};
+    service.acquireViewerControl("account-a", "controller");
+    const lease = internal.viewerControlLease;
+    const acquiredUntil = lease.expiresAt;
+    await new Promise((resolve) => setTimeout(resolve, 10));
+    await service.viewerControl("account-a", "controller", { kind: "movement", control: "forward", enabled: true });
+    const movementRefreshedUntil = lease.expiresAt;
+    assert.ok(movementRefreshedUntil > acquiredUntil);
+    await new Promise((resolve) => setTimeout(resolve, 10));
+    await service.viewerControl("account-a", "controller", { kind: "look", yaw: 0.5, pitch: 0.25 });
+    assert.ok(lease.expiresAt > movementRefreshedUntil);
+    assert.deepEqual(controlCalls, [["forward", true]]);
+  } finally {
+    service?.dispose();
+    if (previousEncryptionKey === undefined) delete process.env.CONFIG_ENCRYPTION_KEY;
+    else process.env.CONFIG_ENCRYPTION_KEY = previousEncryptionKey;
+  }
+});
+
+test("control-session heartbeats are reliable while mouse-look stays volatile", () => {
+  const events: Array<{ event: string; options?: { reliable?: boolean; volatile?: boolean } }> = [];
+  const heartbeatTimers: Array<() => void> = [];
+  const { createControlSession } = require(join(process.cwd(), "viewer-client/control-session.cjs")) as { createControlSession: (options: Record<string, unknown>) => any };
+  const session = createControlSession({
+    emit: (event: string, _payload: unknown, options: { reliable?: boolean; volatile?: boolean }) => events.push({ event, options }),
+    setInterval: (callback: () => void) => { heartbeatTimers.push(callback); return 1; },
+    clearInterval: () => {},
+    setTimeout: (callback: () => void) => { callback(); return 1; },
+    clearTimeout: () => {}
+  }) as { setCapability(value: boolean): void; setParentActive(value: boolean): void; setSocketConnected(value: boolean): void; setPointerLocked(value: boolean): void; setLeaseGranted(value: boolean): void; look(yaw: number, pitch: number): boolean };
+  session.setCapability(true);
+  session.setParentActive(true);
+  session.setSocketConnected(true);
+  session.setPointerLocked(true);
+  session.setLeaseGranted(true);
+  heartbeatTimers[0]?.();
+  session.look(0.5, 0.25);
+
+  const heartbeatEvent = events.find((entry) => entry.event === "viewerControlHeartbeat");
+  const lookEvent = events.find((entry) => entry.event === "botLook");
+  assert.deepEqual(heartbeatEvent?.options, { reliable: true });
+  assert.deepEqual(lookEvent?.options, { volatile: true });
 });
 
 test("browser control session preserves diagonal state and emits authoritative release", async () => {

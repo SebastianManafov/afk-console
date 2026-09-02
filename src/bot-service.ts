@@ -923,7 +923,7 @@ export class BotService {
 
   private assertViewerControl(controllerId: string): void {
     this.assertViewerReady();
-    if (!this.viewerControlLease.owns(controllerId)) throw new ViewerControlDeniedError("not_owner");
+    if (!this.viewerControlLease.heartbeat(controllerId)) throw new ViewerControlDeniedError("not_owner");
   }
 
   private normalizeYaw(yaw: number): number {

@@ -188,7 +188,7 @@ class ControlSession {
         this.failSafe('control condition lost', true)
         return
       }
-      this.emitVolatile('viewerControlHeartbeat')
+      this.emitReliable('viewerControlHeartbeat')
     }, this.heartbeatMs)
   }
 
