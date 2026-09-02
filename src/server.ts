@@ -21,7 +21,8 @@ const contentTypes: Record<string, string> = {
   ".js": "text/javascript; charset=utf-8",
   ".json": "application/json; charset=utf-8",
   ".svg": "image/svg+xml",
-  ".png": "image/png"
+  ".png": "image/png",
+  ".webp": "image/webp"
 };
 
 const require = createRequire(import.meta.url);
@@ -166,6 +167,7 @@ export function startServer(config: ConfigStore, events: AppEvents, bot: MultiBo
         selectedSlot: target.quickBarSlot,
         heldItem: inventoryItem(target.heldItem),
         offhand: inventoryItem(target.inventory.slots[45]),
+        armorItems: target.inventory.slots.slice(5, 9).map(inventoryItem),
         armor: target.inventory.slots.slice(5, 9).filter(Boolean).length,
         hotbar: target.inventory.slots.slice(36, 45).map(inventoryItem),
         inventory: target.inventory.slots.slice(9, 45).map(inventoryItem),

@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="de">
+<html lang="en">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1">
@@ -7,22 +7,47 @@
   <link rel="stylesheet" href="styles.css">
 </head>
 <body>
-  <div id="hud"><button id="follow" class="active">Bot POV</button><button id="freecam">Freecam</button><span id="status">Verbinde …</span><span id="vitals">❤ – · 🍗 – · XP –</span><span id="hint">Klicken · WASD · Maus · Space/Shift · F Freecam · Tab Spieler · M Minimap</span></div>
+  <div id="hud"><button id="follow" class="active">Bot POV</button><button id="freecam">Freecam</button><span id="status">Connecting...</span><span id="vitals">Health - · Food - · XP -</span><span id="hint">Click · WASD · Mouse · Space/Shift · F Freecam · Tab Players · M Minimap</span></div>
   <div id="crosshair">+</div>
   <div id="chatOverlay" aria-live="polite"></div>
   <div id="minecraftHud">
-    <div id="offhandItem" class="held-card" hidden></div>
+    <div id="offhandItem" class="held-card" hidden><span class="held-card-title">Offhand</span><span id="offhandIcon" class="standalone-icon"></span><span id="offhandName"></span></div>
     <div id="survivalHud">
       <div class="meter-row"><span id="armorMeter"></span><span id="heartMeter"></span><span id="foodMeter"></span></div>
       <div class="xp-row"><span id="xpLevel">0</span></div>
-      <div id="mcHotbar"></div>
+      <div id="mcHotbar" class="slot-grid hotbar-grid" aria-label="Hotbar"></div>
     </div>
-    <div id="firstPersonHand"><span id="heldItemName"></span></div>
+    <div id="firstPersonHand"><span id="heldItemIcon" class="standalone-icon"></span><span id="heldItemName"></span></div>
   </div>
-  <div id="inventoryPanel" class="minecraft-window" hidden><h2>Inventory</h2><div id="inventorySlots"></div><p>E oder Esc zum Schließen</p></div>
-  <div id="playerList" class="panel" hidden><strong>Spieler online</strong><div id="players"></div></div>
+  <section id="inventoryPanel" class="minecraft-window" hidden aria-label="Inventory">
+    <div class="inventory-window">
+      <div class="inventory-window-header"><h2>Crafting</h2><button id="closeInventory" type="button" aria-label="Close inventory">×</button></div>
+      <div class="inventory-top">
+        <div class="player-loadout">
+          <div id="armorSlots" class="armor-slots" aria-label="Armor">
+            <div class="inventory-slot armor-slot" data-armor="head" aria-label="Helmet"></div>
+            <div class="inventory-slot armor-slot" data-armor="chest" aria-label="Chestplate"></div>
+            <div class="inventory-slot armor-slot" data-armor="legs" aria-label="Leggings"></div>
+            <div class="inventory-slot armor-slot" data-armor="feet" aria-label="Boots"></div>
+          </div>
+          <div id="playerPreview" class="player-preview" aria-label="Player preview">
+            <div class="avatar-head"></div><div class="avatar-body"></div><div class="avatar-arm avatar-arm-left"></div><div class="avatar-arm avatar-arm-right"></div><div class="avatar-leg avatar-leg-left"></div><div class="avatar-leg avatar-leg-right"></div>
+          </div>
+        </div>
+        <div class="crafting-panel">
+          <h3>Crafting</h3>
+          <div class="crafting-row"><div id="craftingGrid" class="slot-grid crafting-grid" aria-label="Crafting grid"></div><span class="crafting-arrow">➜</span><div id="craftingOutput" class="inventory-slot crafting-output" aria-label="Crafting output"></div></div>
+        </div>
+      </div>
+      <div class="inventory-divider"></div>
+      <div id="inventoryMainSlots" class="slot-grid inventory-grid" aria-label="Inventory"></div>
+      <div id="inventoryHotbar" class="slot-grid hotbar-grid inventory-hotbar" aria-label="Inventory hotbar"></div>
+      <p class="inventory-note">Live read-only inventory · Press E or Escape to close</p>
+    </div>
+  </section>
+  <div id="playerList" class="panel" hidden><strong>Players online</strong><div id="players"></div></div>
   <canvas id="minimap" width="180" height="180" hidden></canvas>
-  <div id="controls">Bot POV: WASD/Maus · E Inventar · Linksklick abbauen/angreifen · Rechtsklick benutzen · Mausrad/1–9 Hotbar · Esc freigeben</div>
+  <div id="controls">Bot POV: WASD/Mouse · E Inventory · Left click dig/attack · Right click use · Wheel/1-9 Hotbar · Esc release</div>
   <script src="index.js"></script>
 </body>
 </html>

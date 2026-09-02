@@ -1,14 +1,94 @@
-html,body,canvas{width:100%;height:100%;margin:0;overflow:hidden;background:#081018}canvas{display:block}[hidden]{display:none!important}body:not(.live) #minecraftHud{display:none}
-#hud{position:fixed;inset:12px 12px auto;z-index:4;display:flex;gap:8px;align-items:center;color:#fff;font:12px system-ui}
-#hud button,#hud span{border:1px solid #ffffff38;border-radius:8px;background:#0b1220d9;color:#fff;padding:8px 11px}
-#hud button.active{border-color:#55e6a5;color:#55e6a5}#hint{margin-left:auto}
-#crosshair{position:fixed;left:50%;top:50%;z-index:3;translate:-50% -50%;color:#fff;font:24px monospace;text-shadow:0 1px 3px #000}
-#controls{position:fixed;left:50%;bottom:12px;z-index:4;translate:-50% 0;border:1px solid #ffffff38;border-radius:8px;background:#0b1220d9;color:#fff;padding:7px 10px;font:11px system-ui;white-space:nowrap}
-.panel{position:fixed;z-index:5;left:50%;top:60px;translate:-50% 0;width:min(520px,80vw);max-height:55vh;overflow:auto;border:1px solid #ffffff4d;border-radius:10px;background:#07101aeb;color:#fff;padding:14px;font:13px system-ui}.panel strong{display:block;margin-bottom:10px}.player{display:flex;justify-content:space-between;border-top:1px solid #ffffff18;padding:6px 2px}
-#minimap{position:fixed;z-index:4;right:14px;bottom:44px;width:180px;height:180px;border:1px solid #ffffff4d;border-radius:50%;background:#07101ad9}
-#chatOverlay{position:fixed;z-index:4;left:14px;bottom:112px;width:min(560px,55vw);display:flex;flex-direction:column;gap:2px;pointer-events:none;color:#fff;font:15px/1.25 monospace;text-shadow:2px 2px #000}.chat-line{width:max-content;max-width:100%;overflow-wrap:anywhere;background:#0006;padding:1px 4px;animation:chatFade 12s forwards}@keyframes chatFade{0%,75%{opacity:1}100%{opacity:0}}
-#minecraftHud{position:fixed;z-index:4;inset:0;pointer-events:none;font-family:monospace;color:#fff;text-shadow:2px 2px #000}#survivalHud{position:absolute;left:50%;bottom:10px;translate:-50% 0;width:366px}.meter-row{display:grid;grid-template-columns:1fr 1fr 1fr;align-items:end;height:25px;font-size:19px;white-space:nowrap}.meter-row span:nth-child(2){text-align:center;color:#ff334c}.meter-row span:nth-child(3){text-align:right;color:#d78b28}.xp-row{height:7px;border:2px solid #17200e;background:#162019;margin:1px 0 3px;position:relative;box-shadow:0 0 0 1px #000}.xp-row:before{content:"";position:absolute;inset:1px;background:linear-gradient(90deg,#78d31f 72%,transparent 72%)}#xpLevel{position:absolute;left:50%;bottom:4px;translate:-50% 0;color:#80ff36;font:bold 17px monospace}
-#mcHotbar{display:grid;grid-template-columns:repeat(9,40px);gap:1px;background:#222c;padding:3px;border:2px solid #8d8d8d;box-shadow:0 0 0 2px #111}.mc-slot{position:relative;height:38px;display:grid;place-items:center;border:2px solid #555;background:#686868aa;color:#fff;font:bold 9px/1.05 system-ui;text-align:center;overflow:hidden}.mc-slot.selected{border-color:#fff;box-shadow:inset 0 0 0 2px #222}.mc-slot .count{position:absolute;right:2px;bottom:0;font:bold 13px monospace}.mc-slot .glyph{font-size:19px;color:#d8d8d8}
-#firstPersonHand{position:absolute;right:-25px;bottom:-35px;width:180px;height:260px;rotate:24deg;background:linear-gradient(90deg,#c78d68 0 68%,#875f48 68%);clip-path:polygon(25% 0,75% 0,100% 100%,0 100%);filter:drop-shadow(0 0 2px #0008);transform-origin:bottom right}#heldItemName{position:absolute;right:45px;top:14px;rotate:-24deg;width:150px;text-align:center;font:bold 11px system-ui}.held-card{position:absolute;left:24px;bottom:25px;width:72px;height:96px;display:grid;place-items:center;border:3px solid #8d8d8d;background:#252525d9;text-align:center;font:bold 11px system-ui}
-.minecraft-window{position:fixed;z-index:8;left:50%;top:50%;translate:-50% -50%;width:min(560px,86vw);padding:18px;border:4px solid #eee;box-shadow:0 0 0 4px #555,0 12px 50px #000;background:#c6c6c6;color:#222;font:14px monospace}.minecraft-window h2{margin:0 0 12px}.minecraft-window p{margin:12px 0 0}#inventorySlots{display:grid;grid-template-columns:repeat(9,1fr);gap:3px}.inventory-slot{min-height:45px;padding:4px;border:2px inset #eee;background:#8b8b8b;color:#fff;text-shadow:1px 1px #000;font:10px/1.1 system-ui;overflow:hidden}.inventory-slot.empty{opacity:.45}
-@media(max-width:700px){#hint{display:none}#hud{flex-wrap:wrap}}
+:root {
+  --slot-size: 52px;
+  --slot-border: #555;
+  --slot-light: #bdbdbd;
+  --slot-dark: #373737;
+  --window: #c6c6c6;
+}
+
+html, body, canvas { width: 100%; height: 100%; margin: 0; overflow: hidden; background: #081018; }
+body { color: #fff; font-family: system-ui, sans-serif; }
+canvas { display: block; }
+[hidden] { display: none !important; }
+body:not(.live) #minecraftHud { display: none; }
+
+#hud { position: fixed; inset: 12px 12px auto; z-index: 4; display: flex; gap: 8px; align-items: center; color: #fff; font: 12px system-ui; }
+#hud button, #hud span { border: 1px solid #ffffff38; border-radius: 8px; background: #0b1220d9; color: #fff; padding: 8px 11px; }
+#hud button { cursor: pointer; }
+#hud button.active { border-color: #55e6a5; color: #55e6a5; }
+#hint { margin-left: auto; }
+#crosshair { position: fixed; left: 50%; top: 50%; z-index: 3; translate: -50% -50%; color: #fff; font: 24px monospace; text-shadow: 0 1px 3px #000; }
+#controls { position: fixed; left: 50%; bottom: 12px; z-index: 4; translate: -50% 0; border: 1px solid #ffffff38; border-radius: 8px; background: #0b1220d9; color: #fff; padding: 7px 10px; font: 11px system-ui; white-space: nowrap; }
+
+.panel { position: fixed; z-index: 5; left: 50%; top: 60px; translate: -50% 0; width: min(520px, 80vw); max-height: 55vh; overflow: auto; border: 1px solid #ffffff4d; border-radius: 10px; background: #07101aeb; color: #fff; padding: 14px; font: 13px system-ui; }
+.panel strong { display: block; margin-bottom: 10px; }
+.player { display: flex; justify-content: space-between; border-top: 1px solid #ffffff18; padding: 6px 2px; }
+#minimap { position: fixed; z-index: 4; right: 14px; bottom: 44px; width: 180px; height: 180px; border: 1px solid #ffffff4d; border-radius: 50%; background: #07101ad9; }
+#chatOverlay { position: fixed; z-index: 4; left: 14px; bottom: 112px; width: min(560px, 55vw); display: flex; flex-direction: column; gap: 2px; pointer-events: none; color: #fff; font: 15px/1.25 monospace; text-shadow: 2px 2px #000; }
+.chat-line { width: max-content; max-width: 100%; overflow-wrap: anywhere; background: #0006; padding: 1px 4px; animation: chatFade 12s forwards; }
+@keyframes chatFade { 0%, 75% { opacity: 1; } 100% { opacity: 0; } }
+
+#minecraftHud { position: fixed; z-index: 4; inset: 0; pointer-events: none; font-family: monospace; color: #fff; text-shadow: 2px 2px #000; }
+#survivalHud { position: absolute; left: 50%; bottom: 10px; translate: -50% 0; width: min(480px, calc(100vw - 20px)); }
+.meter-row { display: grid; grid-template-columns: 1fr 1fr 1fr; align-items: end; height: 25px; font-size: 19px; white-space: nowrap; }
+.meter-row span:nth-child(2) { text-align: center; color: #ff334c; }
+.meter-row span:nth-child(3) { text-align: right; color: #d78b28; }
+.xp-row { height: 7px; border: 2px solid #17200e; background: #162019 url("ui-assets/xp-empty.webp") center / 100% 100% no-repeat; margin: 1px 0 3px; position: relative; box-shadow: 0 0 0 1px #000; }
+.xp-row:before { content: ""; position: absolute; inset: 1px; background: url("ui-assets/xp-filled.webp") center / 100% 100% no-repeat; }
+#xpLevel { position: absolute; left: 50%; bottom: 4px; translate: -50% 0; color: #80ff36; font: bold 17px monospace; }
+
+.slot-grid { display: grid; }
+.hotbar-grid { grid-template-columns: repeat(9, var(--slot-size)); gap: 1px; }
+#mcHotbar { width: max-content; background: #222c url("ui-assets/hotbar.webp") center / 100% 100% no-repeat; padding: 3px; border: 2px solid #8d8d8d; box-shadow: 0 0 0 2px #111; }
+.inventory-slot { position: relative; width: var(--slot-size); height: var(--slot-size); box-sizing: border-box; border: 2px solid var(--slot-border); border-top-color: var(--slot-dark); border-left-color: var(--slot-dark); border-right-color: var(--slot-light); border-bottom-color: var(--slot-light); background: #8b8b8b; color: #fff; text-shadow: 2px 2px #000; }
+.inventory-slot.empty { background: #8b8b8b; }
+.mc-slot { position: relative; width: var(--slot-size); height: var(--slot-size); box-sizing: border-box; border: 2px solid #555; background: #686868aa; color: #fff; text-align: center; overflow: hidden; }
+.mc-slot.selected { border-color: #fff; box-shadow: inset 0 0 0 2px #222; background-image: url("ui-assets/hotbar-selected.webp"); background-size: 100% 100%; }
+.item-icon { display: block; width: 92%; height: 92%; margin: 4%; object-fit: contain; image-rendering: pixelated; filter: drop-shadow(2px 2px 1px #0009); }
+.item-fallback { position: absolute; inset: 0; display: grid; place-items: center; color: #e3e3e3; font: bold 12px/1 system-ui; text-shadow: 2px 2px #222; }
+.item-count { position: absolute; right: 2px; bottom: -1px; color: #fff; font: bold 15px monospace; line-height: 1; text-shadow: 2px 2px #000; }
+
+#firstPersonHand { position: absolute; right: -25px; bottom: -35px; width: 180px; height: 260px; rotate: 24deg; background: linear-gradient(90deg, #c78d68 0 68%, #875f48 68%); clip-path: polygon(25% 0, 75% 0, 100% 100%, 0 100%); filter: drop-shadow(0 0 2px #0008); transform-origin: bottom right; }
+#heldItemIcon { position: absolute; right: 20px; top: -22px; width: 92px; height: 92px; rotate: -24deg; }
+#heldItemName { position: absolute; right: 45px; top: 76px; rotate: -24deg; width: 150px; text-align: center; font: bold 11px system-ui; }
+.held-card { position: absolute; left: 24px; bottom: 25px; width: 80px; min-height: 108px; display: grid; place-items: center; gap: 2px; padding: 5px; box-sizing: border-box; border: 3px solid #8d8d8d; background: #252525d9; text-align: center; font: bold 11px system-ui; }
+.held-card-title { color: #aaa; font-size: 10px; }
+.standalone-icon { display: block; width: 62px; height: 62px; }
+
+.minecraft-window { position: fixed; z-index: 8; inset: 0; display: grid; place-items: center; padding: 18px; box-sizing: border-box; background: #0008; color: #222; pointer-events: auto; }
+.inventory-window { width: min(700px, calc(100vw - 24px)); max-height: calc(100vh - 24px); overflow: auto; padding: 14px; border: 4px solid #eee; box-shadow: 0 0 0 4px #555, 0 12px 50px #000; background: var(--window); font: 14px monospace; }
+.inventory-window-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px; }
+.inventory-window h2, .inventory-window h3 { margin: 0; font-size: 16px; font-weight: normal; }
+.inventory-window-header button { width: 28px; height: 28px; border: 2px outset #eee; background: #c6c6c6; color: #333; font: 20px/18px monospace; cursor: pointer; }
+.inventory-top { display: grid; grid-template-columns: minmax(250px, 1fr) minmax(260px, 1fr); gap: 20px; align-items: center; min-height: 188px; }
+.player-loadout { display: grid; grid-template-columns: 54px 1fr; gap: 14px; align-items: center; }
+.armor-slots { display: grid; gap: 4px; }
+.armor-slot { width: 48px; height: 48px; }
+.player-preview { position: relative; width: 150px; height: 178px; margin: auto; background: #080808; overflow: hidden; }
+.avatar-head { position: absolute; left: 57px; top: 16px; width: 38px; height: 38px; background: linear-gradient(90deg, #f0b184 0 20%, #d88154 20% 31%, #f0b184 31% 100%); border: 3px solid #9c5b3e; box-shadow: inset -8px 0 #d98158, inset 0 -7px #edaa7c; }
+.avatar-body { position: absolute; left: 48px; top: 60px; width: 56px; height: 66px; background: linear-gradient(90deg, #70a872 0 50%, #58885c 50%); border: 3px solid #3b5e40; }
+.avatar-arm { position: absolute; top: 63px; width: 22px; height: 62px; background: #e0a175; border: 3px solid #9c5b3e; }
+.avatar-arm-left { left: 22px; }.avatar-arm-right { right: 22px; }
+.avatar-leg { position: absolute; top: 126px; width: 24px; height: 47px; background: #586b7a; border: 3px solid #35424d; }
+.avatar-leg-left { left: 49px; }.avatar-leg-right { right: 49px; }
+.crafting-panel h3 { margin-bottom: 12px; }
+.crafting-row { display: flex; align-items: center; gap: 14px; }
+.crafting-grid { grid-template-columns: repeat(2, var(--slot-size)); gap: 3px; }
+.crafting-arrow { color: #777; font: 30px monospace; }
+.crafting-output { width: var(--slot-size); height: var(--slot-size); }
+.inventory-divider { height: 12px; }
+.inventory-grid { grid-template-columns: repeat(9, var(--slot-size)); gap: 3px; justify-content: center; }
+.inventory-hotbar { margin-top: 10px; justify-content: center; }
+.inventory-note { margin: 12px 0 0; color: #444; font-size: 11px; text-align: center; }
+
+@media (max-width: 700px) {
+  :root { --slot-size: clamp(29px, 8.5vw, 52px); }
+  #hint { display: none; }
+  #hud { flex-wrap: wrap; }
+  #controls { max-width: calc(100vw - 20px); overflow: hidden; text-overflow: ellipsis; }
+  .inventory-window { padding: 10px; }
+  .inventory-top { grid-template-columns: 1fr; gap: 12px; min-height: 0; }
+  .player-loadout { justify-content: center; }
+  .crafting-panel { display: grid; justify-items: center; }
+  .inventory-grid, .inventory-hotbar { justify-content: center; }
+}

@@ -11,9 +11,9 @@
   },
   "scripts": {
     "dev": "tsx watch src/index.ts",
-    "build": "node scripts/write-app-version.cjs && tsc && webpack --config webpack.pov.cjs && node scripts/build-pov-worker.cjs",
+    "build": "node scripts/write-app-version.cjs && tsc && node scripts/build-pov-item-icons.cjs && webpack --config webpack.pov.cjs && node scripts/build-pov-worker.cjs",
     "start": "node dist/src/index.js",
-    "test": "npm run build && node scripts/test-pov-worker.cjs && node --test dist/test/*.test.js"
+    "test": "npm run build && node scripts/test-pov-item-icons.cjs && node scripts/test-pov-worker.cjs && node --test dist/test/*.test.js"
   },
   "dependencies": {
     "buffer": "^6.0.3",
@@ -32,6 +32,7 @@
   "devDependencies": {
     "@types/node": "^24.3.0",
     "@types/ws": "^8.18.1",
+    "minecraft-assets": "1.19.0",
     "tsx": "^4.20.5",
     "typescript": "^5.9.2",
     "webpack": "^5.110.2",

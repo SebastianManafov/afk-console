@@ -9,4 +9,6 @@ work-*/
 .DS_Store
 Thumbs.db
 public/pov-viewer/worker.js
+public/pov-viewer/item-icons/
+public/pov-viewer/ui-assets/
 public/app-version.js

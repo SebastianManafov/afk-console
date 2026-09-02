@@ -2,6 +2,7 @@
 global.THREE = require('three')
 const { Viewer } = require('prismarine-viewer/viewer')
 const { io } = require('socket.io-client')
+const { itemIconUrl } = require('./item-icons.cjs')
 
 const renderer = new THREE.WebGLRenderer({ antialias: true })
 renderer.setPixelRatio(Math.min(2, window.devicePixelRatio || 1))
@@ -64,6 +65,7 @@ let botPosition = null
 let botYaw = 0
 let botPitch = 0
 let selectedSlot = 0
+let itemRenderVersion = '1.21.4'
 let hudData = null
 let selfEntityId = null
 const entities = new Map()
@@ -82,10 +84,25 @@ const armorMeter = document.getElementById('armorMeter')
 const xpLevel = document.getElementById('xpLevel')
 const mcHotbar = document.getElementById('mcHotbar')
 const heldItemName = document.getElementById('heldItemName')
+const heldItemIcon = document.getElementById('heldItemIcon')
 const offhandItem = document.getElementById('offhandItem')
+const offhandIcon = document.getElementById('offhandIcon')
+const offhandName = document.getElementById('offhandName')
 const chatOverlay = document.getElementById('chatOverlay')
 const inventoryPanel = document.getElementById('inventoryPanel')
-const inventorySlots = document.getElementById('inventorySlots')
+const closeInventory = document.getElementById('closeInventory')
+const armorSlots = [...document.querySelectorAll('.armor-slot')]
+const inventoryMainSlots = document.getElementById('inventoryMainSlots')
+const inventoryHotbar = document.getElementById('inventoryHotbar')
+const craftingGrid = document.getElementById('craftingGrid')
+const craftingOutput = document.getElementById('craftingOutput')
+
+function setInventoryVisible (visible) {
+  inventoryPanel.hidden = !visible
+  if (visible && document.pointerLockElement) document.exitPointerLock()
+}
+
+closeInventory.onclick = () => setInventoryVisible(false)
 function lockPointer () {
   try {
     const result = renderer.domElement.requestPointerLock?.()
@@ -111,8 +128,8 @@ const movementControls = { KeyW: 'forward', KeyS: 'back', KeyA: 'left', KeyD: 'r
 document.addEventListener('keydown', (event) => {
   keys.add(event.code)
   if (event.code === 'KeyF' && !event.repeat) setMode(!freecam)
-  if (event.code === 'KeyE' && !event.repeat) { inventoryPanel.hidden = !inventoryPanel.hidden; if (!inventoryPanel.hidden && document.pointerLockElement) document.exitPointerLock() }
-  if (event.code === 'Escape' && !inventoryPanel.hidden) inventoryPanel.hidden = true
+  if (event.code === 'KeyE' && !event.repeat) setInventoryVisible(inventoryPanel.hidden)
+  if (event.code === 'Escape' && !inventoryPanel.hidden) setInventoryVisible(false)
   if (event.code === 'Tab') { event.preventDefault(); playerList.hidden = false }
   if (event.code === 'KeyM' && !event.repeat) minimap.hidden = !minimap.hidden
   if (!freecam && document.pointerLockElement === renderer.domElement && movementControls[event.code] && !event.repeat) socket.emit('botControl', { control: movementControls[event.code], enabled: true })
@@ -145,12 +162,13 @@ renderer.domElement.addEventListener('wheel', (event) => {
 socket.on('connect', () => { status.textContent = 'Live verbunden' })
 socket.on('disconnect', () => { status.textContent = 'Verbindung getrennt' })
 socket.on('viewerUnavailable', (message) => {
-  status.textContent = `${message} · neuer Versuch …`
+  status.textContent = `${message} \u00b7 neuer Versuch \u2026`
   setTimeout(() => { socket.disconnect(); socket.connect() }, 2000)
 })
 socket.on('version', (version) => {
+  itemRenderVersion = String(version)
   if (!version) { status.textContent = 'POV wartet auf die Minecraft-Version'; return }
-  if (!viewer.setVersion(version)) { status.textContent = `Viewer unterstützt ${version} nicht`; return }
+  if (!viewer.setVersion(version)) { status.textContent = `Viewer unterst\u00fctzt ${version} nicht`; return }
   viewer.listen(socket)
 })
 socket.on('position', ({ pos, yaw: botYaw, pitch: botPitch }) => {
@@ -173,7 +191,7 @@ socket.on('entity', (entity) => { if (entity.delete) entities.delete(entity.id);
 socket.on('hud', (nextHud) => {
   document.body.classList.add('live')
   hudData = nextHud
-  vitals.textContent = `❤ ${Math.ceil(nextHud.health ?? 0)} · 🍗 ${Math.ceil(nextHud.food ?? 0)} · XP ${nextHud.experience ?? 0}`
+  vitals.textContent = `\u2665 ${Math.ceil(nextHud.health ?? 0)} \u00b7 \uD83C\uDF57 ${Math.ceil(nextHud.food ?? 0)} \u00b7 XP ${nextHud.experience ?? 0}`
   players.replaceChildren(...(nextHud.players || []).map((player) => {
     const row = document.createElement('div'); row.className = 'player'
     const name = document.createElement('span'); name.textContent = player.username
@@ -193,31 +211,74 @@ function itemLabel(item) {
   if (!item) return ''
   return String(item.displayName || item.name || '').replace(/_/g, ' ')
 }
-function makeSlot(item, selected = false) {
-  const slot = document.createElement('div'); slot.className = `mc-slot${selected ? ' selected' : ''}`
-  const glyph = document.createElement('span'); glyph.className = 'glyph'; glyph.textContent = item ? itemLabel(item).slice(0, 2).toUpperCase() : ''
-  const name = document.createElement('span'); name.textContent = item ? itemLabel(item) : ''
-  slot.title = itemLabel(item); slot.append(glyph, name)
-  if (item?.count > 1) { const count = document.createElement('span'); count.className = 'count'; count.textContent = item.count; slot.append(count) }
+function makeItemFallback (item) {
+  const fallback = document.createElement('span')
+  fallback.className = 'item-fallback'
+  fallback.textContent = itemLabel(item).slice(0, 2).toUpperCase()
+  return fallback
+}
+function setItemIcon (target, item) {
+  target.replaceChildren()
+  if (!item) return
+  const url = itemIconUrl(itemRenderVersion, item.name)
+  const fallback = makeItemFallback(item)
+  if (!url) { target.append(fallback); return }
+  const icon = document.createElement('img')
+  icon.className = 'item-icon'
+  icon.alt = ''
+  icon.src = url
+  icon.addEventListener('error', () => icon.replaceWith(fallback), { once: true })
+  target.append(icon)
+}
+function fillSlot (slot, item) {
+  slot.replaceChildren()
+  slot.classList.toggle('empty', !item)
+  if (!item) {
+    slot.removeAttribute('title')
+    slot.removeAttribute('aria-label')
+    return
+  }
+  const label = itemLabel(item)
+  slot.title = label
+  slot.setAttribute('aria-label', `${label}${item.count > 1 ? ` x${item.count}` : ''}`)
+  setItemIcon(slot, item)
+  if (item.count > 1) {
+    const count = document.createElement('span')
+    count.className = 'item-count'
+    count.textContent = item.count
+    slot.append(count)
+  }
+}
+function makeSlot (item, selected = false) {
+  const slot = document.createElement('div')
+  slot.className = `inventory-slot mc-slot${selected ? ' selected' : ''}`
+  fillSlot(slot, item)
   return slot
 }
-function renderMinecraftHud(data) {
+function renderSlots (container, items, count, selected = -1) {
+  const values = Array.isArray(items) ? items : []
+  container.replaceChildren(...Array.from({ length: count }, (_, index) => makeSlot(values[index] || null, index === selected)))
+}
+function renderMinecraftHud (data) {
   const hearts = Math.max(0, Math.min(10, Math.ceil((data.health || 0) / 2)))
   const foods = Math.max(0, Math.min(10, Math.ceil((data.food || 0) / 2)))
-  heartMeter.textContent = '♥'.repeat(hearts) + '♡'.repeat(10 - hearts)
-  foodMeter.textContent = '●'.repeat(foods) + '○'.repeat(10 - foods)
-  armorMeter.textContent = '♢'.repeat(Math.max(0, data.armor || 0))
+  armorMeter.textContent = '\u2662'.repeat(Math.max(0, data.armor || 0))
+  heartMeter.textContent = '\u2665'.repeat(hearts) + '\u2661'.repeat(10 - hearts)
+  foodMeter.textContent = '\u25cf'.repeat(foods) + '\u25cb'.repeat(10 - foods)
   xpLevel.textContent = data.experience || 0
-  mcHotbar.replaceChildren(...(data.hotbar || Array(9).fill(null)).map((item, index) => makeSlot(item, index === data.selectedSlot)))
+  renderSlots(mcHotbar, data.hotbar, 9, data.selectedSlot)
+  renderSlots(inventoryMainSlots, data.inventory, 27)
+  renderSlots(inventoryHotbar, data.hotbar, 9, data.selectedSlot)
+  const armor = Array.isArray(data.armorItems) ? data.armorItems : []
+  armorSlots.forEach((slot, index) => fillSlot(slot, armor[index] || null))
+  if (craftingGrid.childElementCount === 0) renderSlots(craftingGrid, [], 4)
+  fillSlot(craftingOutput, null)
   heldItemName.textContent = itemLabel(data.heldItem) || 'Hand'
-  offhandItem.hidden = !data.offhand; offhandItem.textContent = itemLabel(data.offhand)
-  inventorySlots.replaceChildren(...(data.inventory || []).map((item) => {
-    const slot = document.createElement('div'); slot.className = `inventory-slot${item ? '' : ' empty'}`
-    slot.textContent = item ? `${itemLabel(item)}${item.count > 1 ? ` ×${item.count}` : ''}` : ''
-    return slot
-  }))
+  setItemIcon(heldItemIcon, data.heldItem)
+  offhandItem.hidden = !data.offhand
+  offhandName.textContent = itemLabel(data.offhand)
+  setItemIcon(offhandIcon, data.offhand)
 }
-
 function updateFreecam(delta) {
   if (!freecam) return
   const speed = (keys.has('ControlLeft') ? 18 : 7) * delta

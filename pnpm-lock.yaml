@@ -51,6 +51,9 @@ importers:
       '@types/ws':
         specifier: ^8.18.1
         version: 8.18.1
+      minecraft-assets:
+        specifier: 1.19.0
+        version: 1.19.0
       tsx:
         specifier: ^4.20.5
         version: 4.23.12
@@ -821,6 +824,9 @@ packages:
 
   minecraft-data@3.113.2:
     resolution: {integrity: sha512-+3/9uO/xHcaY3ZA9iW22EGdGi8SAQKeMvbXZGrsd9zHrNhsx5KDo4nblfdwTFxm2xNJEwF67cFuWGSR8VS13Qw==}
+
+  minecraft-assets@1.19.0:
+    resolution: {integrity: sha512-OZswwMV6LTfVo67KttRLAxTAmD2pMH14WNHUt1NXAikGkKkeogqbRFUKs7CcoZee576rrB6YlQJTuutYlLbOaA==}
 
   minecraft-folder-path@1.2.0:
     resolution: {integrity: sha512-qaUSbKWoOsH9brn0JQuBhxNAzTDMwrOXorwuRxdJKKKDYvZhtml+6GVCUrY5HRiEsieBEjCUnhVpDuQiKsiFaw==}
@@ -2088,6 +2094,8 @@ snapshots:
   mime@1.6.0: {}
 
   minecraft-data@3.113.2: {}
+
+  minecraft-assets@1.19.0: {}
 
   minecraft-folder-path@1.2.0: {}
 
