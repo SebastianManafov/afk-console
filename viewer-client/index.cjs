@@ -17,6 +17,8 @@ function reportViewerState (label, extra = {}) {
 }
 for (const worker of viewer.world.workers || []) {
   const onmessage = worker.onmessage
+  worker.onerror = (event) => reportViewerState('worker error', { message: event?.message || 'unbekannter Worker-Fehler', filename: event?.filename, lineno: event?.lineno })
+  worker.onmessageerror = (event) => reportViewerState('worker message error', { data: event?.data })
   worker.onmessage = (event) => {
     const message = event?.data
     if (message?.type === 'geometry') {
