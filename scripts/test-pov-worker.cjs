@@ -8,6 +8,9 @@ const { Vec3 } = require('vec3')
 
 const builtWorker = path.resolve(__dirname, '../public/pov-viewer/worker.js')
 const runnableWorker = path.join(os.tmpdir(), `rcc-pov-worker-${process.pid}.cjs`)
+if (fs.readFileSync(builtWorker, 'utf8').includes('eval("require")')) {
+  throw new Error('POV browser worker still contains the CSP-blocked eval(require) fallback')
+}
 fs.copyFileSync(builtWorker, runnableWorker)
 
 const worker = new Worker(runnableWorker)

@@ -5,9 +5,14 @@ const source = require.resolve('prismarine-viewer/public/worker.js')
 const destination = path.resolve(__dirname, '../public/pov-viewer/worker.js')
 let worker = fs.readFileSync(source, 'utf8')
 
-// Keep the worker identical to Prismarine Viewer except for the modern
-// negative-height section indexes below.
+// Keep the worker identical to Prismarine Viewer except for the browser-safe
+// Node fallback and the modern negative-height section indexes below.
 const replacements = [
+  [
+    'if(!__webpack_require__.g.self){const r=eval("require"),',
+    'if(typeof self==="undefined"&&typeof require==="function"){const r=require,',
+    1
+  ],
   [
     'i&&i.sections[Math.floor(a/16)]?dirtySections[s]=t',
     'i&&i.sections[(a-(Number.isFinite(i.minY)?i.minY:0)>>4)]?dirtySections[s]=t',
