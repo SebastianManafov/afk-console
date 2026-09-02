@@ -8,10 +8,17 @@ const { Vec3 } = require('vec3')
 
 const builtWorker = path.resolve(__dirname, '../public/pov-viewer/worker.js')
 const runnableWorker = path.join(os.tmpdir(), `rcc-pov-worker-${process.pid}.cjs`)
-if (fs.readFileSync(builtWorker, 'utf8').includes('eval("require")')) {
-  throw new Error('POV browser worker still contains the CSP-blocked eval(require) fallback')
+const workerSource = fs.readFileSync(builtWorker, 'utf8')
+if (/\beval\s*\(/.test(workerSource)) {
+  throw new Error('POV browser worker still contains CSP-blocked eval() code')
 }
-fs.copyFileSync(builtWorker, runnableWorker)
+fs.writeFileSync(runnableWorker, [
+  "const { parentPort } = require('node:worker_threads')",
+  'globalThis.self = { onmessage: null }',
+  'globalThis.postMessage = (value, transferList) => parentPort.postMessage(value, transferList)',
+  'parentPort.on("message", data => globalThis.self.onmessage?.({ data }));',
+  workerSource
+].join('\n'))
 
 const worker = new Worker(runnableWorker)
 const timeout = setTimeout(() => finish(new Error('POV worker timed out before producing geometry')), 10_000)
