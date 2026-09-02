@@ -24,12 +24,13 @@ private data from another dashboard or service.
 - `src/auth.ts`, `src/token-vault.ts`, `src/config.ts` — authentication,
   encrypted session storage, configuration, and persistence.
 - `src/*-macro.ts` — guarded automation workflows.
-- `viewer-client/` — browser viewer entry point, compatibility aliases, and
-  canvas shim used by webpack.
-- `scripts/build-pov-worker.cjs` — reproducibly patches the Prismarine worker
-  during `pnpm build`.
-- `scripts/test-pov-worker.cjs` — regression checks for the generated viewer
-  worker.
+- `viewer-client/` — browser viewer entry point, CSP-safe POV worker entry
+  point, local Prismarine compatibility/data shims, and canvas shim used by
+  webpack.
+- `scripts/build-pov-worker.cjs` — bundles the self-contained Prismarine POV
+  worker and applies negative-height support during `pnpm build`.
+- `scripts/test-pov-worker.cjs` — regression checks for the generated worker's
+  CSP safety, geometry, and modern vertical range.
 - `public/` — dashboard files and viewer assets. `dist/` and
   `public/pov-viewer/index.js`/`worker.js` are build outputs.
 - `test/` — TypeScript unit and integration tests.
@@ -64,6 +65,10 @@ configured.
 - World rendering must support the modern vertical range from Y=-64 through at
   least Y=300. Preserve regression coverage for a negative section and a high
   section (currently exercised at Y=-64 and Y=288).
+- Keep the generated POV worker self-contained and free of runtime `eval`,
+  `new Function`, and other dynamic code generation; the dashboard CSP blocks
+  those paths. Keep the local `viewer-client/pov-*.cjs` compatibility shims
+  aligned with the pinned Prismarine dependencies.
 - Edit `viewer-client/` or `scripts/build-pov-worker.cjs`, then run `pnpm build`;
   do not hand-edit generated bundles or `dist/`.
 - Preserve authenticated viewer endpoints and the existing Bot POV/freecam,
