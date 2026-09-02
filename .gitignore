@@ -9,3 +9,4 @@ work-*/
 .DS_Store
 Thumbs.db
 public/pov-viewer/worker.js
+public/app-version.js

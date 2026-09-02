@@ -66,7 +66,7 @@ async function boot() {
 
 function showApp(data) {
   $('login').classList.add('hidden'); $('app').classList.remove('hidden')
-  const versionScript = document.createElement('script'); versionScript.src = '/app-version.js'; versionScript.onload = () => { if (window.RCC_VERSION) $('appVersion').textContent = window.RCC_VERSION }; document.head.append(versionScript)
+  const versionScript = document.createElement('script'); versionScript.src = `/app-version.js?build=${Date.now()}`; versionScript.onload = () => { if (window.RCC_VERSION) $('appVersion').textContent = window.RCC_VERSION }; document.head.append(versionScript)
   state = data.state; config = data.config
   logEntries = (data.logs || []).map((entry) => ({ ...entry, system: true, message: `[${entry.source}] ${entry.message}` }))
   renderConsole()
