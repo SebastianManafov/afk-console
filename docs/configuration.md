@@ -14,6 +14,8 @@ RCC reads secrets from environment variables and stores runtime state below `DAT
 
 Minecraft servers, accounts, reconnect rules, proxies, macros and webhooks are configured through the dashboard. The `.env.example` file contains placeholders only.
 
+The browser POV terrain renderer uses the Prismarine-compatible Minecraft `1.21.4` render profile. RCC keeps the configured `26.1` and `26.1.2` protocol paths working and maps them to that profile only inside viewer rendering.
+
 ## Token persistence
 
 Each account receives a private directory at `DATA_DIR/accounts/<account-id>/auth`. RCC restores Microsoft cache files only while authenticating or connecting and stores them encrypted at rest. Keep the same encryption key to reuse a session.

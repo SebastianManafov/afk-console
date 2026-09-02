@@ -3,9 +3,11 @@
 const { Vec3 } = require('vec3')
 const { World } = require('prismarine-viewer/viewer/lib/world')
 const { getSectionGeometry } = require('prismarine-viewer/viewer/lib/models')
+const { createGeometryWorld } = require('./pov-geometry.cjs')
 
 let blocksStates = null
 let world = null
+let geometryWorld = null
 
 function sectionKey (x, y, z) {
   return `${x},${y},${z}`
@@ -37,6 +39,7 @@ function setSectionDirty (pos, value = true) {
 self.onmessage = ({ data }) => {
   if (data.type === 'version') {
     world = new World(data.version)
+    geometryWorld = createGeometryWorld(world)
   } else if (data.type === 'blockStates') {
     blocksStates = data.json
   } else if (data.type === 'dirty') {
@@ -51,6 +54,7 @@ self.onmessage = ({ data }) => {
     world.setBlockStateId(loc, data.stateId)
   } else if (data.type === 'reset') {
     world = null
+    geometryWorld = null
     blocksStates = null
   }
 }
@@ -69,7 +73,7 @@ setInterval(() => {
     const chunk = world.getColumn(x, z)
     if (chunk && chunk.sections[sectionIndex(chunk, y)]) {
       delete dirtySections[key]
-      const geometry = getSectionGeometry(x, y, z, world, blocksStates)
+      const geometry = getSectionGeometry(x, y, z, geometryWorld, blocksStates)
       const transferable = [geometry.positions.buffer, geometry.normals.buffer, geometry.colors.buffer, geometry.uvs.buffer]
       postMessage({ type: 'geometry', key, geometry }, transferable)
     }

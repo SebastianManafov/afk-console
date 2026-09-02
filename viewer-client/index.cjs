@@ -32,10 +32,9 @@ for (const worker of viewer.world.workers || []) {
     onmessage?.(event)
   }
 }
-// PrismarineJS's 1.21.4 viewer only marks the legacy Y 0..255 range dirty
-// when a chunk arrives. Modern Java worlds extend from -64 through 319, so a
-// bot outside the legacy range otherwise receives valid chunks that never get
-// meshed or displayed. Keep the 26.1 viewer path and its version mapping intact.
+// PrismarineJS 1.33.0 only marks the legacy Y 0..255 range dirty when a chunk
+// arrives. Modern 1.21.4 Java worlds extend from -64 through 319, so chunks
+// outside that range otherwise receive valid data that never gets meshed.
 const addLegacyHeightColumn = viewer.world.addColumn.bind(viewer.world)
 viewer.world.addColumn = (x, z, chunk) => {
   addLegacyHeightColumn(x, z, chunk)

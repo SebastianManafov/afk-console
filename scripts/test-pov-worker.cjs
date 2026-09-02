@@ -26,14 +26,12 @@ const blockStates = path.resolve(__dirname, '../public/pov-viewer/blocksStates/1
 const chunk = new Chunk()
 const stoneState = mcData.blocksByName.stone.defaultState
 for (const y of [-64, 64, 288]) {
-  for (let x = 0; x < 16; x++) {
-    for (let z = 0; z < 16; z++) chunk.setBlockStateId(new Vec3(x, y, z), stoneState)
-  }
+  chunk.setBlockStateId(new Vec3(8, y, 8), stoneState)
 }
 const serializedChunk = chunk.toJson()
 const roundTrippedChunk = Chunk.fromJson(serializedChunk)
 for (const y of [-64, 64, 288]) {
-  if (roundTrippedChunk.getBlockStateId(new Vec3(0, y, 0)) !== stoneState) {
+  if (roundTrippedChunk.getBlockStateId(new Vec3(8, y, 8)) !== stoneState) {
     throw new Error(`1.21.4 chunk serialization changed the stone state at Y=${y}`)
   }
 }
@@ -53,7 +51,7 @@ worker.on('error', finish)
 worker.on('message', message => {
   if (message.type !== 'geometry') return
   if (message.geometry.positions.length === 0) {
-    finish(new Error('POV worker returned empty geometry outside Y 0..255'))
+    finish(new Error(`POV worker returned empty geometry for serialized stone at ${message.key}`))
     return
   }
   expectedKeys.delete(message.key)

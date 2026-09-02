@@ -37,13 +37,7 @@ const run = async () => {
   if (stats.hasErrors()) throw new Error(stats.toString({ all: false, errors: true }))
   await new Promise((resolve, reject) => compiler.close(error => error ? reject(error) : resolve()))
 
-  let worker = fs.readFileSync(destination, 'utf8')
-  const before = 'if (neighbor.position.y < 0) continue'
-  const after = 'if (false) continue'
-  const matches = worker.split(before).length - 1
-  if (matches !== 2) throw new Error(`POV worker patch expected 2 match(es) but found ${matches}: ${before}`)
-  worker = worker.split(before).join(after)
-  fs.writeFileSync(destination, worker)
+  fs.accessSync(destination)
   console.log(`[pov] Built CSP-safe 1.21.4 worker with negative-height support: ${path.relative(process.cwd(), destination)}`)
 }
 

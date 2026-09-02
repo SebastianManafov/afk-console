@@ -66,7 +66,7 @@ pnpm install --frozen-lockfile
 pnpm test
 ```
 
-`pnpm test` compiles TypeScript, builds the browser POV bundle, patches the modern negative-height world worker and runs the complete Node.js test suite.
+`pnpm test` compiles TypeScript, builds the browser POV bundle and CSP-safe worker, then runs the complete Node.js test suite.
 
 ## Security
 
