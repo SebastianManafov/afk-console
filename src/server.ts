@@ -219,7 +219,7 @@ export function startServer(config: ConfigStore, events: AppEvents, bot: MultiBo
       socket.emit("position", payload);
       if (pose !== lastLoggedPositionPose) {
         lastLoggedPositionPose = pose;
-        events.log("info", "viewer", `[POV pose] position target.version=${target.version} target.entity.id=${target.entity.id} exact payload=${JSON.stringify(payload)}`);
+        events.log("info", "viewer", `[POSE SOCKET] positionPose=${pose} exact payload=${JSON.stringify(payload)}`);
       }
       void worldView.updatePosition(target.entity.position);
     };

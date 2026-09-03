@@ -13,9 +13,10 @@ export const PLAYER_POSE_EYE_HEIGHT: Readonly<Record<PlayerPose, number>> = {
   fall_flying: 0.4
 };
 
-const PLAYER_POSE_METADATA_INDEX = 6;
-const PLAYER_SHARED_FLAGS_METADATA_INDEX = 0;
-const PLAYER_SLEEPING_POSITION_METADATA_INDEX = 14;
+export const PLAYER_POSE_METADATA_INDEX = 6;
+export const PLAYER_SHARED_FLAGS_METADATA_INDEX = 0;
+export const PLAYER_SLEEPING_POSITION_METADATA_INDEX = 14;
+const PLAYER_SHARED_FLAG_SWIMMING = 0x10;
 
 type UnknownRecord = Record<string, unknown>;
 
@@ -63,6 +64,11 @@ function hasCrouchingFlag(value: unknown): boolean {
   return flags !== null && (Math.trunc(flags) & 0x02) !== 0;
 }
 
+function hasSwimmingFlag(value: unknown): boolean {
+  const flags = numericValue(value);
+  return flags !== null && (Math.trunc(flags) & PLAYER_SHARED_FLAG_SWIMMING) !== 0;
+}
+
 export function normalizePlayerPose(entity: unknown): PlayerPose {
   const record = asRecord(entity);
   const metadata = record?.metadata;
@@ -76,6 +82,7 @@ export function normalizePlayerPose(entity: unknown): PlayerPose {
   if (record?.sleeping === true || record?.isSleeping === true || sleepingPosition !== undefined && sleepingPosition !== null) return "sleeping";
 
   const sharedFlags = metadataValue(metadata, PLAYER_SHARED_FLAGS_METADATA_INDEX, "shared_flags");
+  if (hasSwimmingFlag(sharedFlags)) return "swimming";
   if (record?.crouching === true || hasCrouchingFlag(sharedFlags)) return "crouching";
 
   if (record?.elytraFlying === true) return "fall_flying";

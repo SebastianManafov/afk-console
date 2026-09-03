@@ -29,6 +29,12 @@ function createSocket() {
   };
 }
 
+function emitMineflayerEntityMetadata(target: SyntheticBot, metadata: Array<{ key: number; type: string; value: unknown }>): void {
+  for (const entry of metadata) target.entity.metadata[entry.key] = entry.value;
+  target._client.emit("entity_metadata", { entityId: target.entity.id, metadata });
+  target.emit("entityUpdate", target.entity);
+}
+
 test("viewer state sync forwards authoritative block state updates", () => {
   const target = new SyntheticBot();
   const viewerEmitter = new EventEmitter();
@@ -57,8 +63,9 @@ test("viewer state sync removes block and entity listeners without duplicates", 
   assert.equal(target.listenerCount("entityUpdate"), 1);
   assert.equal(target._client.listenerCount("entity_metadata"), 1);
 
-  target.entity.metadata[6] = 3;
-  target.emit("entityUpdate", target.entity);
+  target.entity.metadata[0] = 0;
+  target.entity.metadata[6] = 0;
+  emitMineflayerEntityMetadata(target, [{ key: 0, type: "byte", value: 0x10 }]);
   await new Promise<void>((resolve) => setImmediate(resolve));
   assert.deepEqual(socket.sent.at(-1), {
     event: "selfEntity",

@@ -1,6 +1,12 @@
 import type { Bot } from "mineflayer";
 import { inspect } from "node:util";
-import { normalizePlayerPose, type PlayerPose } from "./player-pose.js";
+import {
+  normalizePlayerPose,
+  PLAYER_POSE_METADATA_INDEX,
+  PLAYER_SHARED_FLAGS_METADATA_INDEX,
+  PLAYER_SLEEPING_POSITION_METADATA_INDEX,
+  type PlayerPose
+} from "./player-pose.js";
 
 type UnknownRecord = Record<string, unknown>;
 type EventListener = (...args: any[]) => void;
@@ -143,7 +149,7 @@ export function registerViewerStateSync(options: {
     if (!state) return;
     if (!force && state.pose === lastSelfPose) return;
     lastSelfPose = state.pose ?? null;
-    diagnostic?.(`[POV pose] selfEntity target.version=${diagnosticValue(target.version)} target.entity.id=${selfEntityId} exact payload=${diagnosticValue(state)}`);
+    diagnostic?.(`[POSE SOCKET] selfEntityPose=${diagnosticValue(state.pose)} exact payload=${diagnosticValue(state)}`);
     options.socket.emit("selfEntity", state);
   };
 
@@ -152,13 +158,23 @@ export function registerViewerStateSync(options: {
     const packetEntityId = finiteNumber(packet?.entityId);
     if (packetEntityId !== selfEntityId) return;
 
-    const metadata0 = entityMetadataValue(target.entity, 0, "shared_flags");
-    const metadata6 = entityMetadataValue(target.entity, 6, "pose");
+    const entityMetadata = asRecord(target.entity)?.metadata;
+    const metadata0 = entityMetadataValue(target.entity, PLAYER_SHARED_FLAGS_METADATA_INDEX, "shared_flags");
+    const metadata6 = entityMetadataValue(target.entity, PLAYER_POSE_METADATA_INDEX, "pose");
     const rawMetadata = packet?.metadata;
-    const signature = [diagnosticValue(rawMetadata), diagnosticValue(metadata0), diagnosticValue(metadata6)].join("|");
+    const rawPoseMetadata = Array.isArray(rawMetadata)
+      ? rawMetadata.filter((entry) => {
+        const key = finiteNumber(asRecord(entry)?.key);
+        return key === PLAYER_SHARED_FLAGS_METADATA_INDEX || key === PLAYER_POSE_METADATA_INDEX || key === PLAYER_SLEEPING_POSITION_METADATA_INDEX;
+      })
+      : rawMetadata;
+    const sleepingPosition = entityMetadataValue(target.entity, PLAYER_SLEEPING_POSITION_METADATA_INDEX, "sleeping_pos");
+    const signature = [diagnosticValue(rawPoseMetadata), diagnosticValue(metadata0), diagnosticValue(metadata6), diagnosticValue(sleepingPosition)].join("|");
     if (signature === lastRawMetadataSignature) return;
     lastRawMetadataSignature = signature;
-    diagnostic?.(`[POV pose] raw entity_metadata target.version=${diagnosticValue(target.version)} target.entity.id=${selfEntityId} rawPacket=${diagnosticValue(value)} rawPacket.metadata=${diagnosticValue(rawMetadata)} target.entity.metadata[0]=${diagnosticValue(metadata0)} target.entity.metadata[6]=${diagnosticValue(metadata6)} metadata[0].hex=${metadataHex(metadata0)} shared flag 0x10=${hasSharedFlag(metadata0, 0x10)} normalizePlayerPose(target.entity)=${normalizePlayerPose(target.entity)}`);
+    const normalizedPose = normalizePlayerPose(target.entity);
+    diagnostic?.(`[POSE RAW] minecraftVersion=${diagnosticValue(target.version)} entityId=${selfEntityId} rawMetadataPacket=${diagnosticValue(value)} entityMetadata=${diagnosticValue(entityMetadata)} metadata0=${diagnosticValue(metadata0)} metadata6=${diagnosticValue(metadata6)} sharedFlagsHex=${metadataHex(metadata0)} sharedFlagSwimming=${hasSharedFlag(metadata0, 0x10)} registryPoseIndex=${PLAYER_POSE_METADATA_INDEX} registrySharedFlagsIndex=${PLAYER_SHARED_FLAGS_METADATA_INDEX}`);
+    diagnostic?.(`[POSE NORMALIZE] input=${diagnosticValue({ metadata0, metadata6, sleepingPosition, entityMetadata })} normalizedPose=${normalizedPose}`);
   };
 
   const forwardBlockUpdate: EventListener = (value: unknown) => {

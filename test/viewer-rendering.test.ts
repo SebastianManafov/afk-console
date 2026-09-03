@@ -28,6 +28,16 @@ test("player pose normalization uses Mineflayer entity metadata", () => {
   assert.equal(playerPoseEyeHeight("crouching"), 1.27);
 });
 
+test("player pose normalization uses the authoritative swimming shared flag", () => {
+  const metadata: unknown[] = [];
+  metadata[0] = 0x10;
+  metadata[6] = 0;
+  assert.equal(normalizePlayerPose({ metadata }), "swimming");
+
+  metadata[0] = 0x02;
+  assert.equal(normalizePlayerPose({ metadata }), "crouching");
+});
+
 test("player pose normalization keeps legacy crouch and Elytra signals", () => {
   const metadata: unknown[] = [];
   metadata[0] = 2;
@@ -56,4 +66,13 @@ test("player pose transform leaves entity-root orientation unchanged", () => {
   assert.equal(applyPlayerPose(root, "standing"), true);
   assert.equal(model.rotation.x, 0);
   assert.equal(model.position.y, 0);
+});
+
+test("pinned viewer player definition has one visible model mesh and separate nametag capacity", () => {
+  const player = require("prismarine-viewer/viewer/lib/entity/entities.json").player as {
+    geometry: Record<string, unknown>;
+    textures: Record<string, string>;
+  };
+  assert.deepEqual(Object.keys(player.geometry), ["default", "cape"]);
+  assert.deepEqual(Object.keys(player.textures), ["default"]);
 });

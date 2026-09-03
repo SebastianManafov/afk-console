@@ -9,10 +9,11 @@ POV sidebar now exposes Bot POV and Freecam as an expandable nested mode choice
 while retaining the shared renderer and existing Bot POV control path.
 
 Live block-state forwarding is implemented. The self-player swimming/crawling
-pose issue is still under investigation: commit `cee601e` adds change-gated
-server and browser diagnostics for the complete pose pipeline. The A–F failure
-classification is pending a trace from the running Minecraft bot; browser
-caching is no longer part of the investigation.
+pose path now recognizes both the authoritative metadata pose and Minecraft’s
+shared-flags swimming bit. Browser caching is no longer part of the
+investigation. The currently available live trace only captured the standing
+state, so a live crawl transition still needs to be observed in the target
+environment after this fix.
 
 ## Completed
 
@@ -59,16 +60,22 @@ caching is no longer part of the investigation.
   emitted `selfEntity`/`position` payloads, browser pose reception, viewer
   entity lookup, `SkinnedMesh` selection, and model rotation before/after
   `applyPlayerPose()` and `viewer.updateEntity()`.
-- `normalizePlayerPose()` currently recognizes metadata pose value `3`, but
-  the shared-flags swimming bit `0x10` remains to be applied after live
-  evidence identifies the failing stage.
+- `normalizePlayerPose()` recognizes metadata pose value `3` and shared-flags
+  bit `0x10`; the latter is required because Mineflayer stores the byte but
+  does not map its swimming meaning.
+- The target runtime trace reached the server/browser/model stages with
+  `standing`: self metadata contained `metadata[0]=0`, no `metadata[6]`, and
+  no `0x10`; the browser received `standing`, found the real viewer
+  `SkinnedMesh`, and applied rotation `0`. No crawl transition was present in
+  that capture.
 - Listener cleanup is covered by the viewer-state test; no live Minecraft
-  reproduction has been captured yet, so A–F is not classified.
+  crawl reproduction has been captured yet. The fixed code path addresses
+  Case B when a swimming shared flag is received without pose metadata.
 
 ## Verification
 
 - `pnpm build` passed.
-- `pnpm test` passed: 66 tests, 0 failures.
+- `pnpm test` passed: 68 tests, 0 failures.
 - POV item-icon and geometry regressions passed for 1.21.4, including Y=`-64`
   and Y=`288` sections.
 - `git diff --check` passed.
@@ -80,8 +87,8 @@ caching is no longer part of the investigation.
   encrypted at rest, Minecraft Java profiles are validated server-side, direct
   Minecraft sessions bypass Microsoft Authflow, and tokens are absent from
   normal API/state responses.
-- Pose instrumentation is committed and pushed to `origin/main` at `cee601e`;
-  this status update is the only pending change.
+- Pose instrumentation and the shared-flags fix are included in the current
+  focused change.
 
 ## Using browser controls
 
@@ -100,11 +107,11 @@ Non-maximized cards and Freecam never emit bot controls.
 
 ## Next operator step
 
-Pull the pushed diagnostic commit, rebuild, and start the dashboard in the
-target environment. Reproduce the bot’s swimming/crawling state, then collect
-all server log lines and browser DevTools console lines containing
-`[POV pose]`. Those logs are required to classify A–F before changing the pose
-implementation.
+Pull the pushed pose fix, rebuild, and start the dashboard in the target
+environment. Reproduce the bot’s swimming/crawling state, then collect all
+server log lines and browser DevTools console lines containing `[POSE`. The
+change-gated trace should show the raw metadata, normalized state, Socket.IO
+payload, real model hierarchy, and model rotation after `viewer.updateEntity`.
 
 For Codespaces:
 

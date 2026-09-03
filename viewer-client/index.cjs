@@ -166,13 +166,38 @@ function modelDescription (model) {
   if (!model) return 'none'
   return `name=${model.name || '<unnamed>'} type=${model.type || model.constructor?.name || '<unknown>'}`
 }
+function rootType (root) {
+  return root?.type || root?.constructor?.name || 'none'
+}
+function modelHierarchy (root, selectedModel) {
+  const directChildren = Array.isArray(root?.children) ? root.children : []
+  let skinnedMeshes = 0
+  const visit = (node) => {
+    if (!node) return
+    if (node.isSkinnedMesh) skinnedMeshes += 1
+    for (const child of Array.isArray(node.children) ? node.children : []) visit(child)
+  }
+  visit(root)
+  return {
+    entityFound: Boolean(root),
+    rootType: rootType(root),
+    children: directChildren.map(child => ({ name: child?.name || '<unnamed>', type: child?.type || child?.constructor?.name || '<unknown>', isSkinnedMesh: Boolean(child?.isSkinnedMesh) })),
+    skinnedMeshes,
+    selectedModel: modelDescription(selectedModel)
+  }
+}
 function logPoseApplication (root, pose, stage) {
   const beforeModel = findPlayerModel(root)
   const beforeRotationX = modelRotationX(beforeModel)
   const applied = applyPlayerPose(root, pose)
   const afterModel = findPlayerModel(root)
-  console.info(`[POV pose] ${stage} selfEntityId=${poseDiagnosticValue(selfEntityId)} viewerEntity=${Boolean(root)} applyPlayerPose=${applied} model=${modelDescription(afterModel)} model.rotation.x before=${beforeRotationX} after=${modelRotationX(afterModel)}`)
+  const hierarchy = modelHierarchy(root, afterModel)
+  console.info(`[POSE MODEL] ${stage} ${poseDiagnosticValue(hierarchy)} applyResult=${applied} rotationBefore=${beforeRotationX} rotationAfter=${modelRotationX(afterModel)}`)
   return applied
+}
+function logPoseAfterViewerUpdate (root) {
+  const model = findPlayerModel(root)
+  console.info(`[POSE MODEL AFTER UPDATE] ${poseDiagnosticValue(modelHierarchy(root, model))} rotation=${modelRotationX(model)}`)
 }
 function setBotPose (pose, forceDiagnostic = false) {
   const previousPose = botPose
@@ -182,7 +207,7 @@ function setBotPose (pose, forceDiagnostic = false) {
   const mesh = selfEntityId === null ? null : viewer.entities.entities[selfEntityId]
   if (changed || forceDiagnostic) {
     poseDiagnosticPending = true
-    console.info(`[POV pose] botPose after setBotPose incoming=${poseDiagnosticValue(pose)} botPose=${botPose} selfEntityId=${poseDiagnosticValue(selfEntityId)} viewerEntity=${Boolean(mesh)}`)
+    console.info(`[POSE CLIENT] botPose=${botPose} incoming=${poseDiagnosticValue(pose)} entityFound=${Boolean(mesh)} selfEntityId=${poseDiagnosticValue(selfEntityId)}`)
     logPoseApplication(mesh, botPose, 'applyPlayerPose from setBotPose')
   } else if (mesh) {
     applyPlayerPose(mesh, botPose)
@@ -203,8 +228,7 @@ function updateRenderedEntity (entity) {
   const pose = isSelf ? botPose : entity.pose
   if (isSelf && poseDiagnosticPending) {
     const mesh = viewer.entities.entities[entity.id]
-    const model = findPlayerModel(mesh)
-    console.info(`[POV pose] rotation.x after viewer.updateEntity selfEntityId=${selfEntityId} viewerEntity=${Boolean(mesh)} model=${modelDescription(model)} model.rotation.x=${modelRotationX(model)}`)
+    logPoseAfterViewerUpdate(mesh)
     if (PLAYER_POSES.has(pose)) logPoseApplication(mesh, pose, 'applyPlayerPose after viewer.updateEntity')
     poseDiagnosticPending = false
   } else if (PLAYER_POSES.has(pose)) {
@@ -288,7 +312,7 @@ socket.on('version', (version) => {
 socket.on('position', ({ pos, yaw: nextBotYaw, pitch: nextBotPitch, pose }) => {
   if (pose !== lastReceivedPositionPose) {
     lastReceivedPositionPose = pose
-    console.info(`[POV pose] received position.pose=${poseDiagnosticValue(pose)} exact payload=${poseDiagnosticValue({ pos, yaw: nextBotYaw, pitch: nextBotPitch, pose })}`)
+    console.info(`[POSE CLIENT] positionPose=${poseDiagnosticValue(pose)} botPose=${botPose} exact payload=${poseDiagnosticValue({ pos, yaw: nextBotYaw, pitch: nextBotPitch, pose })}`)
   }
   botPosition = pos
   setBotPose(pose)
@@ -304,7 +328,7 @@ socket.on('position', ({ pos, yaw: nextBotYaw, pitch: nextBotPitch, pose }) => {
 socket.on('selfEntity', (entity) => {
   if (entity?.pose !== lastReceivedSelfEntityPose) {
     lastReceivedSelfEntityPose = entity?.pose
-    console.info(`[POV pose] received selfEntity.pose=${poseDiagnosticValue(entity?.pose)} exact payload=${poseDiagnosticValue(entity)}`)
+    console.info(`[POSE CLIENT] selfEntityPose=${poseDiagnosticValue(entity?.pose)} botPose=${botPose} exact payload=${poseDiagnosticValue(entity)}`)
   }
   selfEntityId = entity.id
   setBotPose(entity.pose, true)
