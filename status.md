@@ -8,6 +8,12 @@ RCC’s browser dashboard and POV control path are implemented and verified. The
 POV sidebar now exposes Bot POV and Freecam as an expandable nested mode choice
 while retaining the shared renderer and existing Bot POV control path.
 
+Live block-state forwarding is implemented. The self-player swimming/crawling
+pose issue is still under investigation: commit `cee601e` adds change-gated
+server and browser diagnostics for the complete pose pipeline. The A–F failure
+classification is pending a trace from the running Minecraft bot; browser
+caching is no longer part of the investigation.
+
 ## Completed
 
 - POV control uses Mineflayer movement and interaction states directly.
@@ -42,11 +48,27 @@ while retaining the shared renderer and existing Bot POV control path.
 - Modern 1.21.3+/26.1 movement synchronizes complete `player_input` state,
   movement rotation, horizontal-collision flags, and `tick_end`; legacy
   protocol movement remains on Mineflayer’s native path.
+- Authoritative Mineflayer/WorldView `blockUpdate` events are forwarded to the
+  browser viewer as position plus state ID, so redstone and other live block
+  states do not require chunk reloads.
+
+## Pose investigation
+
+- The diagnostic commit logs self-only raw `entity_metadata` packets,
+  Mineflayer metadata indexes 0 and 6, shared flag `0x10`, normalized pose,
+  emitted `selfEntity`/`position` payloads, browser pose reception, viewer
+  entity lookup, `SkinnedMesh` selection, and model rotation before/after
+  `applyPlayerPose()` and `viewer.updateEntity()`.
+- `normalizePlayerPose()` currently recognizes metadata pose value `3`, but
+  the shared-flags swimming bit `0x10` remains to be applied after live
+  evidence identifies the failing stage.
+- Listener cleanup is covered by the viewer-state test; no live Minecraft
+  reproduction has been captured yet, so A–F is not classified.
 
 ## Verification
 
 - `pnpm build` passed.
-- `pnpm test` passed: 61 tests, 0 failures.
+- `pnpm test` passed: 66 tests, 0 failures.
 - POV item-icon and geometry regressions passed for 1.21.4, including Y=`-64`
   and Y=`288` sections.
 - `git diff --check` passed.
@@ -58,8 +80,8 @@ while retaining the shared renderer and existing Bot POV control path.
   encrypted at rest, Minecraft Java profiles are validated server-side, direct
   Minecraft sessions bypass Microsoft Authflow, and tokens are absent from
   normal API/state responses.
-- The latest changes are committed and pushed to `origin/main`; the working
-  tree is clean.
+- Pose instrumentation is committed and pushed to `origin/main` at `cee601e`;
+  this status update is the only pending change.
 
 ## Using browser controls
 
@@ -78,11 +100,11 @@ Non-maximized cards and Freecam never emit bot controls.
 
 ## Next operator step
 
-Pull the pushed commit, rebuild, and start the dashboard in the target
-environment. Then perform live browser QA with an authorized admin account
-against the intended Minecraft server, including POV mode switching,
-pointer-lock switching,
-minimize/restore, tab hiding, reconnects, macros, and world transitions.
+Pull the pushed diagnostic commit, rebuild, and start the dashboard in the
+target environment. Reproduce the bot’s swimming/crawling state, then collect
+all server log lines and browser DevTools console lines containing
+`[POV pose]`. Those logs are required to classify A–F before changing the pose
+implementation.
 
 For Codespaces:
 
