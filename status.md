@@ -13,7 +13,7 @@ pose path now recognizes both the authoritative metadata pose and Minecraft’s
 shared-flags swimming bit. Browser caching is no longer part of the
 investigation. The currently available live trace only captured the standing
 state, so a live crawl transition still needs to be observed in the target
-environment after this fix.
+environment after commit `ed8d998`.
 
 ## Completed
 
@@ -53,9 +53,9 @@ environment after this fix.
   browser viewer as position plus state ID, so redstone and other live block
   states do not require chunk reloads.
 
-## Pose investigation
+## Pose synchronization
 
-- The diagnostic commit logs self-only raw `entity_metadata` packets,
+- Commit `ed8d998` logs self-only raw `entity_metadata` packets,
   Mineflayer metadata indexes 0 and 6, shared flag `0x10`, normalized pose,
   emitted `selfEntity`/`position` payloads, browser pose reception, viewer
   entity lookup, `SkinnedMesh` selection, and model rotation before/after
@@ -87,8 +87,8 @@ environment after this fix.
   encrypted at rest, Minecraft Java profiles are validated server-side, direct
   Minecraft sessions bypass Microsoft Authflow, and tokens are absent from
   normal API/state responses.
-- Pose instrumentation and the shared-flags fix are included in the current
-  focused change.
+- Pose instrumentation and the shared-flags fix are committed and pushed to
+  `origin/main` at `ed8d998`.
 
 ## Using browser controls
 
