@@ -43,6 +43,7 @@ test("Offline-Dashboard: Login, State, Health, Preview und Sicherheitsfehler", {
     assert.equal((await fetch(`${baseUrl}/pov-viewer/`)).status, 401);
     const viewerPage = await fetch(`${baseUrl}/pov-viewer/`, { headers });
     assert.equal(viewerPage.status, 200);
+    assert.equal(viewerPage.headers.get("cache-control"), "no-store");
     const viewerHtml = await viewerPage.text();
     assert.doesNotMatch(viewerHtml, /id="hud"|id="controls"|id="firstPersonHand"/);
     assert.match(viewerHtml, /id="offhandIcon"/);
@@ -66,6 +67,7 @@ test("Offline-Dashboard: Login, State, Health, Preview und Sicherheitsfehler", {
     assert.match(dashboardHtml, /id="removeAccountToken"/);
     const viewerBundle = await fetch(`${baseUrl}/pov-viewer/index.js`, { headers });
     assert.equal(viewerBundle.status, 200);
+    assert.equal(viewerBundle.headers.get("cache-control"), "no-store");
     assert.ok(Number(viewerBundle.headers.get("content-length") ?? 0) > 0 || (await viewerBundle.arrayBuffer()).byteLength > 1_000_000);
     const textureAtlas = await fetch(`${baseUrl}/pov-viewer/textures/1.21.4.png`, { headers });
     assert.equal(textureAtlas.status, 200);

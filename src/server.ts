@@ -413,7 +413,10 @@ async function serveStatic(request: IncomingMessage, response: ServerResponse, p
   try {
     const info = await stat(file);
     if (!info.isFile()) throw new Error("not file");
-    response.writeHead(200, { "Content-Type": contentTypes[extname(file)] || "application/octet-stream" });
+    response.writeHead(200, {
+      "Content-Type": contentTypes[extname(file)] || "application/octet-stream",
+      "Cache-Control": "no-store"
+    });
     createReadStream(file).pipe(response);
   } catch {
     json(response, 404, { error: "Not found" });
@@ -427,6 +430,7 @@ async function serveStaticPath(request: IncomingMessage, response: ServerRespons
   if (!info?.isFile()) return json(response, 404, { error: "Not found" });
   response.statusCode = 200;
   response.setHeader("content-type", contentTypes[extname(file)] ?? "application/octet-stream");
+  response.setHeader("cache-control", "no-store");
   response.setHeader("vary", "Accept-Encoding");
   if (/\bgzip\b/.test(request.headers["accept-encoding"] ?? "") && [".js", ".json"].includes(extname(file))) {
     response.setHeader("content-encoding", "gzip");
