@@ -190,6 +190,38 @@ test("control-session heartbeats are reliable while mouse-look stays volatile", 
   assert.deepEqual(lookEvent?.options, { volatile: true });
 });
 
+test("control-session binds default browser timers to the global object", () => {
+  const timerGlobal = globalThis as any;
+  const originalSetInterval = timerGlobal.setInterval;
+  const originalClearInterval = timerGlobal.clearInterval;
+  const originalSetTimeout = timerGlobal.setTimeout;
+  const originalClearTimeout = timerGlobal.clearTimeout;
+  const assertGlobalContext = function (this: unknown): any {
+    assert.equal(this, globalThis);
+    return 1;
+  };
+  try {
+    timerGlobal.setInterval = assertGlobalContext;
+    timerGlobal.clearInterval = assertGlobalContext;
+    timerGlobal.setTimeout = assertGlobalContext;
+    timerGlobal.clearTimeout = assertGlobalContext;
+    const { createControlSession } = require(join(process.cwd(), "viewer-client/control-session.cjs")) as { createControlSession: (options: Record<string, unknown>) => any };
+    const session = createControlSession({});
+    session.setCapability(true);
+    session.setParentActive(true);
+    session.setSocketConnected(true);
+    session.setPointerLocked(true);
+    session.setLeaseGranted(true);
+    assert.equal(session.look(0.5, 0.25), true);
+    session.cleanup("test cleanup");
+  } finally {
+    timerGlobal.setInterval = originalSetInterval;
+    timerGlobal.clearInterval = originalClearInterval;
+    timerGlobal.setTimeout = originalSetTimeout;
+    timerGlobal.clearTimeout = originalClearTimeout;
+  }
+});
+
 test("browser control session preserves diagonal state and emits authoritative release", async () => {
   const { createControlSession } = require(join(process.cwd(), "viewer-client/control-session.cjs")) as { createControlSession: (options: Record<string, unknown>) => any };
   const events: Array<{ event: string; payload?: unknown; options?: unknown }> = [];

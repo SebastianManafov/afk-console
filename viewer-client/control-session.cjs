@@ -6,10 +6,10 @@ class ControlSession {
   constructor (options = {}) {
     this.emitEvent = typeof options.emit === 'function' ? options.emit : () => {}
     this.now = options.now || (() => Date.now())
-    this.setInterval = options.setInterval || globalThis.setInterval
-    this.clearInterval = options.clearInterval || globalThis.clearInterval
-    this.setTimeout = options.setTimeout || globalThis.setTimeout
-    this.clearTimeout = options.clearTimeout || globalThis.clearTimeout
+    this.setInterval = options.setInterval || globalThis.setInterval.bind(globalThis)
+    this.clearInterval = options.clearInterval || globalThis.clearInterval.bind(globalThis)
+    this.setTimeout = options.setTimeout || globalThis.setTimeout.bind(globalThis)
+    this.clearTimeout = options.clearTimeout || globalThis.clearTimeout.bind(globalThis)
     this.onStateChange = typeof options.onStateChange === 'function' ? options.onStateChange : () => {}
     this.onRevoked = typeof options.onRevoked === 'function' ? options.onRevoked : () => {}
     this.heartbeatMs = options.heartbeatMs || HEARTBEAT_MS
