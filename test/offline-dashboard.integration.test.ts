@@ -58,6 +58,10 @@ test("Offline-Dashboard: Login, State, Health, Preview und Sicherheitsfehler", {
     assert.match(dashboardHtml, /data-pov-mode="freecam"/);
     assert.doesNotMatch(dashboardHtml, /pov-mode-panel|Choose a perspective/);
     assert.match(dashboardHtml, /id="profileInputToken" type="password"/);
+    assert.match(dashboardHtml, /id="profileInputTokenType"/);
+    assert.equal((dashboardHtml.match(/<option value="(?:microsoft_oauth|minecraft_java)">/g) || []).length, 2);
+    assert.match(dashboardHtml, /Microsoft OAuth Access Token/);
+    assert.match(dashboardHtml, /Minecraft Java Access Token/);
     assert.match(dashboardHtml, /placeholder="Enter new token to replace existing token"/);
     assert.match(dashboardHtml, /id="removeAccountToken"/);
     const viewerBundle = await fetch(`${baseUrl}/pov-viewer/index.js`, { headers });
@@ -83,26 +87,60 @@ test("Offline-Dashboard: Login, State, Health, Preview und Sicherheitsfehler", {
     assert.equal(body.state.connection, "offline");
     assert.equal(body.state.reconnectAt, null);
     assert.ok(body.state.bots.every((entry) => entry.connection === "offline"));
-    assert.deepEqual(body.state.bots[0]?.tokenStatus, { configured: false, valid: false, expiresAt: null, status: "not_set" });
+    assert.deepEqual(body.state.bots[0]?.tokenStatus, { type: null, configured: false, valid: false, expiresAt: null, status: "not_set" });
     assert.equal(body.logs.some((entry) => /Verbindungsaufbau zu/.test(entry.message)), false);
 
     const accessToken = "synthetic-dashboard-access-token";
-    const setToken = await fetch(`${baseUrl}/api/account/token`, { method: "PUT", headers: { ...headers, "content-type": "application/json" }, body: JSON.stringify({ accountId: "primary", accessToken }) });
+    const missingTokenType = await fetch(`${baseUrl}/api/account/token`, { method: "PUT", headers: { ...headers, "content-type": "application/json" }, body: JSON.stringify({ accountId: "primary", accessToken }) });
+    assert.equal(missingTokenType.status, 400);
+    const setToken = await fetch(`${baseUrl}/api/account/token`, { method: "PUT", headers: { ...headers, "content-type": "application/json" }, body: JSON.stringify({ accountId: "primary", tokenType: "microsoft_oauth", accessToken }) });
     assert.equal(setToken.status, 200);
-    const setTokenBody = await setToken.json() as { tokenStatus: { configured: boolean; valid: boolean; expiresAt: string | null; status: string } };
+    const setTokenBody = await setToken.json() as { tokenStatus: { type: string; configured: boolean; valid: boolean; expiresAt: string | null; status: string } };
     assert.equal(setTokenBody.tokenStatus.configured, true);
     assert.equal(setTokenBody.tokenStatus.valid, true);
     assert.equal(setTokenBody.tokenStatus.status, "valid");
+    assert.equal(setTokenBody.tokenStatus.type, "microsoft_oauth");
     assert.doesNotMatch(JSON.stringify(setTokenBody), new RegExp(accessToken));
     const stateAfterToken = await (await fetch(`${baseUrl}/api/state`, { headers })).text();
     assert.doesNotMatch(stateAfterToken, new RegExp(accessToken));
+    const emptyToken = await fetch(`${baseUrl}/api/account/token`, { method: "PUT", headers: { ...headers, "content-type": "application/json" }, body: JSON.stringify({ accountId: "primary", tokenType: "microsoft_oauth", accessToken: "" }) });
+    assert.equal(emptyToken.status, 400);
+    const stateAfterEmptyToken = await (await fetch(`${baseUrl}/api/state`, { headers })).json() as { state: { bots: Array<{ tokenStatus: unknown }> } };
+    assert.deepEqual(stateAfterEmptyToken.state.bots[0]?.tokenStatus, setTokenBody.tokenStatus);
     const tokenFiles = await readdir(join(directory, "accounts", "primary", "auth"));
     assert.equal(tokenFiles.length, 1);
     assert.match(tokenFiles[0]!, /\.vault$/);
     assert.doesNotMatch(await readFile(join(directory, "accounts", "primary", "auth", tokenFiles[0]!), "utf8"), new RegExp(accessToken));
     const removeToken = await fetch(`${baseUrl}/api/account/token`, { method: "DELETE", headers: { ...headers, "content-type": "application/json" }, body: JSON.stringify({ accountId: "primary" }) });
     assert.equal(removeToken.status, 200);
-    assert.deepEqual((await removeToken.json() as { tokenStatus: unknown }).tokenStatus, { configured: false, valid: false, expiresAt: null, status: "not_set" });
+    assert.deepEqual((await removeToken.json() as { tokenStatus: unknown }).tokenStatus, { type: null, configured: false, valid: false, expiresAt: null, status: "not_set" });
+
+    const minecraftToken = `header.${Buffer.from(JSON.stringify({ exp: Math.floor(Date.now() / 1000) + 3_600 }), "utf8").toString("base64url")}.signature`;
+    const previousFetch = globalThis.fetch;
+    globalThis.fetch = (async (input, init) => {
+      if (String(input) === "https://api.minecraftservices.com/minecraft/profile") return new Response(JSON.stringify({ id: "0123456789abcdef0123456789abcdef", name: "TestPlayer" }), { status: 200, headers: { "content-type": "application/json" } });
+      return previousFetch(input, init);
+    }) as typeof fetch;
+    try {
+      const setMinecraftToken = await fetch(`${baseUrl}/api/account/token`, { method: "PUT", headers: { ...headers, "content-type": "application/json" }, body: JSON.stringify({ accountId: "primary", tokenType: "minecraft_java", accessToken: minecraftToken }) });
+      assert.equal(setMinecraftToken.status, 200);
+      const setMinecraftBody = await setMinecraftToken.json() as { tokenStatus: { type: string; configured: boolean; valid: boolean; expiresAt: string | null; status: string } };
+      assert.equal(setMinecraftBody.tokenStatus.type, "minecraft_java");
+      assert.equal(setMinecraftBody.tokenStatus.configured, true);
+      assert.equal(setMinecraftBody.tokenStatus.valid, true);
+      assert.equal(setMinecraftBody.tokenStatus.status, "valid");
+      assert.ok(setMinecraftBody.tokenStatus.expiresAt);
+      assert.doesNotMatch(JSON.stringify(setMinecraftBody), new RegExp(minecraftToken));
+      const minecraftState = await (await fetch(`${baseUrl}/api/state`, { headers })).text();
+      assert.doesNotMatch(minecraftState, new RegExp(minecraftToken));
+      const minecraftFiles = await readdir(join(directory, "accounts", "primary", "auth"));
+      assert.deepEqual(minecraftFiles, ["rcc-minecraft-token.json.vault"]);
+      assert.doesNotMatch(await readFile(join(directory, "accounts", "primary", "auth", minecraftFiles[0]!), "utf8"), new RegExp(minecraftToken));
+    } finally {
+      globalThis.fetch = previousFetch;
+    }
+    const removeMinecraftToken = await fetch(`${baseUrl}/api/account/token`, { method: "DELETE", headers: { ...headers, "content-type": "application/json" }, body: JSON.stringify({ accountId: "primary" }) });
+    assert.equal(removeMinecraftToken.status, 200);
 
     const systemCheck = await fetch(`${baseUrl}/api/system-check`, { headers });
     assert.equal(systemCheck.status, 200);

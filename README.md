@@ -4,7 +4,7 @@
 [![Node.js 22+](https://img.shields.io/badge/Node.js-22%2B-5FA04E?logo=node.js&logoColor=white)](https://nodejs.org/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 
-RCC is a self-hosted Minecraft Java console client with a private web dashboard, encrypted Microsoft session storage, multi-account control, automation and a live 3D point-of-view viewer.
+RCC is a self-hosted Minecraft Java console client with a private web dashboard, encrypted authentication session storage, multi-account control, automation and a live 3D point-of-view viewer.
 
 > [!IMPORTANT]
 > RCC is an independent community project. It is not affiliated with Mojang Studios or Microsoft. Check the rules of every Minecraft server before using automation.
@@ -12,7 +12,7 @@ RCC is a self-hosted Minecraft Java console client with a private web dashboard,
 ## Highlights
 
 - Microsoft device-code authentication; RCC never receives your Microsoft password
-- encrypted OAuth cache and dashboard secrets using AES-256-GCM
+- encrypted OAuth/Minecraft session cache and dashboard secrets using AES-256-GCM
 - multiple accounts, server profiles and optional HTTP CONNECT proxies
 - connect, chat, movement, inventory and reconnect controls from the browser
 - live textured 3D world viewer with Bot POV, Freecam, HUD, chat and inventory; browser bot controls are admin-only and fail closed on focus, visibility, disconnect and world transitions

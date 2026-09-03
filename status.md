@@ -14,8 +14,10 @@ while retaining the shared renderer and existing Bot POV control path.
 - POV mode selection lives in the expandable sidebar item under `08 POV`: Bot
   POV controls the real bot, while Freecam moves only the local camera through
   the loaded world.
-- Accounts show a derived Microsoft token status with no token value in the
-  browser; token replacement uses the encrypted per-account OAuth vault.
+- Accounts show a derived token status with no token value in the browser;
+  Microsoft OAuth and Minecraft Java tokens are selected explicitly, stored in
+  separate encrypted per-account paths, and displayed only as safe status
+  metadata.
 - Viewer leases use reliable one-second heartbeats with a five-second dead-man
   timeout and refresh on valid movement, look, and action input.
 - Lease expiry and every authoritative cleanup path clear movement states,
@@ -38,17 +40,20 @@ while retaining the shared renderer and existing Bot POV control path.
 ## Verification
 
 - `pnpm build` passed.
-- `pnpm test` passed: 56 tests, 0 failures.
+- `pnpm test` passed: 61 tests, 0 failures.
 - POV item-icon and geometry regressions passed for 1.21.4, including Y=`-64`
   and Y=`288` sections.
 - `git diff --check` passed.
 - Browser visual QA passed across login, dashboard pages, settings, POV mode
-  selection, macros, inventory, chat, dark theme, dialogs, and responsive
-  layout using an offline local run. No Minecraft server was joined during
-  verification.
+  selection, accounts token-type editor, macros, inventory, chat, dark theme,
+  dialogs, and responsive layout using an offline local run. No Minecraft
+  server was joined during verification.
 - Token-vault and dashboard redaction tests confirm submitted access tokens are
-  encrypted at rest and absent from normal API/state responses.
-- The working tree is clean and `HEAD` matches `origin/main`.
+  encrypted at rest, Minecraft Java profiles are validated server-side, direct
+  Minecraft sessions bypass Microsoft Authflow, and tokens are absent from
+  normal API/state responses.
+- The working tree is clean after the local commit; this change is intentionally
+  not pushed to `origin/main`.
 
 ## Using browser controls
 

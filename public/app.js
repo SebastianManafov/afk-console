@@ -424,16 +424,18 @@ function renderConfig() {
 }
 
 const tokenStatusKinds = new Set(['valid', 'expired', 'invalid', 'not_set'])
+const tokenTypes = new Set(['microsoft_oauth', 'minecraft_java'])
 
 function normalizeTokenStatus (raw, fallbackBot = null) {
   const hasStatus = raw && typeof raw === 'object' && tokenStatusKinds.has(raw.status)
   if (hasStatus) {
     const expiresAt = typeof raw.expiresAt === 'string' && Number.isFinite(Date.parse(raw.expiresAt)) ? raw.expiresAt : null
-    return { status: raw.status, configured: raw.status !== 'not_set', valid: raw.status === 'valid', expiresAt }
+    const type = tokenTypes.has(raw.type) ? raw.type : raw.status === 'not_set' ? null : 'microsoft_oauth'
+    return { type, status: raw.status, configured: raw.status !== 'not_set', valid: raw.status === 'valid', expiresAt }
   }
   const expiresAt = typeof fallbackBot?.authExpiresAt === 'string' && Number.isFinite(Date.parse(fallbackBot.authExpiresAt)) ? fallbackBot.authExpiresAt : null
-  if (fallbackBot?.authenticated) return { status: expiresAt && Date.parse(expiresAt) <= Date.now() ? 'expired' : 'valid', configured: true, valid: !expiresAt || Date.parse(expiresAt) > Date.now(), expiresAt }
-  return { status: 'not_set', configured: false, valid: false, expiresAt: null }
+  if (fallbackBot?.authenticated) return { type: 'microsoft_oauth', status: expiresAt && Date.parse(expiresAt) <= Date.now() ? 'expired' : 'valid', configured: true, valid: !expiresAt || Date.parse(expiresAt) > Date.now(), expiresAt }
+  return { type: null, status: 'not_set', configured: false, valid: false, expiresAt: null }
 }
 
 function tokenStatusFor (bot) { return normalizeTokenStatus(bot?.tokenStatus, bot) }
@@ -453,15 +455,17 @@ function tokenStatusIcon (status) {
 }
 
 function tokenStatusCell (metadata) {
-  const status = normalizeTokenStatus(metadata).status
-  const label = { valid: 'Valid', expired: 'Expired', invalid: 'Invalid', not_set: 'Not set' }[status]
-  const expiry = formatTokenDate(metadata.expiresAt)
+  const normalized = normalizeTokenStatus(metadata)
+  const status = normalized.status
+  const typeLabel = normalized.type === 'minecraft_java' ? 'Minecraft' : 'Microsoft OAuth'
+  const label = status === 'valid' ? `Valid · ${typeLabel}` : status === 'expired' ? `Expired · ${typeLabel}` : { invalid: 'Invalid', not_set: 'Not set' }[status]
+  const expiry = formatTokenDate(normalized.expiresAt)
   const tooltipLines = status === 'valid'
-    ? ['Token is valid', ...(expiry ? [`Expires: ${expiry}`] : [])]
+    ? ['Token is valid', `Type: ${typeLabel}`, ...(expiry ? [`Expires: ${expiry}`] : [])]
     : status === 'expired'
-      ? ['Token expired', ...(expiry ? [`Expired: ${expiry}`] : [])]
+      ? ['Token expired', `Type: ${typeLabel}`, ...(expiry ? [`Expired: ${expiry}`] : [])]
       : status === 'invalid'
-        ? ['Token invalid']
+        ? ['Token invalid', ...(normalized.type ? [`Type: ${typeLabel}`] : [])]
         : ['No access token configured']
   const tooltip = tooltipLines.join('. ')
   return `<td class="token-status-cell"><span class="token-status token-status-${status}" tabindex="0" aria-label="${escapeHtml(tooltip)}"><span class="token-status-icon">${tokenStatusIcon(status)}</span><span class="token-status-label">${label}</span><span class="token-status-tooltip" role="tooltip">${tooltipLines.map((line) => `<span>${escapeHtml(line)}</span>`).join('')}</span></span></td>`
@@ -470,7 +474,7 @@ function tokenStatusCell (metadata) {
 function renderProfiles() {
   if (!config || !state) return
   const botMap = new Map((state.bots || [state]).map((bot) => [bot.accountId || 'primary', bot]))
-  const signature = JSON.stringify({ servers: config.servers, proxies: config.proxies, accounts: config.accounts, bots: [...botMap].map(([id, bot]) => ({ id, connection: bot.connection, authenticated: bot.authenticated, authenticating: bot.authenticating, hasAuthCode: Boolean(bot.authCode), authExpiresAt: bot.authExpiresAt, tokenStatus: bot.tokenStatus?.status, tokenExpiresAt: bot.tokenStatus?.expiresAt, paused: bot.paused, lastError: bot.lastError, worldTransition: bot.worldTransition?.state, controlLocked: bot.controlLock?.locked })) })
+  const signature = JSON.stringify({ servers: config.servers, proxies: config.proxies, accounts: config.accounts, bots: [...botMap].map(([id, bot]) => ({ id, connection: bot.connection, authenticated: bot.authenticated, authenticating: bot.authenticating, hasAuthCode: Boolean(bot.authCode), authExpiresAt: bot.authExpiresAt, tokenStatus: bot.tokenStatus?.status, tokenType: bot.tokenStatus?.type, tokenExpiresAt: bot.tokenStatus?.expiresAt, paused: bot.paused, lastError: bot.lastError, worldTransition: bot.worldTransition?.state, controlLocked: bot.controlLock?.locked })) })
   if (signature === lastProfilesSignature) return
   lastProfilesSignature = signature
   if ($('serversTable')) {
@@ -494,9 +498,10 @@ function renderProfiles() {
       const serverOptions = config.servers.map((item) => `<option value="${escapeHtml(item.id)}" ${item.id === account.serverId ? 'selected' : ''}>${escapeHtml(item.name)}</option>`).join('')
       const proxyOptions = `<option value="">Direct</option>` + config.proxies.map((item) => `<option value="${escapeHtml(item.id)}" ${item.id === account.proxyId ? 'selected' : ''}>${escapeHtml(item.name)}</option>`).join('')
       const row = document.createElement('tr')
-      const tokenWarning = bot?.authExpiresAt && Date.parse(bot.authExpiresAt) - Date.now() < 900_000 ? '<small class="token-warning">Token renewal soon</small>' : ''
       const tokenStatus = tokenStatusFor(bot)
-      const connectionAction = bot?.authenticating ? 'Microsoft login running …' : bot?.connection === 'online' ? 'Reconnect' : bot?.authenticated ? 'Connect' : 'Microsoft login'
+      const tokenWarning = tokenStatus.type === 'microsoft_oauth' && bot?.authExpiresAt && Date.parse(bot.authExpiresAt) - Date.now() < 900_000 ? '<small class="token-warning">Token renewal soon</small>' : ''
+      const directMinecraftToken = tokenStatus.type === 'minecraft_java' && tokenStatus.configured
+      const connectionAction = bot?.authenticating ? 'Microsoft login running …' : bot?.connection === 'online' ? 'Reconnect' : bot?.authenticated ? 'Connect' : directMinecraftToken ? 'Connect' : 'Microsoft login'
       const connectionError = bot?.lastError ? `<small class="connection-error">${escapeHtml(bot.lastError)}</small>` : ''
       const loginDisabledReason = account.paused ? 'Paused accounts must be resumed first' : bot?.authenticating ? 'Microsoft authentication is already running' : ['connecting', 'reconnecting'].includes(status) ? 'Connection attempt is already running' : ''
       const emailHidden = hiddenEmailAccountIds.has(account.id)
@@ -513,7 +518,7 @@ function renderProfiles() {
       row.querySelector('.server-assignment').onchange = (event) => switchAccountConnection(account.id, { serverId: event.target.value }, bot?.connection === 'online', 'Server profile')
       row.querySelector('.proxy-assignment').onchange = (event) => switchAccountConnection(account.id, { proxyId: event.target.value || null }, bot?.connection === 'online', 'Proxy profile')
       row.querySelectorAll('.server-assignment,.proxy-assignment,.reconnect-enabled,.reconnect-delays').forEach((element) => element.setAttribute('data-admin-only', ''))
-      row.querySelector('.account-login').onclick = () => bot?.authenticated ? connectAccounts([account.id], bot.connection === 'online') : loginMicrosoftAccount(account.id)
+      row.querySelector('.account-login').onclick = () => bot?.authenticated ? connectAccounts([account.id], bot.connection === 'online') : directMinecraftToken ? connectAccounts([account.id]) : loginMicrosoftAccount(account.id)
       row.querySelector('.account-edit').onclick = () => openProfileDialog('account', account)
       row.querySelector('.account-pause').onclick = () => pauseAccount(account.id, !account.paused)
       row.querySelector('.reconnect-enabled').onchange = (event) => updateAccount(account.id, { reconnectEnabled: event.target.checked })
@@ -629,8 +634,8 @@ async function connectAccounts(accountIds, reconnect = false) {
 }
 async function pauseAccount(accountId, paused) { try { const result = await api('/api/account/pause', { method: 'POST', body: JSON.stringify({ accountId, paused }) }); config = result.config; renderConfig(); renderState(); toast(paused ? 'Account paused' : 'Account resumed') } catch (error) { toast(error.message, true) } }
 async function loginMicrosoftAccount(accountId) { try { await api('/api/account/login', { method: 'POST', body: JSON.stringify({ accountId }) }); showPage('connect'); toast('Creating a new Microsoft code …') } catch (error) { toast(error.message, true) } }
-async function logoutMicrosoftAccount(accountId, name) { if (!confirm(`Remove Microsoft authentication for “${name}”? The OAuth token will be deleted locally.`)) return; if (povSelection.isSelected(accountId)) povSelection.clear(); try { await api('/api/account/logout', { method: 'POST', body: JSON.stringify({ accountId }) }); toast('Microsoft authentication removed') } catch (error) { toast(error.message, true) } }
-async function deleteAccount(accountId, name) { if (!confirm(`Delete account “${name}” and its local OAuth token?`)) return; if (povSelection.isSelected(accountId)) povSelection.clear(); try { const result = await api('/api/account', { method: 'DELETE', body: JSON.stringify({ accountId }) }); config = result.config; await saveProfilePatch({ accounts: config.accounts }); toast('Account deleted') } catch (error) { toast(error.message, true) } }
+async function logoutMicrosoftAccount(accountId, name) { if (!confirm(`Remove saved authentication for “${name}”? The token will be deleted locally.`)) return; if (povSelection.isSelected(accountId)) povSelection.clear(); try { await api('/api/account/logout', { method: 'POST', body: JSON.stringify({ accountId }) }); toast('Saved authentication removed') } catch (error) { toast(error.message, true) } }
+async function deleteAccount(accountId, name) { if (!confirm(`Delete account “${name}” and its local token?`)) return; if (povSelection.isSelected(accountId)) povSelection.clear(); try { const result = await api('/api/account', { method: 'DELETE', body: JSON.stringify({ accountId }) }); config = result.config; await saveProfilePatch({ accounts: config.accounts }); toast('Account deleted') } catch (error) { toast(error.message, true) } }
 
 document.querySelectorAll('[data-page]').forEach((button) => {
   if (button.id === 'povNavToggle') return
@@ -693,9 +698,12 @@ $('addWebhook').onclick = () => $('webhookUrl').focus()
 function renderProfileTokenState (raw) {
   const metadata = normalizeTokenStatus(raw)
   const configured = metadata.status !== 'not_set'
-  const state = { valid: 'Access token already configured', expired: 'Access token already configured · expired', invalid: 'Access token already configured · invalid', not_set: 'No access token configured' }[metadata.status]
+  const state = configured ? '● Access token already configured' : 'No access token configured'
   $('profileTokenState').textContent = state
-  $('profileTokenHint').textContent = configured ? 'Leave the field empty to keep the current token unchanged.' : 'Recommended: use Microsoft login. Manual entry accepts a Microsoft Live OAuth access token.'
+  if (metadata.type) $('profileInputTokenType').value = metadata.type
+  else $('profileInputTokenType').value = 'microsoft_oauth'
+  const selectedType = $('profileInputTokenType').value === 'minecraft_java' ? 'Minecraft Java' : 'Microsoft OAuth'
+  $('profileTokenHint').textContent = configured ? 'Leave the field empty to keep the current token unchanged.' : `Manual entry accepts a ${selectedType} access token.`
   $('profileInputToken').placeholder = configured ? 'Enter new token to replace existing token' : 'Enter access token'
   $('removeAccountToken').classList.toggle('hidden', !configured)
 }
@@ -704,7 +712,7 @@ function openProfileDialog(type, item = null) {
   editingProfileId = item?.id || null; $('profileType').value = type; $('profileForm').reset(); $('profileType').value = type
   const account = type === 'account'; const proxy = type === 'proxy'; const server = type === 'server'
   $('profileDialogTitle').textContent = `${item ? 'Edit' : 'Add'} ${type === 'account' ? 'account' : type === 'proxy' ? 'proxy' : 'server'}`
-  $('profileDialogHint').textContent = account ? 'Uses a separate OAuth folder and macro settings.' : proxy ? 'HTTP-CONNECT proxy; credentials are encrypted.' : 'Minecraft Java server profile.'
+  $('profileDialogHint').textContent = account ? 'Uses a separate encrypted authentication folder and macro settings.' : proxy ? 'HTTP-CONNECT proxy; credentials are encrypted.' : 'Minecraft Java server profile.'
   document.querySelectorAll('.profile-server-field').forEach((field) => field.classList.toggle('hidden', account))
   document.querySelectorAll('.profile-port-field').forEach((field) => field.classList.toggle('hidden', account))
   document.querySelectorAll('.profile-version-field').forEach((field) => field.classList.toggle('hidden', !server))
@@ -716,6 +724,7 @@ function openProfileDialog(type, item = null) {
   $('profileInputVersion').value = config.servers[0]?.version || config.connection.version
   $('profileAutoGuiSlot').value = '0'; $('profileAutoGuiDelay').value = '750'
   $('profileInputToken').value = ''
+  $('profileInputTokenType').value = 'microsoft_oauth'
   renderProfileTokenState(account && item ? tokenStatusFor(botForAccount(item.id)) : null)
   if (item) { $('profileInputName').value = item.name; $('profileInputHost').value = item.host || ''; $('profileInputPort').value = item.port || ''; $('profileInputVersion').value = item.version || config.servers[0]?.version || config.connection.version; $('profileInputEmail').value = account ? item.username || '' : ''; $('profileInputUser').value = proxy ? item.username || '' : ''; $('profileInputPassword').value = ''; $('profileAutoGuiEnabled').checked = Boolean(item.autoGuiJoinEnabled); $('profileAutoGuiTitle').value = item.autoGuiJoinTitleIncludes || ''; $('profileAutoGuiSlot').value = String(item.autoGuiJoinSlot ?? 0); $('profileAutoGuiDelay').value = String(item.autoGuiJoinDelayMs ?? 750) }
   $('profileDialog').showModal()
@@ -727,7 +736,7 @@ $('closeProfileDialog').onclick = $('cancelProfileDialog').onclick = () => { $('
 $('removeAccountToken').onclick = async () => {
   const accountId = editingProfileId
   if ($('profileType').value !== 'account' || !accountId) return
-  if (!confirm('Remove the saved Microsoft access token?')) return
+  if (!confirm('Remove the saved access token?')) return
   try {
     const result = await api('/api/account/token', { method: 'DELETE', body: JSON.stringify({ accountId }) })
     $('profileInputToken').value = ''
@@ -743,13 +752,13 @@ $('profileForm').onsubmit = async (event) => {
     if (type === 'server') { const item = { id: editingProfileId || `server-${Date.now()}`, name, host: $('profileInputHost').value.trim(), port: Number($('profileInputPort').value), version: $('profileInputVersion').value.trim(), autoGuiJoinEnabled: $('profileAutoGuiEnabled').checked, autoGuiJoinTitleIncludes: $('profileAutoGuiTitle').value.trim(), autoGuiJoinSlot: Number($('profileAutoGuiSlot').value), autoGuiJoinDelayMs: Number($('profileAutoGuiDelay').value) }; await saveProfilePatch({ servers: editingProfileId ? config.servers.map((server) => server.id === editingProfileId ? item : server) : [...config.servers, item] }) }
     if (type === 'account') {
       const email = $('profileInputEmail').value.trim(); const previous = config.accounts.find((account) => account.id === editingProfileId)
-      const accessToken = $('profileInputToken').value.trim()
-      if (previous && previous.username !== email && !confirm('The email address changed. The existing Microsoft authentication will be removed. Continue?')) return
+      const accessToken = $('profileInputToken').value.trim(); const tokenType = $('profileInputTokenType').value
+      if (previous && previous.username !== email && !confirm('The email address changed. The existing saved authentication will be removed. Continue?')) return
       if (previous && previous.username !== email) await api('/api/account/logout', { method: 'POST', body: JSON.stringify({ accountId: previous.id }) })
       const item = previous ? { ...previous, name, username: email } : { id: `account-${Date.now()}`, name, username: email, serverId: config.servers[0].id, proxyId: null, enabled: true, paused: false, autoConnect: false, reconnectEnabled: true, reconnectDelaysSeconds: [5, 15, 30, 60], sell: structuredClone(config.sell), spawner: structuredClone(config.spawner) }
       await saveProfilePatch({ accounts: previous ? config.accounts.map((account) => account.id === previous.id ? item : account) : [...config.accounts, item] })
       if (accessToken) {
-        const result = await api('/api/account/token', { method: 'PUT', body: JSON.stringify({ accountId: item.id, accessToken }) })
+        const result = await api('/api/account/token', { method: 'PUT', body: JSON.stringify({ accountId: item.id, tokenType, accessToken }) })
         $('profileInputToken').value = ''
         renderProfileTokenState(result.tokenStatus)
       }

@@ -1,7 +1,9 @@
 import { createCipheriv, createDecipheriv, createHash, randomBytes } from "node:crypto";
 import { existsSync, mkdirSync, readdirSync, readFileSync, renameSync, rmSync, writeFileSync } from "node:fs";
 import { basename, dirname, join } from "node:path";
-import type { TokenStatus } from "./types.js";
+import type { MinecraftJavaProfile } from "./minecraft-auth.js";
+import { inspectAccessToken } from "./minecraft-auth.js";
+import type { TokenStatus, TokenStatusKind, TokenType } from "./types.js";
 
 interface TokenScan {
   configured: boolean;
@@ -9,7 +11,21 @@ interface TokenScan {
   expiries: number[];
 }
 
-const emptyTokenStatus = (): TokenStatus => ({ configured: false, valid: false, expiresAt: null, status: "not_set" });
+export interface StoredMinecraftTokenMetadata {
+  profile: MinecraftJavaProfile | null;
+  expiresAt: string | null;
+  status: Exclude<TokenStatusKind, "not_set">;
+}
+
+interface MinecraftTokenRecord extends StoredMinecraftTokenMetadata {
+  tokenType: "minecraft_java";
+  accessToken: string;
+  obtainedOn: number;
+}
+
+const MINECRAFT_TOKEN_FILE = "rcc-minecraft-token.json.vault";
+
+const emptyTokenStatus = (): TokenStatus => ({ type: null, configured: false, valid: false, expiresAt: null, status: "not_set" });
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return Boolean(value) && typeof value === "object" && !Array.isArray(value);
@@ -27,20 +43,6 @@ function parseTimestamp(value: unknown): number | null {
 function parseDuration(value: unknown): number | null {
   const duration = typeof value === "number" ? value : typeof value === "string" && value.trim() ? Number(value) : Number.NaN;
   return Number.isFinite(duration) ? duration : null;
-}
-
-function inspectAccessToken(value: string): { expiresAt: number | null; malformed: boolean } {
-  const segments = value.split(".");
-  if (segments.length !== 3) return { expiresAt: null, malformed: false };
-  try {
-    const payload = JSON.parse(Buffer.from(segments[1]!, "base64url").toString("utf8")) as unknown;
-    if (!isRecord(payload)) return { expiresAt: null, malformed: true };
-    if (payload.exp === undefined) return { expiresAt: null, malformed: false };
-    const expiresAt = parseTimestamp(payload.exp);
-    return { expiresAt, malformed: expiresAt === null };
-  } catch {
-    return { expiresAt: null, malformed: true };
-  }
 }
 
 function isCredentialField(key: string): boolean {
@@ -114,7 +116,7 @@ export class TokenVault {
 
   restore(): void {
     if (!existsSync(this.directory)) return;
-    for (const file of this.files(this.directory).filter((name) => name.endsWith(".vault"))) {
+    for (const file of this.files(this.directory).filter((name) => name.endsWith(".vault") && basename(name) !== MINECRAFT_TOKEN_FILE)) {
       const target = file.slice(0, -6); const plain = migrateManualCache(this.decrypt(readFileSync(file, "utf8")));
       mkdirSync(dirname(target), { recursive: true }); writeFileSync(`${target}.tmp`, plain, { mode: 0o600 }); renameSync(`${target}.tmp`, target); rmSync(file);
     }
@@ -139,6 +141,8 @@ export class TokenVault {
   status(): TokenStatus {
     const files = this.files(this.directory).filter((file) => !file.endsWith(".tmp"));
     if (!files.length) return emptyTokenStatus();
+    const minecraftFile = files.find((file) => basename(file) === MINECRAFT_TOKEN_FILE);
+    if (minecraftFile) return this.minecraftStatus(minecraftFile);
     let configured = false;
     let invalid = false;
     const expiries: number[] = [];
@@ -153,20 +157,28 @@ export class TokenVault {
         invalid = true;
       }
     }
-    if (!configured) return invalid ? { configured: true, valid: false, expiresAt: null, status: "invalid" } : emptyTokenStatus();
+    if (!configured) return invalid ? { type: "microsoft_oauth", configured: true, valid: false, expiresAt: null, status: "invalid" } : emptyTokenStatus();
     const now = Date.now();
     const future = expiries.filter((value) => value > now).sort((left, right) => left - right);
-    if (invalid && !future.length) return { configured: true, valid: false, expiresAt: expiries.length ? new Date(Math.max(...expiries)).toISOString() : null, status: "invalid" };
-    if (future.length) return { configured: true, valid: true, expiresAt: new Date(future[0]!).toISOString(), status: "valid" };
-    if (expiries.length) return { configured: true, valid: false, expiresAt: new Date(Math.max(...expiries)).toISOString(), status: "expired" };
-    return { configured: true, valid: !invalid, expiresAt: null, status: invalid ? "invalid" : "valid" };
+    if (invalid && !future.length) return { type: "microsoft_oauth", configured: true, valid: false, expiresAt: expiries.length ? new Date(Math.max(...expiries)).toISOString() : null, status: "invalid" };
+    if (future.length) return { type: "microsoft_oauth", configured: true, valid: true, expiresAt: new Date(future[0]!).toISOString(), status: "valid" };
+    if (expiries.length) return { type: "microsoft_oauth", configured: true, valid: false, expiresAt: new Date(Math.max(...expiries)).toISOString(), status: "expired" };
+    return { type: "microsoft_oauth", configured: true, valid: !invalid, expiresAt: null, status: invalid ? "invalid" : "valid" };
   }
 
-  setAccessToken(username: string, accessToken: string): void {
+  setAccessToken(username: string, accessToken: string, tokenType: TokenType = "microsoft_oauth"): void {
     const normalizedUsername = username.trim();
     const normalizedToken = accessToken.trim();
     if (!normalizedUsername) throw new Error("Microsoft account email is required before saving an access token");
     if (!normalizedToken) throw new Error("Access token is required");
+    if (tokenType === "minecraft_java") {
+      const inspected = inspectAccessToken(normalizedToken);
+      const expiresAt = inspected.expiresAt === null ? null : new Date(inspected.expiresAt).toISOString();
+      const status: StoredMinecraftTokenMetadata["status"] = inspected.malformed ? "invalid" : inspected.expiresAt !== null && inspected.expiresAt <= Date.now() ? "expired" : "valid";
+      this.setMinecraftJavaAccessToken(normalizedUsername, normalizedToken, { profile: null, expiresAt, status });
+      return;
+    }
+    if (tokenType !== "microsoft_oauth") throw new Error("Invalid access token type");
     this.clear();
     mkdirSync(this.directory, { recursive: true, mode: 0o700 });
     const obtainedOn = Date.now();
@@ -177,14 +189,72 @@ export class TokenVault {
     // Keep an explicit timestamp for RCC's status scanner, which uses the
     // OAuth-standard seconds when interpreting expires_in in existing caches.
     const expiresIn = expiresAt === null ? 0 : Math.max(0, expiresAt - obtainedOn);
-    const cache = JSON.stringify({ token: { access_token: normalizedToken, refresh_token: normalizedToken, token_type: "Bearer", expires_in: expiresIn, obtainedOn, expiresAt: expiresAt ? new Date(expiresAt).toISOString() : null } });
+    const cache = JSON.stringify({ rccTokenType: "microsoft_oauth", token: { access_token: normalizedToken, refresh_token: normalizedToken, token_type: "Bearer", expires_in: expiresIn, obtainedOn, expiresAt: expiresAt ? new Date(expiresAt).toISOString() : null } });
     const file = join(this.directory, `${createHash("sha1").update(normalizedUsername, "binary").digest("hex").slice(0, 6)}_live-cache.json.vault`);
     const temporary = `${file}.tmp`;
     writeFileSync(temporary, this.encrypt(Buffer.from(cache, "utf8")), { encoding: "utf8", mode: 0o600 });
     renameSync(temporary, file);
   }
 
+  setMinecraftJavaAccessToken(username: string, accessToken: string, metadata: StoredMinecraftTokenMetadata): void {
+    const normalizedUsername = username.trim();
+    const normalizedToken = accessToken.trim();
+    if (!normalizedUsername) throw new Error("Microsoft account email is required before saving an access token");
+    if (!normalizedToken) throw new Error("Access token is required");
+    if (!["valid", "expired", "invalid"].includes(metadata.status)) throw new Error("Invalid Minecraft token status");
+    this.clear();
+    mkdirSync(this.directory, { recursive: true, mode: 0o700 });
+    const record: MinecraftTokenRecord = {
+      tokenType: "minecraft_java",
+      accessToken: normalizedToken,
+      profile: metadata.profile,
+      expiresAt: metadata.expiresAt,
+      status: metadata.status,
+      obtainedOn: Date.now()
+    };
+    const file = join(this.directory, MINECRAFT_TOKEN_FILE);
+    const temporary = `${file}.tmp`;
+    writeFileSync(temporary, this.encrypt(Buffer.from(JSON.stringify(record), "utf8")), { encoding: "utf8", mode: 0o600 });
+    renameSync(temporary, file);
+  }
+
+  getMinecraftJavaCredentials(): { accessToken: string; profile: MinecraftJavaProfile } | null {
+    const file = join(this.directory, MINECRAFT_TOKEN_FILE);
+    if (!existsSync(file)) return null;
+    try {
+      const record = this.readMinecraftRecord(file);
+      const expiresAt = record.expiresAt ? Date.parse(record.expiresAt) : null;
+      if (record.status !== "valid" || !record.profile || (expiresAt !== null && Number.isFinite(expiresAt) && expiresAt <= Date.now())) return null;
+      return { accessToken: record.accessToken, profile: record.profile };
+    } catch {
+      return null;
+    }
+  }
+
   clear(): void { if (existsSync(this.directory)) rmSync(this.directory, { recursive: true, force: true }); }
+
+  private minecraftStatus(file: string): TokenStatus {
+    try {
+      const record = this.readMinecraftRecord(file);
+      const configured = Boolean(record.accessToken.trim());
+      if (!configured) return { type: "minecraft_java", configured: false, valid: false, expiresAt: null, status: "not_set" };
+      const expiresAt = record.expiresAt && Number.isFinite(Date.parse(record.expiresAt)) ? record.expiresAt : null;
+      if (record.status === "invalid") return { type: "minecraft_java", configured: true, valid: false, expiresAt, status: "invalid" };
+      if (record.status === "expired" || (expiresAt !== null && Date.parse(expiresAt) <= Date.now())) return { type: "minecraft_java", configured: true, valid: false, expiresAt, status: "expired" };
+      return { type: "minecraft_java", configured: true, valid: true, expiresAt, status: "valid" };
+    } catch {
+      return { type: "minecraft_java", configured: true, valid: false, expiresAt: null, status: "invalid" };
+    }
+  }
+
+  private readMinecraftRecord(file: string): MinecraftTokenRecord {
+    const raw = file.endsWith(".vault") ? this.decrypt(readFileSync(file, "utf8")) : readFileSync(file);
+    const parsed = JSON.parse(raw.toString("utf8")) as unknown;
+    if (!isRecord(parsed) || parsed.tokenType !== "minecraft_java" || typeof parsed.accessToken !== "string" || typeof parsed.obtainedOn !== "number" || typeof parsed.status !== "string" || !["valid", "expired", "invalid"].includes(parsed.status)) throw new Error("Invalid Minecraft token record");
+    const profile = isRecord(parsed.profile) && typeof parsed.profile.id === "string" && typeof parsed.profile.name === "string" ? { id: parsed.profile.id, name: parsed.profile.name } : null;
+    const expiresAt = parsed.expiresAt === null ? null : typeof parsed.expiresAt === "string" ? parsed.expiresAt : null;
+    return { tokenType: "minecraft_java", accessToken: parsed.accessToken, profile, expiresAt, status: parsed.status as StoredMinecraftTokenMetadata["status"], obtainedOn: parsed.obtainedOn };
+  }
 
   private files(directory: string): string[] {
     if (!existsSync(directory)) return [];

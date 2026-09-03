@@ -4,7 +4,7 @@ import { rm } from "node:fs/promises";
 import type { ConfigReader, ConfigStore } from "./config.js";
 import { BotService } from "./bot-service.js";
 import { AppEvents } from "./events.js";
-import type { AppConfig, BotSnapshot, TokenStatus } from "./types.js";
+import type { AppConfig, BotSnapshot, TokenStatus, TokenType } from "./types.js";
 import type { WebhookNotifier } from "./webhook.js";
 import { selectPrimarySnapshot } from "./snapshot-policy.js";
 import { selectRoutedAccountId } from "./routing-policy.js";
@@ -71,7 +71,11 @@ export class MultiBotManager {
       const bot = this.bots.get(account.id);
       if (!bot) continue;
       const snapshot = bot.snapshot();
-      if (!snapshot.authenticated && !snapshot.authenticating) { bot.authenticate(); continue; }
+      if (!snapshot.authenticated && !snapshot.authenticating) {
+        if (snapshot.tokenStatus.type === "minecraft_java" && snapshot.tokenStatus.configured) this.enqueueConnection(account.id, false);
+        else bot.authenticate();
+        continue;
+      }
       if (!snapshot.authenticating) this.enqueueConnection(account.id, false);
     }
     this.pumpConnectionQueue();
@@ -94,15 +98,16 @@ export class MultiBotManager {
     if (account.paused) throw new Error("Account is paused. Resume it first");
     if (!account.username.trim()) throw new Error("Enter the Microsoft email address for this account first");
     if (["connecting", "reconnecting"].includes(bot.snapshot().connection)) throw new Error("Connection attempt is already running");
-    bot.authenticate();
+    if (bot.snapshot().tokenStatus.type === "minecraft_java" && bot.snapshot().tokenStatus.configured) bot.connect();
+    else bot.authenticate();
   }
   sendChat(message: string, accountId?: string): void { this.routedBot(accountId).sendChat(message); }
   control(input: Record<string, unknown>, accountId?: string): Promise<void> { return this.routedBot(accountId).control(input); }
-  setAccessToken(accountId: string, accessToken: string): TokenStatus {
+  async setAccessToken(accountId: string, tokenType: TokenType, accessToken: string): Promise<TokenStatus> {
     this.sync();
     const target = this.bots.get(accountId);
     if (!target) throw new Error("Account not found");
-    return target.setAccessToken(accessToken);
+    return target.setAccessToken(tokenType, accessToken);
   }
   acquireViewerControl(accountId: string, controllerId: string): void { this.viewerBotService(accountId).acquireViewerControl(accountId, controllerId); }
   heartbeatViewerControl(accountId: string, controllerId: string): boolean { return this.viewerBotService(accountId).heartbeatViewerControl(accountId, controllerId); }
@@ -135,7 +140,7 @@ export class MultiBotManager {
     const authDirectory = resolve(accountsRoot, accountId, "auth");
     if (!authDirectory.startsWith(`${accountsRoot}\\`) && !authDirectory.startsWith(`${accountsRoot}/`)) throw new Error("Invalid account path");
     await rm(authDirectory, { recursive: true, force: true });
-    this.events.log("info", "auth", `Microsoft authentication removed for ${account.name}`);
+    this.events.log("info", "auth", `Saved authentication removed for ${account.name}`);
     this.events.state(this.snapshot());
   }
 

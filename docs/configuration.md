@@ -23,16 +23,21 @@ Guests can inspect dashboard state, diagnostics, previews, inventory and POV ter
 
 Each account receives a private directory at `DATA_DIR/accounts/<account-id>/auth`. RCC restores Microsoft cache files only while authenticating or connecting and stores them encrypted at rest. Keep the same encryption key to reuse a session.
 
-The Accounts editor can replace a Microsoft access token without revealing the
-stored value. RCC writes the supplied token into the encrypted OAuth cache and
-the dashboard receives only derived status metadata (`valid`, `expired`,
+The Accounts editor can replace an access token without revealing the stored
+value. Select one of the explicit token types: Microsoft OAuth, which continues
+through the Prismarine authentication flow, or Minecraft Java, which is
+validated against Minecraft Services and used as a direct Minecraft session.
+Microsoft tokens remain in the encrypted OAuth cache; Minecraft Java tokens use
+a separate encrypted per-account record and are never restored into the
+Microsoft Authflow cache.
+
+The dashboard receives only derived status metadata (`type`, `valid`, `expired`,
 `invalid`, or `not_set`) and an optional expiry timestamp. Leaving the field
 empty preserves the current token; **Remove token** deletes the account's
-Microsoft authentication cache.
+authentication cache. Both token inputs are password fields, and RCC never
+returns, renders, logs, or copies the stored token.
 
-Manual entry expects the Microsoft Live OAuth `access_token` used by the
-Prismarine authentication flow. The recommended path is the built-in Microsoft
-device-code login; RCC does not expose or copy the token from that flow.
+The recommended path for Microsoft OAuth is the built-in device-code login.
 
 ## Network identity
 

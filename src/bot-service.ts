@@ -8,11 +8,12 @@ import type { ConfigReader } from "./config.js";
 import type { AppEvents } from "./events.js";
 import { installHugoSmpProtocolHandlers } from "./hugosmp-protocol.js";
 import { installMovementInputBridge } from "./movement-input.js";
+import { createMinecraftSessionAuth, validateMinecraftJavaAccessToken } from "./minecraft-auth.js";
 import { decideAutoGuiJoin, determineControlLock, isMovementReady, isNewWorldStable, isStablePlayState, sameAutoGuiJoinConfig } from "./connection-safety.js";
 import { readableMinecraftReason } from "./minecraft-text.js";
 import { SellMacro } from "./sell-macro.js";
 import { SpawnerMacro } from "./spawner-macro.js";
-import type { BotSnapshot, TokenStatus } from "./types.js";
+import type { BotSnapshot, TokenStatus, TokenType } from "./types.js";
 import type { WebhookNotifier } from "./webhook.js";
 import { TokenVault } from "./token-vault.js";
 import { ViewerControlDeniedError, ViewerControlLease, type ViewerControlInput } from "./viewer-control.js";
@@ -81,6 +82,10 @@ export class BotService {
     const connection = this.config.get().connection;
     const username = connection.username.trim();
     if (!username) throw new Error("Microsoft account is not configured in Settings");
+    const tokenStatus = this.tokenVault.status();
+    const minecraftCredentials = tokenStatus.type === "minecraft_java" && tokenStatus.valid ? this.tokenVault.getMinecraftJavaCredentials() : null;
+    if (tokenStatus.type === "minecraft_java" && !tokenStatus.valid) throw new Error(`Minecraft access token is ${tokenStatus.status}`);
+    if (tokenStatus.type === "minecraft_java" && !minecraftCredentials) throw new Error("Minecraft Java access token profile is unavailable");
     this.intentionalStop = false;
     this.autoGuiJoinCompleted = false;
     this.autoGuiJoinInFlight = false;
@@ -88,7 +93,7 @@ export class BotService {
     this.diagnose("connect", "info", `Connection attempt to ${connection.host}:${connection.port} started`);
     this.publish();
     const profilesFolder = join(this.dataDir, "auth");
-    this.tokenVault.restore();
+    if (tokenStatus.type !== "minecraft_java") this.tokenVault.restore();
     mkdirSync(profilesFolder, { recursive: true });
     const options: Parameters<typeof mineflayer.createBot>[0] = {
       host: connection.host,
@@ -98,9 +103,9 @@ export class BotService {
       // Proxy networks route the login by this virtual host value.
       fakeHost: connection.host,
       username,
-      auth: "microsoft",
+      auth: minecraftCredentials ? createMinecraftSessionAuth(minecraftCredentials) : "microsoft",
       version: connection.version,
-      profilesFolder,
+      profilesFolder: minecraftCredentials ? false : profilesFolder,
       viewDistance: "tiny",
       checkTimeoutInterval: 60_000,
       closeTimeout: 60_000,
@@ -429,7 +434,13 @@ export class BotService {
     if (this.authPromise || this.authPending) throw new Error("Microsoft authentication is already in progress");
     const username = this.config.get().connection.username.trim();
     if (!username) throw new Error("Microsoft account is not configured in Settings");
-    if (this.tokenVault.hasTokens()) {
+    const tokenStatus = this.tokenVault.status();
+    if (tokenStatus.type === "minecraft_java") {
+      if (!tokenStatus.valid) throw new Error(`Minecraft access token is ${tokenStatus.status}`);
+      this.connect();
+      return;
+    }
+    if (tokenStatus.valid) {
       this.events.log("info", "auth", "Microsoft authentication is already saved");
       this.publish();
       return;
@@ -536,11 +547,20 @@ export class BotService {
     bot.chat(trimmed);
   }
 
-  setAccessToken(accessToken: string): TokenStatus {
-    if (this.authPromise || this.authPending) throw new Error("Microsoft authentication is already in progress");
+  async setAccessToken(tokenType: TokenType, accessToken: string): Promise<TokenStatus> {
+    if (this.authPromise || this.authPending) throw new Error("Authentication is already in progress");
     const username = this.config.get().connection.username;
+    if (tokenType !== "microsoft_oauth" && tokenType !== "minecraft_java") throw new Error("Invalid access token type");
+    if (tokenType === "minecraft_java") {
+      const validation = await validateMinecraftJavaAccessToken(accessToken);
+      this.stop();
+      this.tokenVault.setMinecraftJavaAccessToken(username, accessToken, validation);
+      this.lastError = validation.status === "valid" ? null : validation.reason;
+      this.publish();
+      return this.tokenVault.status();
+    }
     this.stop();
-    this.tokenVault.setAccessToken(username, accessToken);
+    this.tokenVault.setAccessToken(username, accessToken, tokenType);
     this.lastError = null;
     this.publish();
     return this.tokenVault.status();
@@ -726,7 +746,7 @@ export class BotService {
         service: "rcc"
       },
       accountId: this.accountId,
-      authenticated: !this.authPending && tokenStatus.configured,
+      authenticated: !this.authPending && tokenStatus.valid,
       authenticating: this.authPending,
       authExpiresAt: tokenStatus.expiresAt,
       tokenStatus,

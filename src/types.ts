@@ -1,8 +1,10 @@
 export type MacroStatus = "off" | "waiting" | "running" | "success" | "blocked" | "error";
 
 export type TokenStatusKind = "valid" | "expired" | "invalid" | "not_set";
+export type TokenType = "microsoft_oauth" | "minecraft_java";
 
 export interface TokenStatus {
+  type: TokenType | null;
   configured: boolean;
   valid: boolean;
   expiresAt: string | null;
