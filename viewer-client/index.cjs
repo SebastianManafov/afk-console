@@ -4,7 +4,7 @@ const { Viewer } = require('prismarine-viewer/viewer')
 const { io } = require('socket.io-client')
 const { itemIconUrl } = require('./item-icons.cjs')
 const { createControlSession } = require('./control-session.cjs')
-const { applyPlayerPose, playerPoseEyeHeight } = require('./player-pose.cjs')
+const { findPlayerModel, applyPlayerPose, playerPoseEyeHeight } = require('./player-pose.cjs')
 
 const renderer = new THREE.WebGLRenderer({ antialias: true })
 renderer.setPixelRatio(Math.min(2, window.devicePixelRatio || 1))
@@ -87,6 +87,9 @@ let botPosition = null
 let botYaw = 0
 let botPitch = 0
 let botPose = 'standing'
+let lastReceivedSelfEntityPose = null
+let lastReceivedPositionPose = null
+let poseDiagnosticPending = false
 let selectedSlot = 0
 let itemRenderVersion = '1.21.4'
 let selfEntityId = null
@@ -152,11 +155,38 @@ function setMode (nextMode) {
 }
 
 const PLAYER_POSES = new Set(['standing', 'crouching', 'swimming', 'sleeping', 'fall_flying'])
-function setBotPose (pose) {
+function poseDiagnosticValue (value) {
+  if (value === undefined) return 'undefined'
+  try { return JSON.stringify(value) } catch { return String(value) }
+}
+function modelRotationX (model) {
+  return typeof model?.rotation?.x === 'number' ? model.rotation.x : 'n/a'
+}
+function modelDescription (model) {
+  if (!model) return 'none'
+  return `name=${model.name || '<unnamed>'} type=${model.type || model.constructor?.name || '<unknown>'}`
+}
+function logPoseApplication (root, pose, stage) {
+  const beforeModel = findPlayerModel(root)
+  const beforeRotationX = modelRotationX(beforeModel)
+  const applied = applyPlayerPose(root, pose)
+  const afterModel = findPlayerModel(root)
+  console.info(`[POV pose] ${stage} selfEntityId=${poseDiagnosticValue(selfEntityId)} viewerEntity=${Boolean(root)} applyPlayerPose=${applied} model=${modelDescription(afterModel)} model.rotation.x before=${beforeRotationX} after=${modelRotationX(afterModel)}`)
+  return applied
+}
+function setBotPose (pose, forceDiagnostic = false) {
+  const previousPose = botPose
   if (PLAYER_POSES.has(pose)) botPose = pose
+  const changed = botPose !== previousPose
   viewer.playerHeight = playerPoseEyeHeight(botPose)
   const mesh = selfEntityId === null ? null : viewer.entities.entities[selfEntityId]
-  if (mesh) applyPlayerPose(mesh, botPose)
+  if (changed || forceDiagnostic) {
+    poseDiagnosticPending = true
+    console.info(`[POV pose] botPose after setBotPose incoming=${poseDiagnosticValue(pose)} botPose=${botPose} selfEntityId=${poseDiagnosticValue(selfEntityId)} viewerEntity=${Boolean(mesh)}`)
+    logPoseApplication(mesh, botPose, 'applyPlayerPose from setBotPose')
+  } else if (mesh) {
+    applyPlayerPose(mesh, botPose)
+  }
 }
 function setBotCamera (pos, nextYaw, nextPitch) {
   viewer.playerHeight = playerPoseEyeHeight(botPose)
@@ -168,10 +198,18 @@ function updateRenderedEntity (entity) {
     if (viewer.entities.entities[entity.id]) viewer.updateEntity(entity)
     return
   }
+  const isSelf = selfEntityId !== null && entity.id === selfEntityId
   viewer.updateEntity(entity)
-  if (PLAYER_POSES.has(entity.pose)) {
+  const pose = isSelf ? botPose : entity.pose
+  if (isSelf && poseDiagnosticPending) {
     const mesh = viewer.entities.entities[entity.id]
-    if (mesh) applyPlayerPose(mesh, entity.pose)
+    const model = findPlayerModel(mesh)
+    console.info(`[POV pose] rotation.x after viewer.updateEntity selfEntityId=${selfEntityId} viewerEntity=${Boolean(mesh)} model=${modelDescription(model)} model.rotation.x=${modelRotationX(model)}`)
+    if (PLAYER_POSES.has(pose)) logPoseApplication(mesh, pose, 'applyPlayerPose after viewer.updateEntity')
+    poseDiagnosticPending = false
+  } else if (PLAYER_POSES.has(pose)) {
+    const mesh = viewer.entities.entities[entity.id]
+    if (mesh) applyPlayerPose(mesh, pose)
   }
 }
 function syncSelfVisibility () {
@@ -248,6 +286,10 @@ socket.on('version', (version) => {
   viewer.listen(socket)
 })
 socket.on('position', ({ pos, yaw: nextBotYaw, pitch: nextBotPitch, pose }) => {
+  if (pose !== lastReceivedPositionPose) {
+    lastReceivedPositionPose = pose
+    console.info(`[POV pose] received position.pose=${poseDiagnosticValue(pose)} exact payload=${poseDiagnosticValue({ pos, yaw: nextBotYaw, pitch: nextBotPitch, pose })}`)
+  }
   botPosition = pos
   setBotPose(pose)
   if (selfEntityId !== null) {
@@ -260,8 +302,12 @@ socket.on('position', ({ pos, yaw: nextBotYaw, pitch: nextBotPitch, pose }) => {
   }
 })
 socket.on('selfEntity', (entity) => {
+  if (entity?.pose !== lastReceivedSelfEntityPose) {
+    lastReceivedSelfEntityPose = entity?.pose
+    console.info(`[POV pose] received selfEntity.pose=${poseDiagnosticValue(entity?.pose)} exact payload=${poseDiagnosticValue(entity)}`)
+  }
   selfEntityId = entity.id
-  setBotPose(entity.pose)
+  setBotPose(entity.pose, true)
   updateRenderedEntity(entity)
   syncSelfVisibility()
   if (!freecam && botPosition) setBotCamera(botPosition, botYaw, botPitch)

@@ -48,4 +48,4 @@ function applyPlayerPose (entityRoot, pose) {
   return true
 }
 
-module.exports = { POSE_EYE_HEIGHTS, POSE_TRANSFORMS, applyPlayerPose, playerPoseEyeHeight }
+module.exports = { POSE_EYE_HEIGHTS, POSE_TRANSFORMS, findPlayerModel, applyPlayerPose, playerPoseEyeHeight }

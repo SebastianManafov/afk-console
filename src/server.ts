@@ -161,12 +161,18 @@ export function startServer(config: ConfigStore, events: AppEvents, bot: MultiBo
     viewerEmitter.on("loadChunk", handleLoadChunk);
     viewerEmitter.on("unloadChunk", handleUnloadChunk);
     const worldView = new WorldView(target.world, 6, target.entity.position, viewerEmitter);
-    const viewerStateSync = registerViewerStateSync({ target, viewerEmitter, socket });
+    const viewerStateSync = registerViewerStateSync({
+      target,
+      viewerEmitter,
+      socket,
+      diagnostic: (message) => events.log("info", "viewer", message)
+    });
     let viewerCleaned = false;
     let hudInterval: NodeJS.Timeout | null = null;
     let sendHud: (() => void) | null = null;
     let sendPosition: (() => void) | null = null;
     let sendChat: ((message: string) => void) | null = null;
+    let lastLoggedPositionPose: string | null = null;
     const handleMouseClick = (click: unknown) => viewerEmitter.emit("mouseClick", click);
     socket.on("mouseClick", handleMouseClick);
     const cleanupViewer = () => {
@@ -208,7 +214,13 @@ export function startServer(config: ConfigStore, events: AppEvents, bot: MultiBo
     };
     sendPosition = () => {
       if (!target.entity?.position) return;
-      socket.emit("position", { pos: target.entity.position, yaw: target.entity.yaw, pitch: target.entity.pitch, pose: normalizePlayerPose(target.entity) });
+      const pose = normalizePlayerPose(target.entity);
+      const payload = { pos: target.entity.position, yaw: target.entity.yaw, pitch: target.entity.pitch, pose };
+      socket.emit("position", payload);
+      if (pose !== lastLoggedPositionPose) {
+        lastLoggedPositionPose = pose;
+        events.log("info", "viewer", `[POV pose] position target.version=${target.version} target.entity.id=${target.entity.id} exact payload=${JSON.stringify(payload)}`);
+      }
       void worldView.updatePosition(target.entity.position);
     };
     worldView.listenToBot(target);

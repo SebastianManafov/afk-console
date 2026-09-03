@@ -4,6 +4,7 @@ import test from "node:test";
 import { registerViewerStateSync } from "../src/viewer-state.js";
 
 class SyntheticBot extends EventEmitter {
+  _client = new EventEmitter();
   entity = {
     id: 42,
     name: "player",
@@ -54,6 +55,7 @@ test("viewer state sync removes block and entity listeners without duplicates", 
   assert.equal(viewerEmitter.listenerCount("blockUpdate"), 1);
   assert.equal(viewerEmitter.listenerCount("entity"), 1);
   assert.equal(target.listenerCount("entityUpdate"), 1);
+  assert.equal(target._client.listenerCount("entity_metadata"), 1);
 
   target.entity.metadata[6] = 3;
   target.emit("entityUpdate", target.entity);
@@ -78,6 +80,7 @@ test("viewer state sync removes block and entity listeners without duplicates", 
   assert.equal(viewerEmitter.listenerCount("blockUpdate"), 0);
   assert.equal(viewerEmitter.listenerCount("entity"), 0);
   assert.equal(target.listenerCount("entityUpdate"), 0);
+  assert.equal(target._client.listenerCount("entity_metadata"), 0);
 
   socket.sent.length = 0;
   viewerEmitter.emit("blockUpdate", { pos: { x: 1, y: 2, z: 3 }, stateId: 5 });

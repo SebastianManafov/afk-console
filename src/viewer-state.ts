@@ -1,4 +1,5 @@
 import type { Bot } from "mineflayer";
+import { inspect } from "node:util";
 import { normalizePlayerPose, type PlayerPose } from "./player-pose.js";
 
 type UnknownRecord = Record<string, unknown>;
@@ -12,6 +13,8 @@ interface EventSource {
 interface ViewerSocket {
   emit(event: string, ...args: any[]): unknown;
 }
+
+type DiagnosticLogger = (message: string) => void;
 
 export interface ViewerPosition {
   x: number;
@@ -59,6 +62,33 @@ function position(value: unknown): ViewerPosition | null {
   return x === null || y === null || z === null ? null : { x, y, z };
 }
 
+function diagnosticValue(value: unknown): string {
+  try {
+    const serialized = JSON.stringify(value, (_key, item) => typeof item === "bigint" ? `${item}n` : item);
+    if (serialized !== undefined) return serialized;
+  } catch {
+    // Fall back to an object-safe representation for diagnostic-only logging.
+  }
+  return inspect(value, { depth: 6, breakLength: Infinity, compact: true }).replace(/\s*\n\s*/g, " ");
+}
+
+function entityMetadataValue(entity: unknown, index: number, name: string): unknown {
+  const metadata = asRecord(entity)?.metadata;
+  if (Array.isArray(metadata)) return metadata[index];
+  const record = asRecord(metadata);
+  return record?.[String(index)] ?? record?.[name];
+}
+
+function metadataHex(value: unknown): string {
+  const number = finiteNumber(value);
+  return number === null ? "n/a" : `0x${(Math.trunc(number) >>> 0).toString(16)}`;
+}
+
+function hasSharedFlag(value: unknown, flag: number): boolean {
+  const number = finiteNumber(value);
+  return number !== null && (Math.trunc(number) & flag) !== 0;
+}
+
 function hasPoseState(record: UnknownRecord): boolean {
   return "pose" in record || "metadata" in record || "crouching" in record || "sleeping" in record || "isSleeping" in record || "elytraFlying" in record;
 }
@@ -97,12 +127,15 @@ export function registerViewerStateSync(options: {
   target: Bot;
   viewerEmitter: EventSource;
   socket: ViewerSocket;
+  diagnostic?: DiagnosticLogger;
 }): ViewerStateSync {
   const target = options.target;
   const targetEvents = target as unknown as EventSource;
   const selfEntityId = target.entity.id;
   let cleaned = false;
   let lastSelfPose: PlayerPose | null = null;
+  let lastRawMetadataSignature: string | null = null;
+  const diagnostic = options.diagnostic;
 
   const emitSelfEntity = (force: boolean): void => {
     if (cleaned || !target.entity || target.entity.id !== selfEntityId) return;
@@ -110,7 +143,22 @@ export function registerViewerStateSync(options: {
     if (!state) return;
     if (!force && state.pose === lastSelfPose) return;
     lastSelfPose = state.pose ?? null;
+    diagnostic?.(`[POV pose] selfEntity target.version=${diagnosticValue(target.version)} target.entity.id=${selfEntityId} exact payload=${diagnosticValue(state)}`);
     options.socket.emit("selfEntity", state);
+  };
+
+  const forwardRawEntityMetadata: EventListener = (value: unknown) => {
+    const packet = asRecord(value);
+    const packetEntityId = finiteNumber(packet?.entityId);
+    if (packetEntityId !== selfEntityId) return;
+
+    const metadata0 = entityMetadataValue(target.entity, 0, "shared_flags");
+    const metadata6 = entityMetadataValue(target.entity, 6, "pose");
+    const rawMetadata = packet?.metadata;
+    const signature = [diagnosticValue(rawMetadata), diagnosticValue(metadata0), diagnosticValue(metadata6)].join("|");
+    if (signature === lastRawMetadataSignature) return;
+    lastRawMetadataSignature = signature;
+    diagnostic?.(`[POV pose] raw entity_metadata target.version=${diagnosticValue(target.version)} target.entity.id=${selfEntityId} rawPacket=${diagnosticValue(value)} rawPacket.metadata=${diagnosticValue(rawMetadata)} target.entity.metadata[0]=${diagnosticValue(metadata0)} target.entity.metadata[6]=${diagnosticValue(metadata6)} metadata[0].hex=${metadataHex(metadata0)} shared flag 0x10=${hasSharedFlag(metadata0, 0x10)} normalizePlayerPose(target.entity)=${normalizePlayerPose(target.entity)}`);
   };
 
   const forwardBlockUpdate: EventListener = (value: unknown) => {
@@ -153,6 +201,8 @@ export function registerViewerStateSync(options: {
   for (const event of ["entityCrouch", "entityUncrouch", "entitySleep", "entityWake", "entityElytraFlew"]) {
     targetEvents.on(event, forwardPoseEvent);
   }
+  const protocolEvents = (target as unknown as { _client?: EventSource })._client;
+  protocolEvents?.on("entity_metadata", forwardRawEntityMetadata);
 
   return {
     sendSelfEntity: () => emitSelfEntity(true),
@@ -165,6 +215,7 @@ export function registerViewerStateSync(options: {
       for (const event of ["entityCrouch", "entityUncrouch", "entitySleep", "entityWake", "entityElytraFlew"]) {
         targetEvents.off(event, forwardPoseEvent);
       }
+      protocolEvents?.off("entity_metadata", forwardRawEntityMetadata);
     }
   };
 }
