@@ -15,6 +15,8 @@ import type { ConfigStore } from "./config.js";
 import type { AppEvents } from "./events.js";
 import type { WebhookNotifier } from "./webhook.js";
 import type { TokenType } from "./types.js";
+import { normalizePlayerPose } from "./player-pose.js";
+import { registerViewerStateSync } from "./viewer-state.js";
 import { registerViewerControlHandlers } from "./viewer-control-socket.js";
 
 const contentTypes: Record<string, string> = {
@@ -134,20 +136,10 @@ export function startServer(config: ConfigStore, events: AppEvents, bot: MultiBo
     }
     events.log("info", "viewer", `POV starting: Minecraft ${minecraftVersion}, render profile ${viewerVersion}, position ${Math.round(target.entity.position.x)},${Math.round(target.entity.position.y)},${Math.round(target.entity.position.z)}`);
     socket.emit("version", viewerVersion);
-    socket.emit("selfEntity", {
-      id: target.entity.id,
-      name: "player",
-      username: target.username,
-      pos: target.entity.position,
-      width: target.entity.width ?? 0.6,
-      height: target.entity.height ?? 1.8,
-      yaw: target.entity.yaw,
-      pitch: target.entity.pitch
-    });
     const viewerEmitter = new EventEmitter();
     let loadedChunkCount = 0;
     let unloadedChunkCount = 0;
-    viewerEmitter.on("loadChunk", ({ x, z, chunk }: { x: number; z: number; chunk: string }) => {
+    const handleLoadChunk = ({ x, z, chunk }: { x: number; z: number; chunk: string }) => {
       loadedChunkCount += 1;
       let details = "unknown format";
       try {
@@ -159,16 +151,22 @@ export function startServer(config: ConfigStore, events: AppEvents, bot: MultiBo
       if (loadedChunkCount <= 3 || loadedChunkCount % 25 === 0) events.log("info", "viewer", `POV chunk ${loadedChunkCount} loaded at ${x},${z}: ${details}`);
       if (loadedChunkCount <= 3 || loadedChunkCount % 25 === 0) socket.emit("viewerDiagnostics", { stage: "chunk", loaded: loadedChunkCount, x, z, details });
       socket.emit("loadChunk", { x, z, chunk });
-    });
-    viewerEmitter.on("unloadChunk", ({ x, z }: { x: number; z: number }) => {
+    };
+    const handleUnloadChunk = ({ x, z }: { x: number; z: number }) => {
       unloadedChunkCount += 1;
       events.log("info", "viewer", `POV chunk unloaded at ${x},${z} (total ${unloadedChunkCount})`);
       socket.emit("viewerDiagnostics", { stage: "unload", unloaded: unloadedChunkCount, x, z });
       socket.emit("unloadChunk", { x, z });
-    });
+    };
+    viewerEmitter.on("loadChunk", handleLoadChunk);
+    viewerEmitter.on("unloadChunk", handleUnloadChunk);
     const worldView = new WorldView(target.world, 6, target.entity.position, viewerEmitter);
+    const viewerStateSync = registerViewerStateSync({ target, viewerEmitter, socket });
     let viewerCleaned = false;
     let hudInterval: NodeJS.Timeout | null = null;
+    let sendHud: (() => void) | null = null;
+    let sendPosition: (() => void) | null = null;
+    let sendChat: ((message: string) => void) | null = null;
     const handleMouseClick = (click: unknown) => viewerEmitter.emit("mouseClick", click);
     socket.on("mouseClick", handleMouseClick);
     const cleanupViewer = () => {
@@ -178,10 +176,20 @@ export function startServer(config: ConfigStore, events: AppEvents, bot: MultiBo
       socket.off("disconnect", cleanupViewer);
       socket.off("mouseClick", handleMouseClick);
       if (hudInterval) clearInterval(hudInterval);
+      if (sendPosition) target.removeListener("move", sendPosition);
+      if (sendHud) {
+        target.removeListener("health", sendHud);
+        target.removeListener("playerJoined", sendHud);
+        target.removeListener("playerLeft", sendHud);
+      }
+      if (sendChat) target.removeListener("messagestr", sendChat);
+      viewerEmitter.off("loadChunk", handleLoadChunk);
+      viewerEmitter.off("unloadChunk", handleUnloadChunk);
+      viewerStateSync.cleanup();
       worldView.removeListenersFromBot(target);
     };
     socket.on("disconnect", cleanupViewer);
-    const sendHud = (): void => {
+    sendHud = (): void => {
       const inventoryItem = (item: any) => item ? { name: item.name, displayName: item.displayName, count: item.count } : null;
       socket.emit("hud", {
         health: target.health,
@@ -198,12 +206,13 @@ export function startServer(config: ConfigStore, events: AppEvents, bot: MultiBo
         players: Object.values(target.players).filter((player) => player?.username).map((player) => ({ username: player.username, ping: player.ping }))
       });
     };
-    const sendPosition = () => {
+    sendPosition = () => {
       if (!target.entity?.position) return;
-      socket.emit("position", { pos: target.entity.position, yaw: target.entity.yaw, pitch: target.entity.pitch });
+      socket.emit("position", { pos: target.entity.position, yaw: target.entity.yaw, pitch: target.entity.pitch, pose: normalizePlayerPose(target.entity) });
       void worldView.updatePosition(target.entity.position);
     };
     worldView.listenToBot(target);
+    viewerStateSync.sendSelfEntity();
     try {
       await worldView.init(target.entity.position);
     } catch (error) {
@@ -223,20 +232,12 @@ export function startServer(config: ConfigStore, events: AppEvents, bot: MultiBo
     sendPosition();
     sendHud();
     hudInterval = setInterval(sendHud, 500);
-    const sendChat = (message: string): void => { socket.emit("chatLine", String(message)); };
+    sendChat = (message: string): void => { socket.emit("chatLine", String(message)); };
     target.on("move", sendPosition);
     target.on("health", sendHud);
     target.on("playerJoined", sendHud);
     target.on("playerLeft", sendHud);
     target.on("messagestr", sendChat);
-    socket.on("disconnect", () => {
-      target.removeListener("move", sendPosition);
-      target.removeListener("health", sendHud);
-      target.removeListener("playerJoined", sendHud);
-      target.removeListener("playerLeft", sendHud);
-      target.removeListener("messagestr", sendChat);
-      cleanupViewer();
-    });
   });
 
   const port = options.port ?? Number(process.env.PORT || 3000);

@@ -4,6 +4,7 @@ const { Viewer } = require('prismarine-viewer/viewer')
 const { io } = require('socket.io-client')
 const { itemIconUrl } = require('./item-icons.cjs')
 const { createControlSession } = require('./control-session.cjs')
+const { applyPlayerPose, playerPoseEyeHeight } = require('./player-pose.cjs')
 
 const renderer = new THREE.WebGLRenderer({ antialias: true })
 renderer.setPixelRatio(Math.min(2, window.devicePixelRatio || 1))
@@ -85,6 +86,7 @@ let lastFrame = performance.now()
 let botPosition = null
 let botYaw = 0
 let botPitch = 0
+let botPose = 'standing'
 let selectedSlot = 0
 let itemRenderVersion = '1.21.4'
 let selfEntityId = null
@@ -140,13 +142,37 @@ function setMode (nextMode) {
   if (freecam && botPosition) {
     yaw = botYaw
     pitch = botPitch
-    viewer.camera.position.set(botPosition.x, botPosition.y + 1.62, botPosition.z)
+    viewer.camera.position.set(botPosition.x, botPosition.y + playerPoseEyeHeight(botPose), botPosition.z)
   } else if (!freecam && botPosition) {
     yaw = botYaw
     pitch = botPitch
-    viewer.setFirstPersonCamera(botPosition, botYaw, botPitch)
+    setBotCamera(botPosition, botYaw, botPitch)
   }
   syncSelfVisibility()
+}
+
+const PLAYER_POSES = new Set(['standing', 'crouching', 'swimming', 'sleeping', 'fall_flying'])
+function setBotPose (pose) {
+  if (PLAYER_POSES.has(pose)) botPose = pose
+  viewer.playerHeight = playerPoseEyeHeight(botPose)
+  const mesh = selfEntityId === null ? null : viewer.entities.entities[selfEntityId]
+  if (mesh) applyPlayerPose(mesh, botPose)
+}
+function setBotCamera (pos, nextYaw, nextPitch) {
+  viewer.playerHeight = playerPoseEyeHeight(botPose)
+  viewer.setFirstPersonCamera(pos, nextYaw, nextPitch)
+}
+function updateRenderedEntity (entity) {
+  if (!entity || entity.id === undefined || entity.id === null) return
+  if (entity.delete) {
+    if (viewer.entities.entities[entity.id]) viewer.updateEntity(entity)
+    return
+  }
+  viewer.updateEntity(entity)
+  if (PLAYER_POSES.has(entity.pose)) {
+    const mesh = viewer.entities.entities[entity.id]
+    if (mesh) applyPlayerPose(mesh, entity.pose)
+  }
 }
 function syncSelfVisibility () {
   const mesh = selfEntityId === null ? null : viewer.entities.entities[selfEntityId]
@@ -221,23 +247,33 @@ socket.on('version', (version) => {
   if (!viewer.setVersion(version)) return
   viewer.listen(socket)
 })
-socket.on('position', ({ pos, yaw: botYaw, pitch: botPitch }) => {
+socket.on('position', ({ pos, yaw: nextBotYaw, pitch: nextBotPitch, pose }) => {
   botPosition = pos
+  setBotPose(pose)
   if (selfEntityId !== null) {
-    viewer.updateEntity({ id: selfEntityId, pos, yaw: botYaw, pitch: botPitch })
+    updateRenderedEntity({ id: selfEntityId, pos, yaw: nextBotYaw, pitch: nextBotPitch, pose: botPose })
     syncSelfVisibility()
   }
   if (!freecam) {
-    yaw = botYaw; pitch = botPitch
-    viewer.setFirstPersonCamera(pos, botYaw, botPitch)
+    yaw = nextBotYaw; pitch = nextBotPitch
+    setBotCamera(pos, nextBotYaw, nextBotPitch)
   }
 })
 socket.on('selfEntity', (entity) => {
   selfEntityId = entity.id
-  viewer.updateEntity(entity)
+  setBotPose(entity.pose)
+  updateRenderedEntity(entity)
   syncSelfVisibility()
+  if (!freecam && botPosition) setBotCamera(botPosition, botYaw, botPitch)
 })
-socket.on('entity', (entity) => { if (entity.delete) entities.delete(entity.id); else entities.set(entity.id, { ...(entities.get(entity.id) || {}), ...entity }) })
+socket.on('entity', (entity) => {
+  if (entity.delete) {
+    entities.delete(entity.id)
+  } else {
+    entities.set(entity.id, { ...(entities.get(entity.id) || {}), ...entity })
+  }
+  updateRenderedEntity(entity)
+})
 socket.on('hud', (nextHud) => {
   document.body.classList.add('live')
   players.replaceChildren(...(nextHud.players || []).map((player) => {
