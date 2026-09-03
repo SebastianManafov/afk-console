@@ -7,6 +7,7 @@ import prismarineAuth from "prismarine-auth";
 import type { ConfigReader } from "./config.js";
 import type { AppEvents } from "./events.js";
 import { installHugoSmpProtocolHandlers } from "./hugosmp-protocol.js";
+import { installMovementInputBridge } from "./movement-input.js";
 import { decideAutoGuiJoin, determineControlLock, isMovementReady, isNewWorldStable, isStablePlayState, sameAutoGuiJoinConfig } from "./connection-safety.js";
 import { readableMinecraftReason } from "./minecraft-text.js";
 import { SellMacro } from "./sell-macro.js";
@@ -142,6 +143,7 @@ export class BotService {
       throw error;
     }
     this.bot = bot;
+    bot.once("inject_allowed", () => { installMovementInputBridge(bot); });
     this.movementPhysicsReady = false;
     this.activeEndpoint = { host: connection.host, port: connection.port };
     const receivedPacketCounts = new Map<string, number>();
