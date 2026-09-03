@@ -55,12 +55,8 @@ const accountId = new URLSearchParams(window.location.search).get('accountId') |
 const socket = io({ path: '/pov-viewer/socket.io', query: { accountId } })
 socket.on('viewerDiagnostics', (data) => {
   if (data.stage === 'chunk' || data.stage === 'init') viewerDiagnostics.chunks = data.loaded || viewerDiagnostics.chunks
-  if (data.stage === 'error') status.textContent = `POV error: ${data.message}`
   reportViewerState(`server ${data.stage}`, data)
 })
-const status = document.getElementById('status')
-const controlStatus = document.getElementById('controlStatus')
-const vitals = document.getElementById('vitals')
 const playerList = document.getElementById('playerList')
 const players = document.getElementById('players')
 const minimap = document.getElementById('minimap')
@@ -70,11 +66,8 @@ const foodMeter = document.getElementById('foodMeter')
 const armorMeter = document.getElementById('armorMeter')
 const xpLevel = document.getElementById('xpLevel')
 const mcHotbar = document.getElementById('mcHotbar')
-const heldItemName = document.getElementById('heldItemName')
-const heldItemIcon = document.getElementById('heldItemIcon')
 const offhandItem = document.getElementById('offhandItem')
 const offhandIcon = document.getElementById('offhandIcon')
-const offhandName = document.getElementById('offhandName')
 const chatOverlay = document.getElementById('chatOverlay')
 const inventoryPanel = document.getElementById('inventoryPanel')
 const closeInventory = document.getElementById('closeInventory')
@@ -94,7 +87,6 @@ let botYaw = 0
 let botPitch = 0
 let selectedSlot = 0
 let itemRenderVersion = '1.21.4'
-let hudData = null
 let selfEntityId = null
 const entities = new Map()
 
@@ -104,20 +96,9 @@ const controlSession = createControlSession({
     if (payload === undefined) channel.emit(event)
     else channel.emit(event, payload)
   },
-  onRevoked: (reason) => {
+  onRevoked: () => {
     keys.clear()
-    status.textContent = `Controls revoked: ${reason}`
     if (document.pointerLockElement === renderer.domElement) document.exitPointerLock()
-  },
-  onStateChange: (session) => {
-    if (!controlStatus) return
-    if (!session.adminCapable) controlStatus.textContent = 'View-only'
-    else if (session.canControl) controlStatus.textContent = 'Controls active'
-    else if (!session.parentActive) controlStatus.textContent = 'Maximize POV to control'
-    else if (!session.botPov) controlStatus.textContent = 'Freecam · controls off'
-    else if (!session.pointerLocked) controlStatus.textContent = 'Click canvas for pointer lock'
-    else if (!session.socketConnected) controlStatus.textContent = 'Controls offline'
-    else controlStatus.textContent = 'Controls locked'
   }
 })
 
@@ -217,31 +198,27 @@ document.addEventListener('visibilitychange', () => { if (document.visibilitySta
 window.addEventListener('pagehide', () => controlSession.cleanup('page hidden'))
 window.addEventListener('beforeunload', () => controlSession.cleanup('page unloading'))
 
-socket.on('connect', () => { controlSession.setSocketConnected(true); status.textContent = 'Live connected' })
-socket.on('disconnect', () => { keys.clear(); controlSession.setSocketConnected(false); status.textContent = 'Connection lost' })
+socket.on('connect', () => { controlSession.setSocketConnected(true) })
+socket.on('disconnect', () => { keys.clear(); controlSession.setSocketConnected(false) })
 socket.on('viewerControlCapabilities', (capabilities) => {
   if (!capabilities || capabilities.accountId !== accountId) return
   controlSession.setCapability(capabilities.canControl === true)
-  status.textContent = capabilities.canControl === true ? 'View-only until the POV is maximized and locked' : 'View-only'
 })
 socket.on('viewerControlGranted', (grant) => {
   if (grant?.accountId !== accountId) return
   controlSession.setLeaseGranted(true)
-  status.textContent = 'Controls active'
 })
-socket.on('viewerControlDenied', (denial) => {
+socket.on('viewerControlDenied', () => {
   controlSession.serverDenied()
-  status.textContent = `Controls locked: ${denial?.reason || 'not available'}`
 })
 socket.on('viewerControlRevoked', (revocation) => controlSession.serverRevoked(revocation?.reason || 'server revoked control'))
-socket.on('viewerUnavailable', (message) => {
-  status.textContent = `${message} \u00b7 retrying \u2026`
+socket.on('viewerUnavailable', () => {
   setTimeout(() => { socket.disconnect(); socket.connect() }, 2000)
 })
 socket.on('version', (version) => {
   itemRenderVersion = String(version)
-  if (!version) { status.textContent = 'POV is waiting for the Minecraft version'; return }
-  if (!viewer.setVersion(version)) { status.textContent = `Viewer does not support ${version}`; return }
+  if (!version) return
+  if (!viewer.setVersion(version)) return
   viewer.listen(socket)
 })
 socket.on('position', ({ pos, yaw: botYaw, pitch: botPitch }) => {
@@ -263,8 +240,6 @@ socket.on('selfEntity', (entity) => {
 socket.on('entity', (entity) => { if (entity.delete) entities.delete(entity.id); else entities.set(entity.id, { ...(entities.get(entity.id) || {}), ...entity }) })
 socket.on('hud', (nextHud) => {
   document.body.classList.add('live')
-  hudData = nextHud
-  vitals.textContent = `Health ${Math.ceil(nextHud.health ?? 0)} · Food ${Math.ceil(nextHud.food ?? 0)} · XP ${nextHud.experience ?? 0}`
   players.replaceChildren(...(nextHud.players || []).map((player) => {
     const row = document.createElement('div'); row.className = 'player'
     const name = document.createElement('span'); name.textContent = player.username
@@ -278,7 +253,6 @@ socket.on('chatLine', (message) => {
   chatOverlay.append(line); while (chatOverlay.children.length > 8) chatOverlay.firstChild.remove()
   setTimeout(() => line.remove(), 12500)
 })
-socket.on('controlError', (message) => { status.textContent = `Controls: ${message}` })
 
 function itemLabel(item) {
   if (!item) return ''
@@ -346,10 +320,7 @@ function renderMinecraftHud (data) {
   armorSlots.forEach((slot, index) => fillSlot(slot, armor[index] || null))
   if (craftingGrid.childElementCount === 0) renderSlots(craftingGrid, [], 4)
   fillSlot(craftingOutput, null)
-  heldItemName.textContent = itemLabel(data.heldItem) || 'Hand'
-  setItemIcon(heldItemIcon, data.heldItem)
   offhandItem.hidden = !data.offhand
-  offhandName.textContent = itemLabel(data.offhand)
   setItemIcon(offhandIcon, data.offhand)
 }
 function updateFreecam(delta) {

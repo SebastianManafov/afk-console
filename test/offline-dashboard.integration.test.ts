@@ -42,8 +42,9 @@ test("Offline-Dashboard: Login, State, Health, Preview und Sicherheitsfehler", {
     const viewerPage = await fetch(`${baseUrl}/pov-viewer/`, { headers });
     assert.equal(viewerPage.status, 200);
     const viewerHtml = await viewerPage.text();
-    assert.match(viewerHtml, /WASD · Mouse/);
-    assert.match(viewerHtml, /Choose a mode in the dashboard/);
+    assert.doesNotMatch(viewerHtml, /id="hud"|id="controls"|id="firstPersonHand"/);
+    assert.match(viewerHtml, /id="offhandIcon"/);
+    assert.doesNotMatch(viewerHtml, /held-card-title|offhandName|heldItemName/);
     assert.doesNotMatch(viewerHtml, /id="follow"|id="freecam"/);
     const dashboardPage = await fetch(`${baseUrl}/`, { headers });
     assert.equal(dashboardPage.status, 200);

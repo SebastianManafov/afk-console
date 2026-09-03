@@ -7,17 +7,15 @@
   <link rel="stylesheet" href="styles.css">
 </head>
 <body>
-  <div id="hud"><span id="status" role="status">Connecting...</span><span id="controlStatus" role="status">View-only</span><span id="vitals">Health - · Food - · XP -</span><span id="hint">Choose a mode in the dashboard, then click the canvas. Bot POV: WASD · Mouse · Space/Shift · Tab Players · M Minimap · Esc release</span></div>
   <div id="crosshair">+</div>
   <div id="chatOverlay" aria-live="polite"></div>
   <div id="minecraftHud">
-    <div id="offhandItem" class="held-card" hidden><span class="held-card-title">Offhand</span><span id="offhandIcon" class="standalone-icon"></span><span id="offhandName"></span></div>
+    <div id="offhandItem" class="held-card" hidden><span id="offhandIcon" class="standalone-icon" aria-label="Offhand item"></span></div>
     <div id="survivalHud">
       <div class="meter-row"><span id="armorMeter"></span><span id="heartMeter"></span><span id="foodMeter"></span></div>
       <div class="xp-row"><span id="xpLevel">0</span></div>
       <div id="mcHotbar" class="slot-grid hotbar-grid" aria-label="Hotbar"></div>
     </div>
-    <div id="firstPersonHand"><span id="heldItemIcon" class="standalone-icon"></span><span id="heldItemName"></span></div>
   </div>
   <section id="inventoryPanel" class="minecraft-window" hidden aria-label="Inventory">
     <div class="inventory-window">
@@ -47,7 +45,6 @@
   </section>
   <div id="playerList" class="panel" hidden><strong>Players online</strong><div id="players"></div></div>
   <canvas id="minimap" width="180" height="180" hidden></canvas>
-  <div id="controls">Choose Bot POV or Freecam in the dashboard, then click the canvas. Bot POV: WASD · Mouse · E inventory · Left click dig/attack · Right click use · Scroll or 1–9 select hotbar · Esc releases controls</div>
   <script src="index.js"></script>
 </body>
 </html>

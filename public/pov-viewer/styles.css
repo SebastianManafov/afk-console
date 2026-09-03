@@ -20,48 +20,7 @@ canvas { display: block; }
 [hidden] { display: none !important; }
 body:not(.live) #minecraftHud { display: none; }
 
-#hud {
-  position: fixed;
-  inset: 16px 18px auto;
-  z-index: 4;
-  display: flex;
-  align-items: center;
-  gap: 7px;
-  color: var(--viewer-paper);
-  font-size: 12px;
-}
-#hud span {
-  min-height: 34px;
-  display: inline-flex;
-  align-items: center;
-  padding: 7px 10px;
-  border: 1px solid var(--viewer-border);
-  border-radius: 4px;
-  background: var(--viewer-panel);
-  color: var(--viewer-paper);
-}
-#status { color: var(--viewer-muted); }
-#controlStatus { color: var(--viewer-muted); }
-#vitals { color: var(--viewer-paper); font-family: "SF Mono", "Geist Mono", ui-monospace, monospace; font-size: 10px; }
-#hint { max-width: min(620px, 42vw); margin-left: auto; color: var(--viewer-muted) !important; line-height: 1.3; }
-
 #crosshair { position: fixed; left: 50%; top: 50%; z-index: 3; translate: -50% -50%; color: #fff; font: 22px "SF Mono", "Geist Mono", ui-monospace, monospace; text-shadow: 0 1px 2px #000; }
-#controls {
-  position: fixed;
-  left: 50%;
-  bottom: 16px;
-  z-index: 4;
-  translate: -50% 0;
-  max-width: calc(100vw - 36px);
-  padding: 8px 11px;
-  border: 1px solid var(--viewer-border);
-  border-radius: 4px;
-  background: var(--viewer-panel);
-  color: var(--viewer-muted);
-  font: 10px/1.4 "SF Mono", "Geist Mono", ui-monospace, monospace;
-  text-align: center;
-  white-space: nowrap;
-}
 
 .panel {
   position: fixed;
@@ -106,12 +65,7 @@ body:not(.live) #minecraftHud { display: none; }
 .item-icon { display: block; width: 92%; height: 92%; margin: 4%; object-fit: contain; image-rendering: pixelated; filter: drop-shadow(1px 1px 1px #0009); }
 .item-fallback { position: absolute; inset: 0; display: grid; place-items: center; color: #e3e3e3; font: bold 11px/1 system-ui, sans-serif; text-shadow: 1px 1px 2px #222; }
 .item-count { position: absolute; right: 2px; bottom: 1px; color: #fff; font: bold 14px "SF Mono", "Geist Mono", ui-monospace, monospace; line-height: 1; text-shadow: 1px 1px 2px #000; }
-
-#firstPersonHand { position: absolute; right: -25px; bottom: -35px; width: 180px; height: 260px; rotate: 24deg; background: #aa7658; clip-path: polygon(25% 0, 75% 0, 100% 100%, 0 100%); transform-origin: bottom right; }
-#heldItemIcon { position: absolute; right: 20px; top: -22px; width: 92px; height: 92px; rotate: -24deg; }
-#heldItemName { position: absolute; right: 45px; top: 76px; rotate: -24deg; width: 150px; color: #fff; text-align: center; font: bold 11px system-ui, sans-serif; }
-.held-card { position: absolute; left: 18px; bottom: 22px; width: 86px; min-height: 108px; display: grid; place-items: center; gap: 2px; padding: 7px; box-sizing: border-box; border: 1px solid var(--viewer-border); background: var(--viewer-panel); text-align: center; font: bold 11px system-ui, sans-serif; }
-.held-card-title { color: var(--viewer-muted); font-size: 10px; }
+.held-card { position: absolute; left: 18px; bottom: 22px; width: 62px; height: 62px; }
 .standalone-icon { display: block; width: 62px; height: 62px; }
 
 .minecraft-window { position: fixed; z-index: 8; inset: 0; display: grid; place-items: center; padding: 18px; box-sizing: border-box; background: #11120fb8; color: var(--viewer-ink); pointer-events: auto; }
@@ -144,10 +98,6 @@ body:not(.live) #minecraftHud { display: none; }
 
 @media (max-width: 700px) {
   :root { --slot-size: clamp(29px, 8.5vw, 52px); }
-  #hint { display: none; }
-  #hud { inset: 10px 10px auto; flex-wrap: wrap; }
-  #hud button, #hud span { min-height: 31px; padding: 6px 8px; }
-  #controls { bottom: 10px; max-width: calc(100vw - 20px); overflow: hidden; text-overflow: ellipsis; }
   #chatOverlay { left: 10px; bottom: 104px; width: calc(100vw - 20px); }
   #minimap { right: 10px; bottom: 48px; width: 140px; height: 140px; }
   .inventory-window { padding: 14px; }

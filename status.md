@@ -24,8 +24,8 @@ retaining the shared renderer and existing Bot POV control path.
 - The dashboard frontend was consolidated into a warm, editorial minimalist
   visual system with consistent typography, spacing, borders, buttons, forms,
   tables, dialogs, empty states, and responsive layouts.
-- POV HUD styling, control hints, status states, and accessibility attributes
-  were refreshed without changing renderer or control behavior.
+- POV canvas chrome was reduced to the gameplay HUD, crosshair, chat, player
+  list, and minimap; Bot POV and Freecam selection remains in the dashboard.
 - Generated POV assets were rebuilt through the existing CSP-safe build
   pipeline.
 - Modern 1.21.3+/26.1 movement synchronizes complete `player_input` state,
