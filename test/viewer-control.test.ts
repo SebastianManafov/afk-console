@@ -91,6 +91,7 @@ test("BotService refreshes the active lease for valid viewer input", async () =>
       quickBarSlot: 0,
       heldItem: null,
       setControlState: (control: string, enabled: boolean) => controlCalls.push([control, enabled]),
+      physicsEnabled: true,
       clearControlStates: () => {},
       stopDigging: () => {},
       deactivateItem: () => {},
@@ -100,6 +101,8 @@ test("BotService refreshes the active lease for valid viewer input", async () =>
     internal.connection = "online";
     internal.worldTransition = { state: "stable", startedAt: null, message: "Ready" };
     internal.publish = () => {};
+    assert.throws(() => service!.acquireViewerControl("account-a", "controller"), (error: unknown) => error instanceof ViewerControlDeniedError && error.reason === "not_ready");
+    internal.movementPhysicsReady = true;
     service.acquireViewerControl("account-a", "controller");
     const lease = internal.viewerControlLease;
     const acquiredUntil = lease.expiresAt;
@@ -170,6 +173,34 @@ test("browser control session preserves diagonal state and emits authoritative r
     ["botControl", false],
     ["viewerControlRelease", undefined]
   ]);
+});
+
+test("browser control session replays movement held before the lease grant", () => {
+  const { createControlSession } = require(join(process.cwd(), "viewer-client/control-session.cjs")) as { createControlSession: (options: Record<string, unknown>) => any };
+  const events: Array<{ event: string; payload?: unknown }> = [];
+  const session = createControlSession({
+    emit: (event: string, payload: unknown) => events.push({ event, payload }),
+    setInterval: () => 1,
+    clearInterval: () => {},
+    setTimeout: () => 1,
+    clearTimeout: () => {}
+  }) as { setCapability(value: boolean): void; setParentActive(value: boolean): void; setSocketConnected(value: boolean): void; setPointerLocked(value: boolean): void; setLeaseGranted(value: boolean): void; keyDown(value: string): boolean; keyUp(value: string): boolean; pressedControls: Set<string> };
+  session.setCapability(true);
+  session.setParentActive(true);
+  session.setSocketConnected(true);
+  session.setPointerLocked(true);
+  assert.equal(session.keyDown("forward"), false);
+  assert.equal(session.keyDown("forward"), false);
+  assert.equal(events.filter((entry) => entry.event === "botControl").length, 0);
+  session.setLeaseGranted(true);
+  assert.equal(session.keyDown("forward"), false);
+  assert.deepEqual(events.filter((entry) => entry.event === "botControl").map((entry) => entry.payload), [{ control: "forward", enabled: true }]);
+  assert.equal(session.keyUp("forward"), true);
+  assert.deepEqual(events.filter((entry) => entry.event === "botControl").map((entry) => entry.payload), [
+    { control: "forward", enabled: true },
+    { control: "forward", enabled: false }
+  ]);
+  assert.equal(session.pressedControls.size, 0);
 });
 
 test("POV selection releases before switching and replays replacement iframe activation", async () => {

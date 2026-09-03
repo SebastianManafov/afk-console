@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { decideAutoGuiJoin, determineControlLock, isNewWorldStable, isStablePlayState, sameAutoGuiJoinConfig } from "../src/connection-safety.js";
+import { decideAutoGuiJoin, determineControlLock, isMovementReady, isNewWorldStable, isStablePlayState, sameAutoGuiJoinConfig } from "../src/connection-safety.js";
 import type { MacroRuntime } from "../src/types.js";
 
 const macro = (status: MacroRuntime["status"]): MacroRuntime => ({
@@ -41,6 +41,13 @@ test("Respawn darf Bewegung nur im stabilen Play-State reaktivieren", () => {
   assert.equal(isStablePlayState("online", "play", "waiting_world"), false);
   assert.equal(isStablePlayState("online", "configuration", "stable"), false);
   assert.equal(isStablePlayState("reconnecting", "play", "stable"), false);
+});
+
+test("Bewegung benötigt aktivierte und intern bereite Mineflayer-Physik", () => {
+  assert.equal(isMovementReady("online", "play", "stable", false, true), false);
+  assert.equal(isMovementReady("online", "play", "stable", true, false), false);
+  assert.equal(isMovementReady("online", "play", "waiting_world", true, true), false);
+  assert.equal(isMovementReady("online", "play", "stable", true, true), true);
 });
 
 test("Neue Welt wird erst nach Play-State, Entity und Sicherheitsdelay freigegeben", () => {

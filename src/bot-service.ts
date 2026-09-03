@@ -7,7 +7,7 @@ import prismarineAuth from "prismarine-auth";
 import type { ConfigReader } from "./config.js";
 import type { AppEvents } from "./events.js";
 import { installHugoSmpProtocolHandlers } from "./hugosmp-protocol.js";
-import { decideAutoGuiJoin, determineControlLock, isNewWorldStable, isStablePlayState, sameAutoGuiJoinConfig } from "./connection-safety.js";
+import { decideAutoGuiJoin, determineControlLock, isMovementReady, isNewWorldStable, isStablePlayState, sameAutoGuiJoinConfig } from "./connection-safety.js";
 import { readableMinecraftReason } from "./minecraft-text.js";
 import { SellMacro } from "./sell-macro.js";
 import { SpawnerMacro } from "./spawner-macro.js";
@@ -48,6 +48,7 @@ export class BotService {
   private manualControlActive = false;
   private readonly viewerControlLease: ViewerControlLease;
   private viewerActionGeneration = 0;
+  private movementPhysicsReady = false;
   private activeEndpoint: { host: string; port: number } | null = null;
   private readonly acceptedBots = new WeakSet<Bot>();
   private intentionalStop = false;
@@ -141,10 +142,22 @@ export class BotService {
       throw error;
     }
     this.bot = bot;
+    this.movementPhysicsReady = false;
     this.activeEndpoint = { host: connection.host, port: connection.port };
     const receivedPacketCounts = new Map<string, number>();
     const sentPacketCounts = new Map<string, number>();
     const resourcePackOffers = new Map<string, { forced: boolean; hash: string }>();
+    const markMovementPhysicsReady = () => {
+      if (this.bot !== bot || this.movementPhysicsReady) return;
+      this.movementPhysicsReady = true;
+      this.diagnose("physics", "ok", "Mineflayer accepted the server position; movement physics is ready");
+      this.publish();
+    };
+    // Mineflayer keeps its internal shouldUsePhysics gate private. Its
+    // forcedMove event is the public signal emitted when that gate is opened
+    // by a server position update.
+    bot.on("forcedMove", markMovementPhysicsReady);
+    bot.once("end", () => { bot.removeListener("forcedMove", markMovementPhysicsReady); });
     const protocolClient = bot._client as unknown as { write(name: string, params: unknown): void };
     const originalWrite = protocolClient.write.bind(protocolClient);
     protocolClient.write = (name, params) => {
@@ -223,6 +236,7 @@ export class BotService {
         this.clearAutomationTimers();
         this.worldTransition = { state: "configuring", startedAt: new Date().toISOString(), message: "Synchronizing registry and world" };
         this.diagnose("world-change", "info", "World/server change detected; controls and macros paused");
+        this.movementPhysicsReady = false;
         bot.physicsEnabled = false;
         this.viewerControlLease.forceRelease("world transition");
         bot.clearControlStates();
@@ -334,6 +348,11 @@ export class BotService {
           bot.end("World state timeout");
           return;
         }
+        if (!this.movementPhysicsReady) {
+          this.diagnose("physics", "info", "Waiting for Mineflayer movement readiness before enabling controls");
+          this.waitForWorldStability(bot);
+          return;
+        }
         this.sell.attach(bot);
         this.spawner.attach(bot);
         bot.physicsEnabled = true;
@@ -354,6 +373,7 @@ export class BotService {
         this.scheduledReconnectDelayMs = 180_000;
         this.worldTransition = { state: "configuring", startedAt: new Date().toISOString(), message: "World restart detected; reconnecting in 3 minutes" };
         this.clearAutomationTimers();
+        this.movementPhysicsReady = false;
         bot.physicsEnabled = false;
         this.viewerControlLease.forceRelease("world restart detected");
         bot.clearControlStates();
@@ -375,6 +395,7 @@ export class BotService {
         this.clearAutoGuiJoinTimer();
         this.clearAutomationTimers();
         this.worldTransition = { state: "waiting_world", startedAt: new Date().toISOString(), message: "Stabilizing respawn" };
+        this.movementPhysicsReady = false;
         bot.physicsEnabled = false;
         this.viewerControlLease.forceRelease("respawn or dimension change");
         bot.clearControlStates();
@@ -465,6 +486,7 @@ export class BotService {
     this.clearAutoGuiJoinTimer();
     this.clearWorldReadyWait();
     this.clearAutomationTimers();
+    this.movementPhysicsReady = false;
     this.viewerControlLease.forceRelease("bot stopped");
     const bot = this.bot;
     this.bot = null;
@@ -722,6 +744,7 @@ export class BotService {
     this.clearAutoGuiJoinTimer();
     this.clearWorldReadyWait();
     this.viewerControlLease.forceRelease("connection ended");
+    this.movementPhysicsReady = false;
     const reachedServerLogin = this.acceptedBots.has(endedBot);
     const username = endedBot.username || "Bot";
     this.bot = null;
@@ -786,7 +809,7 @@ export class BotService {
   }
 
   private isWorldReady(): boolean {
-    return this.bot !== null && isStablePlayState(this.connection, this.bot._client.state, this.worldTransition.state);
+    return this.bot !== null && isMovementReady(this.connection, this.bot._client.state, this.worldTransition.state, this.bot.physicsEnabled, this.movementPhysicsReady);
   }
 
   private publish(): void {
@@ -881,7 +904,7 @@ export class BotService {
     const check = () => {
       this.worldReadyTimer = null;
       if (this.bot !== bot || this.connection !== "online" || !generationIsCurrent()) return;
-      if (isNewWorldStable(bot._client.state, Boolean(bot.entity), Date.now() - startedAt)) {
+      if (isNewWorldStable(bot._client.state, Boolean(bot.entity), Date.now() - startedAt) && this.movementPhysicsReady) {
         this.sell.attach(bot);
         this.spawner.attach(bot);
         bot.physicsEnabled = true;

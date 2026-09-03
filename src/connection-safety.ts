@@ -50,6 +50,20 @@ export function isStablePlayState(
   return connection === "online" && String(protocolState).toLowerCase() === "play" && worldState === "stable";
 }
 
+/**
+ * Mineflayer requires both its public physics switch and the internal
+ * position-sync/physics gate before control states can move the entity.
+ */
+export function isMovementReady(
+  connection: BotSnapshot["connection"],
+  protocolState: unknown,
+  worldState: BotSnapshot["worldTransition"]["state"],
+  physicsEnabled: unknown,
+  mineflayerPhysicsReady: boolean
+): boolean {
+  return isStablePlayState(connection, protocolState, worldState) && physicsEnabled === true && mineflayerPhysicsReady;
+}
+
 export function isNewWorldStable(protocolState: unknown, hasEntity: boolean, elapsedMs: number): boolean {
   return String(protocolState).toLowerCase() === "play" && hasEntity && elapsedMs >= 1_500;
 }

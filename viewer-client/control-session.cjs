@@ -1,5 +1,6 @@
 const HEARTBEAT_MS = 1000
 const LOOK_INTERVAL_MS = 25
+const MOVEMENT_CONTROLS = new Set(['forward', 'back', 'left', 'right', 'jump', 'sneak', 'sprint'])
 
 class ControlSession {
   constructor (options = {}) {
@@ -21,6 +22,7 @@ class ControlSession {
     this.leaseGranted = false
     this.acquireRequested = false
     this.pressed = new Set()
+    this.held = new Set()
     this.activeUse = false
     this.heartbeatTimer = null
     this.lookTimer = null
@@ -81,7 +83,10 @@ class ControlSession {
     if (!granted) this.failSafe('lease not granted', false)
     this.leaseGranted = granted === true
     this.acquireRequested = false
-    if (this.leaseGranted && this.canControl) this.startHeartbeat()
+    if (this.leaseGranted && this.canControl) {
+      this.syncHeldControls()
+      this.startHeartbeat()
+    }
     else if (!this.leaseGranted) this.stopHeartbeat()
     this.onStateChange(this)
   }
@@ -96,7 +101,9 @@ class ControlSession {
   }
 
   press (control) {
-    if (!this.canControl || typeof control !== 'string' || this.pressed.has(control)) return false
+    if (typeof control !== 'string' || !MOVEMENT_CONTROLS.has(control) || this.held.has(control)) return false
+    this.held.add(control)
+    if (!this.canControl) return false
     this.pressed.add(control)
     this.emitReliable('botControl', { control, enabled: true })
     return true
@@ -107,9 +114,10 @@ class ControlSession {
   }
 
   release (control) {
-    if (!this.pressed.has(control)) return false
-    this.pressed.delete(control)
-    if (this.socketConnected && this.leaseGranted) this.emitReliable('botControl', { control, enabled: false })
+    const wasHeld = this.held.delete(control)
+    const wasPressed = this.pressed.delete(control)
+    if (!wasHeld && !wasPressed) return false
+    if (wasPressed && this.socketConnected && this.leaseGranted) this.emitReliable('botControl', { control, enabled: false })
     return true
   }
 
@@ -197,6 +205,15 @@ class ControlSession {
     this.heartbeatTimer = null
   }
 
+  syncHeldControls () {
+    if (!this.canControl) return
+    for (const control of this.held) {
+      if (this.pressed.has(control)) continue
+      this.pressed.add(control)
+      this.emitReliable('botControl', { control, enabled: true })
+    }
+  }
+
   flushLook () {
     this.lookTimer = null
     const latest = this.pendingLook
@@ -212,6 +229,7 @@ class ControlSession {
     const canNotify = notifyServer && this.socketConnected && this.leaseGranted
     const controls = [...this.pressed]
     this.pressed.clear()
+    this.held.clear()
     if (canNotify) {
       for (const control of controls) this.emitReliable('botControl', { control, enabled: false })
       if (this.activeUse) this.emitReliable('botAction', { action: 'use', enabled: false })
