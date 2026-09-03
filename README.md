@@ -1,3 +1,6 @@
+> [!WARNING]
+> This is a passion project built and maintained with AI.
+
 # Remote Console Client (RCC)
 
 [![CI](https://github.com/SebastianManafov/afk-console/actions/workflows/ci.yml/badge.svg)](https://github.com/SebastianManafov/afk-console/actions/workflows/ci.yml)
