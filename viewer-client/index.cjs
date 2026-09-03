@@ -156,6 +156,8 @@ function setMode(nextFreecam) {
   controlSession.setBotPov(!freecam)
   followButton.classList.toggle('active', !freecam)
   freecamButton.classList.toggle('active', freecam)
+  followButton.setAttribute('aria-pressed', String(!freecam))
+  freecamButton.setAttribute('aria-pressed', String(freecam))
   if (freecam && botPosition) viewer.camera.position.set(botPosition.x, botPosition.y + 1.62, botPosition.z)
   syncSelfVisibility()
 }
@@ -259,7 +261,7 @@ socket.on('entity', (entity) => { if (entity.delete) entities.delete(entity.id);
 socket.on('hud', (nextHud) => {
   document.body.classList.add('live')
   hudData = nextHud
-  vitals.textContent = `\u2665 ${Math.ceil(nextHud.health ?? 0)} \u00b7 \uD83C\uDF57 ${Math.ceil(nextHud.food ?? 0)} \u00b7 XP ${nextHud.experience ?? 0}`
+  vitals.textContent = `Health ${Math.ceil(nextHud.health ?? 0)} · Food ${Math.ceil(nextHud.food ?? 0)} · XP ${nextHud.experience ?? 0}`
   players.replaceChildren(...(nextHud.players || []).map((player) => {
     const row = document.createElement('div'); row.className = 'player'
     const name = document.createElement('span'); name.textContent = player.username
@@ -368,13 +370,13 @@ function drawMinimap() {
   const size = minimap.width; minimapContext.clearRect(0, 0, size, size)
   minimapContext.fillStyle = '#07101a'; minimapContext.fillRect(0, 0, size, size)
   minimapContext.strokeStyle = '#ffffff22'; minimapContext.beginPath(); minimapContext.arc(size / 2, size / 2, size / 2 - 4, 0, Math.PI * 2); minimapContext.stroke()
-  minimapContext.fillStyle = '#55e6a5'; minimapContext.fillRect(size / 2 - 3, size / 2 - 3, 6, 6)
+  minimapContext.fillStyle = '#b9d5bd'; minimapContext.fillRect(size / 2 - 3, size / 2 - 3, 6, 6)
   for (const entity of entities.values()) {
     if (!entity.pos || !entity.username) continue
     const x = size / 2 + (entity.pos.x - botPosition.x) * 3
     const y = size / 2 + (entity.pos.z - botPosition.z) * 3
     if (x < 5 || y < 5 || x > size - 5 || y > size - 5) continue
-    minimapContext.fillStyle = '#ff5f7a'; minimapContext.beginPath(); minimapContext.arc(x, y, 3, 0, Math.PI * 2); minimapContext.fill()
+    minimapContext.fillStyle = '#c9958f'; minimapContext.beginPath(); minimapContext.arc(x, y, 3, 0, Math.PI * 2); minimapContext.fill()
   }
 }
 requestAnimationFrame(animate)

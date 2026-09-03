@@ -133,7 +133,7 @@ function showPage(name) {
   if (name !== 'pov' && povSelection.activeAccountId) povSelection.clear()
   document.querySelectorAll('.page').forEach((page) => page.classList.toggle('hidden', page.dataset.view !== name))
   document.querySelectorAll('[data-page]').forEach((button) => button.classList.toggle('active', button.dataset.page === name))
-  const label = (document.querySelector(`nav [data-page="${name}"]`)?.textContent.trim() || name).replace(/^[^A-Za-z0-9]+/, '')
+  const label = (document.querySelector(`nav [data-page="${name}"]`)?.textContent.trim() || name).replace(/^\d+\s*/, '').replace(/^[^A-Za-z0-9]+/, '')
   $('pageTitle').textContent = label
   $('app').classList.remove('nav-open')
   history.replaceState(null, '', `#${name}`)
@@ -655,7 +655,7 @@ $('saveWebhook').onclick = async () => {
 function applyTheme(theme) { document.documentElement.dataset.theme = theme; localStorage.setItem('rcc-theme', theme) }
 function toggleTheme() { applyTheme(document.documentElement.dataset.theme === 'dark' ? 'light' : 'dark') }
 $('themeToggle').onclick = $('settingsTheme').onclick = toggleTheme
-applyTheme(localStorage.getItem('rcc-theme') || 'dark')
+applyTheme(localStorage.getItem('rcc-theme') || 'light')
 $('exportSettings').onclick = () => { const blob = new Blob([JSON.stringify(config, null, 2)], { type: 'application/json' }); const link = document.createElement('a'); link.href = URL.createObjectURL(blob); link.download = `rcc-backup-${new Date().toISOString().slice(0, 10)}.json`; link.click(); URL.revokeObjectURL(link.href) }
 $('importSettings').onchange = async (event) => { try { if (!confirm('The backup will overwrite the current configuration. Continue?')) return; const imported = JSON.parse(await event.target.files[0].text()); const result = await api('/api/settings', { method: 'PUT', body: JSON.stringify(imported) }); config = result.config; renderConfig(); toast('Backup imported') } catch (error) { toast(error.message, true) } finally { event.target.value = '' } }
 $('emergencyStop').onclick = async () => { if (!confirm('Disconnect all bots and immediately disable all macros?')) return; try { const result = await api('/api/emergency-stop', { method: 'POST' }); config = result.config; renderConfig(); toast('Emergency stop executed') } catch (error) { toast(error.message, true) } }
