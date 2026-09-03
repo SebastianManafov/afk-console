@@ -30,6 +30,10 @@ the dashboard receives only derived status metadata (`valid`, `expired`,
 empty preserves the current token; **Remove token** deletes the account's
 Microsoft authentication cache.
 
+Manual entry expects the Microsoft Live OAuth `access_token` used by the
+Prismarine authentication flow. The recommended path is the built-in Microsoft
+device-code login; RCC does not expose or copy the token from that flow.
+
 ## Network identity
 
 Without a configured proxy, Minecraft sees the public egress IP of the machine running RCC. A Codespace therefore uses the Codespace egress IP. HTTP CONNECT proxies are optional and selected per account.

@@ -31,11 +31,26 @@ test("Manuell gesetzte Microsoft-Access-Tokens bleiben verschlüsselt und liefer
     assert.deepEqual(vault.status(), { configured: true, valid: true, expiresAt: vault.expiresAt(), status: "valid" });
     vault.restore();
     assert.match(await readFile(join(directory, files[0]!.replace(/\.vault$/, "")), "utf8"), new RegExp(accessToken));
+    const cache = JSON.parse(await readFile(join(directory, files[0]!.replace(/\.vault$/, "")), "utf8")) as { token: { expires_in: number; expiresAt?: string } };
+    assert.ok(cache.token.expires_in > 1_000_000);
+    assert.ok(Date.parse(cache.token.expiresAt!) > Date.now());
+    cache.token.expires_in = 3_600;
+    delete cache.token.expiresAt;
+    await writeFile(join(directory, files[0]!.replace(/\.vault$/, "")), JSON.stringify(cache));
+    vault.seal();
+    vault.restore();
+    const migratedCache = JSON.parse(await readFile(join(directory, files[0]!.replace(/\.vault$/, "")), "utf8")) as { token: { expires_in: number; expiresAt: string } };
+    assert.equal(migratedCache.token.expires_in, 3_600_000);
+    assert.ok(Date.parse(migratedCache.token.expiresAt) > Date.now());
     vault.seal();
     assert.doesNotMatch(await readFile(join(directory, files[0]!), "utf8"), new RegExp(accessToken));
 
     const expiredJwt = `header.${Buffer.from(JSON.stringify({ exp: Math.floor(Date.now() / 1000) - 60 }), "utf8").toString("base64url")}.signature`;
     vault.setAccessToken("player@example.com", expiredJwt);
+    assert.equal(vault.status().status, "expired");
+    const shortLivedJwt = `header.${Buffer.from(JSON.stringify({ exp: Math.floor(Date.now() / 1000) + 1 }), "utf8").toString("base64url")}.signature`;
+    vault.setAccessToken("player@example.com", shortLivedJwt);
+    await new Promise((resolve) => setTimeout(resolve, 1_200));
     assert.equal(vault.status().status, "expired");
     vault.setAccessToken("player@example.com", "not.a.valid-jwt");
     assert.equal(vault.status().status, "invalid");

@@ -64,12 +64,13 @@ function scanTokenData(value: unknown): TokenScan {
     }
     if (isRecord(item)) {
       const obtainedOn = parseTimestamp(item.obtainedOn);
+      const explicitExpiries = Object.entries(item)
+        .filter(([childKey]) => isExpiryField(childKey))
+        .map(([, child]) => parseTimestamp(child))
+        .filter((value): value is number => value !== null);
+      result.expiries.push(...explicitExpiries);
       for (const [childKey, child] of Object.entries(item)) {
-        if (isExpiryField(childKey)) {
-          const expiresAt = parseTimestamp(child);
-          if (expiresAt !== null) result.expiries.push(expiresAt);
-        }
-        if (isDurationField(childKey) && obtainedOn !== null) {
+        if (isDurationField(childKey) && obtainedOn !== null && !explicitExpiries.length) {
           const duration = parseDuration(child);
           if (duration !== null) result.expiries.push(obtainedOn + duration * 1000);
         }
@@ -87,6 +88,23 @@ function scanTokenData(value: unknown): TokenScan {
   return result;
 }
 
+function migrateManualCache(value: Buffer): Buffer {
+  try {
+    const parsed = JSON.parse(value.toString("utf8")) as unknown;
+    if (!isRecord(parsed) || !isRecord(parsed.token)) return value;
+    const token = parsed.token;
+    if (typeof token.access_token !== "string" || token.access_token !== token.refresh_token || "expiresAt" in token) return value;
+    const obtainedOn = parseTimestamp(token.obtainedOn);
+    const expiresIn = parseDuration(token.expires_in);
+    if (obtainedOn === null || expiresIn === null || expiresIn <= 0) return value;
+    token.expiresAt = new Date(obtainedOn + expiresIn * 1000).toISOString();
+    token.expires_in = expiresIn * 1000;
+    return Buffer.from(JSON.stringify(parsed), "utf8");
+  } catch {
+    return value;
+  }
+}
+
 export class TokenVault {
   private readonly key: Buffer;
   constructor(private readonly directory: string, secret = process.env.CONFIG_ENCRYPTION_KEY || process.env.SESSION_SECRET || "") {
@@ -97,7 +115,7 @@ export class TokenVault {
   restore(): void {
     if (!existsSync(this.directory)) return;
     for (const file of this.files(this.directory).filter((name) => name.endsWith(".vault"))) {
-      const target = file.slice(0, -6); const plain = this.decrypt(readFileSync(file, "utf8"));
+      const target = file.slice(0, -6); const plain = migrateManualCache(this.decrypt(readFileSync(file, "utf8")));
       mkdirSync(dirname(target), { recursive: true }); writeFileSync(`${target}.tmp`, plain, { mode: 0o600 }); renameSync(`${target}.tmp`, target); rmSync(file);
     }
   }
@@ -153,8 +171,13 @@ export class TokenVault {
     mkdirSync(this.directory, { recursive: true, mode: 0o700 });
     const obtainedOn = Date.now();
     const inspected = inspectAccessToken(normalizedToken);
-    const expiresIn = inspected.malformed ? 0 : inspected.expiresAt === null ? 3_600 : Math.floor((inspected.expiresAt - obtainedOn) / 1000);
-    const cache = JSON.stringify({ token: { access_token: normalizedToken, refresh_token: normalizedToken, token_type: "Bearer", expires_in: expiresIn, obtainedOn } });
+    const expiresAt = inspected.malformed ? null : inspected.expiresAt ?? obtainedOn + 3_600_000;
+    // prismarine-auth 3.1.1 adds expires_in directly to obtainedOn when it
+    // checks a live cache, so its cache value is effectively milliseconds.
+    // Keep an explicit timestamp for RCC's status scanner, which uses the
+    // OAuth-standard seconds when interpreting expires_in in existing caches.
+    const expiresIn = expiresAt === null ? 0 : Math.max(0, expiresAt - obtainedOn);
+    const cache = JSON.stringify({ token: { access_token: normalizedToken, refresh_token: normalizedToken, token_type: "Bearer", expires_in: expiresIn, obtainedOn, expiresAt: expiresAt ? new Date(expiresAt).toISOString() : null } });
     const file = join(this.directory, `${createHash("sha1").update(normalizedUsername, "binary").digest("hex").slice(0, 6)}_live-cache.json.vault`);
     const temporary = `${file}.tmp`;
     writeFileSync(temporary, this.encrypt(Buffer.from(cache, "utf8")), { encoding: "utf8", mode: 0o600 });

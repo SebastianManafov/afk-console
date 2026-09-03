@@ -695,7 +695,7 @@ function renderProfileTokenState (raw) {
   const configured = metadata.status !== 'not_set'
   const state = { valid: 'Access token already configured', expired: 'Access token already configured · expired', invalid: 'Access token already configured · invalid', not_set: 'No access token configured' }[metadata.status]
   $('profileTokenState').textContent = state
-  $('profileTokenHint').textContent = configured ? 'Leave the field empty to keep the current token unchanged.' : 'Enter an access token only if you have one available.'
+  $('profileTokenHint').textContent = configured ? 'Leave the field empty to keep the current token unchanged.' : 'Recommended: use Microsoft login. Manual entry accepts a Microsoft Live OAuth access token.'
   $('profileInputToken').placeholder = configured ? 'Enter new token to replace existing token' : 'Enter access token'
   $('removeAccountToken').classList.toggle('hidden', !configured)
 }
