@@ -104,7 +104,7 @@ button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-
 
 .nav { display: grid; gap: 3px; }
 .global-nav { margin-top: 38px; }
-.nav button, .profile {
+.nav > button, .nav-pov-toggle, .profile {
   width: 100%;
   min-height: 38px;
   display: flex;
@@ -119,16 +119,33 @@ button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-
   text-align: left;
   transition: background-color 140ms ease, border-color 140ms ease, color 140ms ease;
 }
-.nav button:hover, .profile:hover { border-color: var(--border); background: var(--surface-raised); color: var(--text); }
-.nav button.active { border-color: var(--primary); background: var(--primary); color: var(--primary-contrast); }
-.nav button span { width: 24px; color: var(--subtle); font-family: "SF Mono", "Geist Mono", ui-monospace, monospace; font-size: 10px; letter-spacing: .08em; text-align: center; }
-.nav button.active span { color: inherit; }
+.nav > button:hover, .nav-pov-toggle:hover, .profile:hover { border-color: var(--border); background: var(--surface-raised); color: var(--text); }
+.nav > button.active, .nav-pov-toggle.active { border-color: var(--primary); background: var(--primary); color: var(--primary-contrast); }
+.nav > button > span, .nav-pov-toggle > span { width: 24px; color: var(--subtle); font-family: "SF Mono", "Geist Mono", ui-monospace, monospace; font-size: 10px; letter-spacing: .08em; text-align: center; }
+.nav > button.active > span, .nav-pov-toggle.active > span { color: inherit; }
 .nav-label { display: flex; align-items: center; justify-content: space-between; margin: 38px 3px 10px; color: var(--muted); font-family: "SF Mono", "Geist Mono", ui-monospace, monospace; font-size: 10px; letter-spacing: .12em; text-transform: uppercase; }
 .nav-label button { width: 24px; height: 24px; padding: 0; border: 1px solid var(--border); border-radius: var(--radius-small); background: var(--surface); color: var(--text); font-size: 16px; line-height: 1; }
 .profile { min-height: 46px; border-color: var(--border); background: var(--surface); }
 .profile.active { border-color: var(--border-light); background: var(--surface-raised); color: var(--text); }
 .profile small { margin-left: auto; color: var(--muted); font-family: "SF Mono", "Geist Mono", ui-monospace, monospace; font-size: 10px; }
 .server-nav { margin-top: 7px; }
+.nav-pov-group { display: grid; gap: 3px; }
+.nav-pov-toggle .nav-pov-label { width: auto; flex: 1; color: inherit; font-family: inherit; font-size: inherit; letter-spacing: normal; text-align: left; }
+.nav-pov-toggle .nav-pov-chevron { width: 16px; margin-left: auto; color: var(--subtle); font-family: system-ui, sans-serif; font-size: 17px; line-height: 1; transition: transform 140ms ease, color 140ms ease; }
+.nav-pov-toggle[aria-expanded="true"] .nav-pov-chevron { transform: rotate(180deg); }
+.nav-pov-toggle.active .nav-pov-chevron { color: inherit; }
+.pov-mode-subnav { display: grid; gap: 3px; margin: 0 0 1px; padding: 3px; border-radius: var(--radius-small); background: var(--navigation); }
+.pov-mode-suboption { width: 100%; min-height: 38px; display: grid; grid-template-columns: 24px minmax(0, 1fr) 11px; align-items: center; gap: 8px; padding: 0 8px; border: 1px solid transparent; border-radius: var(--radius-small); background: transparent; color: var(--muted); font-weight: 650; text-align: left; transition: background-color 140ms ease, border-color 140ms ease, color 140ms ease, transform 140ms ease; }
+.pov-mode-suboption:hover { border-color: var(--border); background: var(--surface-raised); color: var(--text); }
+.pov-mode-suboption:active { transform: scale(.99); }
+.pov-mode-suboption > span { width: auto; }
+.pov-mode-suboption-mark { position: relative; display: grid; place-items: center; width: 24px !important; height: 24px; color: var(--subtle); font-family: "SF Mono", "Geist Mono", ui-monospace, monospace; font-size: 15px; line-height: 1; }
+.pov-mode-suboption:first-child .pov-mode-suboption-mark::before { content: "+"; }
+.pov-mode-suboption:last-child .pov-mode-suboption-mark::before { content: "◇"; font-size: 12px; }
+.pov-mode-suboption-indicator { width: 10px !important; height: 10px; justify-self: end; border: 1px solid var(--subtle); border-radius: 50%; }
+.pov-mode-suboption.active { border-color: var(--border); background: var(--surface-raised); color: var(--text); }
+.pov-mode-suboption.active .pov-mode-suboption-mark { color: var(--text); }
+.pov-mode-suboption.active .pov-mode-suboption-indicator { border-color: var(--text); background: var(--text); }
 .account-bar {
   width: 100%;
   min-height: 46px;
@@ -338,27 +355,6 @@ label { display: grid; gap: 6px; color: var(--muted); font-size: 11px; font-weig
 .pov-heading p { margin: 7px 0 0; }
 .pov-tools { display: flex; align-items: center; gap: 8px; }
 .pov-tools .icon-button { min-height: 36px; }
-.pov-layout { display: grid; grid-template-columns: minmax(0, 1fr) 248px; gap: 20px; align-items: start; }
-.pov-mode-panel { position: sticky; top: 92px; margin: 0; padding: 20px; }
-.pov-mode-heading { margin-bottom: 18px; }
-.pov-mode-heading .eyebrow { display: block; margin-bottom: 8px; color: var(--muted); font-family: "SF Mono", "Geist Mono", ui-monospace, monospace; font-size: 10px; font-weight: 700; letter-spacing: .12em; text-transform: uppercase; }
-.pov-mode-heading p { margin: 7px 0 0; font-size: 12px; }
-.pov-mode-options { display: grid; gap: 8px; }
-.pov-mode-option { width: 100%; display: grid; grid-template-columns: 27px minmax(0, 1fr) auto; align-items: start; gap: 9px; padding: 12px 10px; border: 1px solid var(--border); border-radius: var(--radius-small); background: var(--surface); color: var(--text); text-align: left; transition: background-color 140ms ease, border-color 140ms ease, transform 140ms ease; }
-.pov-mode-option:hover { border-color: var(--border-light); background: var(--surface-raised); }
-.pov-mode-option:active { transform: scale(.99); }
-.pov-mode-option.active { border-color: var(--text); background: var(--surface-raised); }
-.pov-mode-index { display: grid; place-items: center; width: 27px; height: 27px; border: 1px solid var(--border-light); border-radius: var(--radius-small); color: var(--muted); font-family: "SF Mono", "Geist Mono", ui-monospace, monospace; font-size: 9px; }
-.pov-mode-option.active .pov-mode-index { border-color: var(--text); background: var(--text); color: var(--surface); }
-.pov-mode-copy { display: grid; gap: 3px; min-width: 0; }
-.pov-mode-copy strong { font-size: 12px; }
-.pov-mode-copy small { color: var(--muted); font-size: 10px; line-height: 1.35; }
-.pov-mode-mark { color: var(--subtle); font-family: "SF Mono", "Geist Mono", ui-monospace, monospace; font-size: 13px; line-height: 27px; }
-.pov-mode-option.active .pov-mode-mark { color: var(--text); }
-.pov-mode-context { display: grid; gap: 3px; margin-top: 18px; padding-top: 15px; border-top: 1px solid var(--border); }
-.pov-mode-context span { color: var(--muted); font-family: "SF Mono", "Geist Mono", ui-monospace, monospace; font-size: 9px; letter-spacing: .08em; text-transform: uppercase; }
-.pov-mode-context strong { font-size: 12px; }
-.pov-mode-context small { color: var(--muted); font-size: 10px; line-height: 1.35; }
 .pov-bot-grid { display: grid; grid-template-columns: repeat(3, minmax(230px, 1fr)); gap: 14px; }
 .pov-bot-card { min-width: 0; overflow: hidden; border: 1px solid var(--border); border-radius: var(--radius); background: #242522; }
 .pov-card-header { display: flex; align-items: center; gap: 8px; min-height: 48px; padding: 0 12px; border-bottom: 1px solid #4b4b45; background: #242522; color: #f7f6f3; }
@@ -373,9 +369,8 @@ label { display: grid; gap: 6px; color: var(--muted); font-size: 11px; font-weig
 .pov-card-screen { position: relative; aspect-ratio: 1.55; background: #151714; }
 .pov-card-screen iframe { width: 100%; height: 100%; display: block; border: 0; }
 .pov-card-overlay { position: absolute; inset: 0; display: grid; place-items: center; padding: 20px; color: #aaa79f; background: #151714d9; font-size: 12px; font-weight: 700; text-align: center; }
-.pov-bot-card.is-maximized { position: fixed; inset: 72px 284px 0 248px; z-index: 25; border-radius: 0; }
+.pov-bot-card.is-maximized { position: fixed; inset: 72px 0 0 248px; z-index: 25; border-radius: 0; }
 .pov-bot-card.is-maximized .pov-card-screen { height: calc(100vh - 120px); aspect-ratio: auto; }
-.pov-maximized .pov-mode-panel { position: fixed; top: 92px; right: 20px; z-index: 26; width: 244px; margin: 0; }
 .pov-maximized { overflow: hidden; }
 
 .email-visibility { display: flex; align-items: center; gap: 7px; margin-top: 3px; }
@@ -488,8 +483,7 @@ dialog::backdrop { background: rgb(37 36 34 / 32%); }
   .form-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .auth-panel { grid-template-columns: 1fr; }
   .auth-panel code { width: max-content; }
-  .pov-bot-card.is-maximized { left: 0; right: 264px; }
-  .pov-maximized .pov-mode-panel { right: 16px; width: 232px; }
+  .pov-bot-card.is-maximized { left: 0; right: 0; }
 }
 
 @media (max-width: 700px) {
@@ -511,11 +505,8 @@ dialog::backdrop { background: rgb(37 36 34 / 32%); }
   .pov-heading h2 { font-size: 24px; }
   .pov-tools { width: 100%; }
   .pov-tools .filter { flex: 1; width: auto; }
-  .pov-layout { grid-template-columns: 1fr; }
-  .pov-mode-panel { position: static; order: -1; }
   .pov-bot-grid { grid-template-columns: 1fr; }
   .pov-bot-card.is-maximized { right: 0; }
-  .pov-maximized .pov-mode-panel { position: static; width: auto; }
   .pov-bot-card.is-maximized .pov-card-screen { height: calc(100vh - 112px); }
   .section-heading, .macro-targets, .account-scope-bar { align-items: stretch; flex-direction: column; gap: 12px; }
   .diagnostic-actions, .scope-controls { width: 100%; align-items: stretch; flex-direction: column; }

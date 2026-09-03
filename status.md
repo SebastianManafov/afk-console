@@ -5,14 +5,15 @@ Updated: 2026-09-03
 ## Current status
 
 RCC’s browser dashboard and POV control path are implemented and verified. The
-POV page now exposes Bot POV and Freecam as outer dashboard mode choices while
-retaining the shared renderer and existing Bot POV control path.
+POV sidebar now exposes Bot POV and Freecam as an expandable nested mode choice
+while retaining the shared renderer and existing Bot POV control path.
 
 ## Completed
 
 - POV control uses Mineflayer movement and interaction states directly.
-- POV mode selection lives in the dashboard’s POV section: Bot POV controls the
-  real bot, while Freecam moves only the local camera through the loaded world.
+- POV mode selection lives in the expandable sidebar item under `08 POV`: Bot
+  POV controls the real bot, while Freecam moves only the local camera through
+  the loaded world.
 - Viewer leases use reliable one-second heartbeats with a five-second dead-man
   timeout and refresh on valid movement, look, and action input.
 - Lease expiry and every authoritative cleanup path clear movement states,
@@ -48,7 +49,8 @@ retaining the shared renderer and existing Bot POV control path.
 ## Using browser controls
 
 1. Log in with an admin dashboard session.
-2. Open `POV` and choose `Bot POV` or `Freecam` in the right-side mode panel.
+2. Open `POV`, expand `08 POV` in the sidebar, and choose `Bot POV` or
+   `Freecam`.
 3. Maximize one bot card, then click the canvas to acquire pointer lock.
 4. In Bot POV, use `W`, `A`, `S`, `D` for movement; mouse movement to look;
    `Space` to jump; `Shift` to sneak; and `Ctrl` to sprint. Freecam movement

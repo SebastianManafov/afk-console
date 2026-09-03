@@ -25,7 +25,13 @@
         <button data-page="chat"><span>05</span> Chat</button>
         <button data-page="movement"><span>06</span> Movement</button>
         <button data-page="inventory"><span>07</span> Inventory</button>
-        <button data-page="pov"><span>08</span> POV</button>
+        <div id="povNavGroup" class="nav-pov-group">
+          <button id="povNavToggle" data-page="pov" class="nav-pov-toggle" type="button" aria-label="08 POV" aria-expanded="false" aria-controls="povModeSubnav"><span>08</span><span class="nav-pov-label">POV</span><span class="nav-pov-chevron" aria-hidden="true">⌄</span></button>
+          <div id="povModeSubnav" class="pov-mode-subnav" role="group" aria-label="POV modes" hidden>
+            <button type="button" class="pov-mode-suboption active" data-pov-mode="bot" aria-pressed="true"><span class="pov-mode-suboption-mark" aria-hidden="true"></span><span>Bot POV</span><span class="pov-mode-suboption-indicator" aria-hidden="true"></span></button>
+            <button type="button" class="pov-mode-suboption" data-pov-mode="freecam" aria-pressed="false"><span class="pov-mode-suboption-mark" aria-hidden="true"></span><span>Freecam</span><span class="pov-mode-suboption-indicator" aria-hidden="true"></span></button>
+          </div>
+        </div>
         <button data-page="macros"><span>09</span> Macros</button>
         <button data-page="webhooks"><span>10</span> Webhooks</button>
         <button data-page="settings"><span>11</span> Settings</button>
@@ -79,20 +85,10 @@
         </section>
 
         <section class="page hidden" data-view="pov">
-          <div class="page-intro"><span class="eyebrow">Live view</span><h2>Point of view</h2><p>Choose how to inspect the loaded world, then maximize one account to open its live view.</p></div>
+          <div class="page-intro"><span class="eyebrow">Live view</span><h2>Point of view</h2><p>Choose a mode in the sidebar, then maximize one account to open its live view.</p></div>
           <div class="pov-workspace">
             <div class="pov-heading"><div><h2>Bots</h2><p>Live POV streams for connected accounts.</p></div><div class="pov-tools"><input id="povSearch" class="filter" aria-label="Search bots" placeholder="Search bots"><button id="povSort" class="icon-button" title="Sort bots">Sort</button><button class="icon-button" type="button" title="POV information">Info</button></div></div>
-            <div class="pov-layout">
-              <div id="povBotGrid" class="pov-bot-grid"></div>
-              <aside class="panel pov-mode-panel" aria-labelledby="povModeTitle">
-                <div class="pov-mode-heading"><span class="eyebrow">View mode</span><h2 id="povModeTitle">Choose a perspective</h2><p>The mode applies to the selected live POV.</p></div>
-                <div id="povModeOptions" class="pov-mode-options" role="group" aria-label="POV mode">
-                  <button type="button" class="pov-mode-option active" data-pov-mode="bot" aria-pressed="true"><span class="pov-mode-index">01</span><span class="pov-mode-copy"><strong>Bot POV</strong><small>Control the real Minecraft bot with pointer lock.</small></span><span class="pov-mode-mark" aria-hidden="true">↗</span></button>
-                  <button type="button" class="pov-mode-option" data-pov-mode="freecam" aria-pressed="false"><span class="pov-mode-index">02</span><span class="pov-mode-copy"><strong>Freecam</strong><small>Inspect the loaded area without moving the bot.</small></span><span class="pov-mode-mark" aria-hidden="true">↗</span></button>
-                </div>
-                <div class="pov-mode-context"><span>Selected mode</span><strong id="povModeState">Bot POV</strong><small id="povModeContext">Choose a bot to open its live view.</small></div>
-              </aside>
-            </div>
+            <div id="povBotGrid" class="pov-bot-grid"></div>
           </div>
         </section>
 

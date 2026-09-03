@@ -49,8 +49,12 @@ test("Offline-Dashboard: Login, State, Health, Preview und Sicherheitsfehler", {
     const dashboardPage = await fetch(`${baseUrl}/`, { headers });
     assert.equal(dashboardPage.status, 200);
     const dashboardHtml = await dashboardPage.text();
+    assert.match(dashboardHtml, /id="povNavToggle"[^>]*aria-expanded="false"/);
+    assert.match(dashboardHtml, /id="povModeSubnav"[^>]*hidden/);
+    assert.equal((dashboardHtml.match(/data-pov-mode="/g) || []).length, 2);
     assert.match(dashboardHtml, /data-pov-mode="bot"/);
     assert.match(dashboardHtml, /data-pov-mode="freecam"/);
+    assert.doesNotMatch(dashboardHtml, /pov-mode-panel|Choose a perspective/);
     const viewerBundle = await fetch(`${baseUrl}/pov-viewer/index.js`, { headers });
     assert.equal(viewerBundle.status, 200);
     assert.ok(Number(viewerBundle.headers.get("content-length") ?? 0) > 0 || (await viewerBundle.arrayBuffer()).byteLength > 1_000_000);

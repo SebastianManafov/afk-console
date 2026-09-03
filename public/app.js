@@ -54,19 +54,11 @@ const povSelection = createPovSelectionController({
 
 function renderPovMode (mode) {
   const activeMode = mode === 'freecam' ? 'freecam' : 'bot'
-  const label = activeMode === 'freecam' ? 'Freecam' : 'Bot POV'
   document.querySelectorAll('[data-pov-mode]').forEach((button) => {
     const active = button.dataset.povMode === activeMode
     button.classList.toggle('active', active)
     button.setAttribute('aria-pressed', String(active))
   })
-  const state = $('povModeState')
-  if (state) state.textContent = label
-  const context = $('povModeContext')
-  if (context) {
-    const account = maximizedPovAccountId ? botForAccount(maximizedPovAccountId) : null
-    context.textContent = account ? `Applies to ${account.username || 'the selected account'}.` : 'Choose a bot to open its live view.'
-  }
 }
 
 renderPovMode(povSelection.mode)
@@ -156,10 +148,30 @@ function showPage(name) {
   if (name !== 'pov' && povSelection.activeAccountId) povSelection.clear()
   document.querySelectorAll('.page').forEach((page) => page.classList.toggle('hidden', page.dataset.view !== name))
   document.querySelectorAll('[data-page]').forEach((button) => button.classList.toggle('active', button.dataset.page === name))
-  const label = (document.querySelector(`nav [data-page="${name}"]`)?.textContent.trim() || name).replace(/^\d+\s*/, '').replace(/^[^A-Za-z0-9]+/, '')
+  setPovNavExpanded(name === 'pov')
+  const pageButton = document.querySelector(`nav [data-page="${name}"]`)
+  const label = (pageButton?.querySelector('.nav-pov-label')?.textContent.trim() || pageButton?.textContent.trim() || name).replace(/^\d+\s*/, '').replace(/^[^A-Za-z0-9]+/, '')
   $('pageTitle').textContent = label
   $('app').classList.remove('nav-open')
   history.replaceState(null, '', `#${name}`)
+}
+
+function setPovNavExpanded (expanded) {
+  const toggle = $('povNavToggle')
+  const submenu = $('povModeSubnav')
+  if (!toggle || !submenu) return
+  toggle.setAttribute('aria-expanded', String(expanded))
+  submenu.hidden = !expanded
+}
+
+function togglePovNav () {
+  const submenu = $('povModeSubnav')
+  if (!submenu) return
+  if (location.hash !== '#pov') {
+    showPage('pov')
+    return
+  }
+  setPovNavExpanded(submenu.hidden)
 }
 
 function botSnapshots() { return state?.bots?.length ? state.bots : state ? [state] : [] }
@@ -575,7 +587,11 @@ async function loginMicrosoftAccount(accountId) { try { await api('/api/account/
 async function logoutMicrosoftAccount(accountId, name) { if (!confirm(`Remove Microsoft authentication for “${name}”? The OAuth token will be deleted locally.`)) return; if (povSelection.isSelected(accountId)) povSelection.clear(); try { await api('/api/account/logout', { method: 'POST', body: JSON.stringify({ accountId }) }); toast('Microsoft authentication removed') } catch (error) { toast(error.message, true) } }
 async function deleteAccount(accountId, name) { if (!confirm(`Delete account “${name}” and its local OAuth token?`)) return; if (povSelection.isSelected(accountId)) povSelection.clear(); try { const result = await api('/api/account', { method: 'DELETE', body: JSON.stringify({ accountId }) }); config = result.config; await saveProfilePatch({ accounts: config.accounts }); toast('Account deleted') } catch (error) { toast(error.message, true) } }
 
-document.querySelectorAll('[data-page]').forEach((button) => button.addEventListener('click', () => showPage(button.dataset.page)))
+document.querySelectorAll('[data-page]').forEach((button) => {
+  if (button.id === 'povNavToggle') return
+  button.addEventListener('click', () => showPage(button.dataset.page))
+})
+$('povNavToggle')?.addEventListener('click', togglePovNav)
 document.querySelectorAll('.configure-account,.configure-server').forEach((button) => button.addEventListener('click', () => showPage('settings')))
 document.querySelector('.nav-label button').onclick = () => openProfileDialog('server')
 document.querySelector('.profile').onclick = () => showPage('connect')
