@@ -5,8 +5,9 @@ Updated: 2026-09-03
 ## Current status
 
 RCC’s browser dashboard and POV control path are implemented and verified. The
-latest frontend redesign is available on `origin/main` in commit `ef81477`
-(`Redesign dashboard with warm minimal UI`).
+latest pushed movement fix is available on `origin/main` in commit `4c1de8a`
+(`Fix modern movement packet synchronization`); it includes the frontend
+redesign from `ef81477`.
 
 ## Completed
 
@@ -26,11 +27,14 @@ latest frontend redesign is available on `origin/main` in commit `ef81477`
   were refreshed without changing renderer or control behavior.
 - Generated POV assets were rebuilt through the existing CSP-safe build
   pipeline.
+- Modern 1.21.3+/26.1 movement synchronizes complete `player_input` state,
+  movement rotation, horizontal-collision flags, and `tick_end`; legacy
+  protocol movement remains on Mineflayer’s native path.
 
 ## Verification
 
 - `pnpm build` passed.
-- `pnpm test` passed: 50 tests, 0 failures.
+- `pnpm test` passed: 54 tests, 0 failures.
 - POV item-icon and geometry regressions passed for 1.21.4, including Y=`-64`
   and Y=`288` sections.
 - `git diff --check` passed.
