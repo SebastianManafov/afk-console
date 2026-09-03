@@ -18,6 +18,12 @@ while retaining the shared renderer and existing Bot POV control path.
   Microsoft OAuth and Minecraft Java tokens are selected explicitly, stored in
   separate encrypted per-account paths, and displayed only as safe status
   metadata.
+- README includes the Access Token Tutorial with the exact Microsoft OAuth and
+  Minecraft Java terminology, clipboard-safe helper commands, and verified
+  Prism Launcher extraction guidance; other launcher-specific extraction uses
+  the generic method where no stable path was verified.
+- The legacy `CHANGELOG.md` was removed; `README.md` is the primary project
+  overview and usage documentation.
 - Viewer leases use reliable one-second heartbeats with a five-second dead-man
   timeout and refresh on valid movement, look, and action input.
 - Lease expiry and every authoritative cleanup path clear movement states,
@@ -52,8 +58,8 @@ while retaining the shared renderer and existing Bot POV control path.
   encrypted at rest, Minecraft Java profiles are validated server-side, direct
   Minecraft sessions bypass Microsoft Authflow, and tokens are absent from
   normal API/state responses.
-- The working tree is clean after the local commit; this change is intentionally
-  not pushed to `origin/main`.
+- The latest changes are committed and pushed to `origin/main`; the working
+  tree is clean.
 
 ## Using browser controls
 

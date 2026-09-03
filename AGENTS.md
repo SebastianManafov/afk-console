@@ -113,11 +113,12 @@ configured.
 6. Summarize what changed, what was verified, and any remaining limitation.
 
 Use imperative, focused commit messages (for example, `Fix negative-height
-POV sections`). After a completed code change, create the focused commit
+POV sections`). After a completed change, create the focused commit
 automatically once the relevant checks pass, then push that commit to the
-configured upstream branch (normally `origin/main`). Documentation-only or
-exploratory changes may remain uncommitted unless requested otherwise. Never
-rewrite history, force-push, or delete data.
+configured upstream branch (normally `origin/main`). Documentation-only
+changes should also be committed and pushed unless the user explicitly
+requests otherwise; exploratory changes may remain uncommitted. Never rewrite
+history, force-push, or delete data.
 
 After every new RCC version is pushed to GitHub, tell the user exactly what to
 run in their console to update and start it. Provide a copy-pasteable command
