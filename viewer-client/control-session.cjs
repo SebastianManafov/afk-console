@@ -101,7 +101,7 @@ class ControlSession {
   }
 
   press (control) {
-    if (typeof control !== 'string' || !MOVEMENT_CONTROLS.has(control) || this.held.has(control)) return false
+    if (!this.botPov || typeof control !== 'string' || !MOVEMENT_CONTROLS.has(control) || this.held.has(control)) return false
     this.held.add(control)
     if (!this.canControl) return false
     this.pressed.add(control)

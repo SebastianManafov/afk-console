@@ -7,7 +7,7 @@
   <link rel="stylesheet" href="styles.css">
 </head>
 <body>
-  <div id="hud"><button id="follow" class="active" type="button" aria-pressed="true">Bot POV</button><button id="freecam" type="button" aria-pressed="false">Freecam</button><span id="status" role="status">Connecting...</span><span id="controlStatus" role="status">View-only</span><span id="vitals">Health - · Food - · XP -</span><span id="hint">Maximize this POV, click the canvas for pointer lock, then use WASD · Mouse · Space/Shift · F Freecam · Tab Players · M Minimap · Esc release</span></div>
+  <div id="hud"><span id="status" role="status">Connecting...</span><span id="controlStatus" role="status">View-only</span><span id="vitals">Health - · Food - · XP -</span><span id="hint">Choose a mode in the dashboard, then click the canvas. Bot POV: WASD · Mouse · Space/Shift · Tab Players · M Minimap · Esc release</span></div>
   <div id="crosshair">+</div>
   <div id="chatOverlay" aria-live="polite"></div>
   <div id="minecraftHud">
@@ -47,7 +47,7 @@
   </section>
   <div id="playerList" class="panel" hidden><strong>Players online</strong><div id="players"></div></div>
   <canvas id="minimap" width="180" height="180" hidden></canvas>
-  <div id="controls">Maximize this POV and click the canvas for pointer lock. Bot POV: WASD · Mouse · E inventory · Left click dig/attack · Right click use · Scroll or 1–9 select hotbar · Esc releases controls</div>
+  <div id="controls">Choose Bot POV or Freecam in the dashboard, then click the canvas. Bot POV: WASD · Mouse · E inventory · Left click dig/attack · Right click use · Scroll or 1–9 select hotbar · Esc releases controls</div>
   <script src="index.js"></script>
 </body>
 </html>

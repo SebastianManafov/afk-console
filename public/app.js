@@ -23,12 +23,14 @@ let maximizedPovAccountId = null
 
 function isAdminSession() { return sessionRole === 'admin' }
 
-function sendPovActivation(accountId, active) {
+function sendPovActivation(accountId, active, mode = 'bot') {
   const iframe = $('povBotGrid')?.querySelector(`[data-account-id="${CSS.escape(accountId)}"] iframe`)
   if (!iframe?.contentWindow) return
   const bot = botForAccount(accountId)
   if (active && (!bot || bot.connection !== 'online' || bot.worldTransition?.state !== 'stable')) active = false
-  iframe.contentWindow.postMessage({ type: 'rcc-pov-activation', accountId, active: active === true }, location.origin)
+  const message = { type: 'rcc-pov-activation', accountId, active: active === true }
+  if (active === true) message.mode = mode === 'freecam' ? 'freecam' : 'bot'
+  iframe.contentWindow.postMessage(message, location.origin)
 }
 
 function setPovCardMaximized(accountId, maximized) {
@@ -45,8 +47,29 @@ const povSelection = createPovSelectionController({
   onSelectionChanged: (accountId) => {
     maximizedPovAccountId = accountId
     document.body.classList.toggle('pov-maximized', Boolean(accountId))
-  }
+    renderPovMode(povSelection.mode)
+  },
+  onModeChanged: renderPovMode
 })
+
+function renderPovMode (mode) {
+  const activeMode = mode === 'freecam' ? 'freecam' : 'bot'
+  const label = activeMode === 'freecam' ? 'Freecam' : 'Bot POV'
+  document.querySelectorAll('[data-pov-mode]').forEach((button) => {
+    const active = button.dataset.povMode === activeMode
+    button.classList.toggle('active', active)
+    button.setAttribute('aria-pressed', String(active))
+  })
+  const state = $('povModeState')
+  if (state) state.textContent = label
+  const context = $('povModeContext')
+  if (context) {
+    const account = maximizedPovAccountId ? botForAccount(maximizedPovAccountId) : null
+    context.textContent = account ? `Applies to ${account.username || 'the selected account'}.` : 'Choose a bot to open its live view.'
+  }
+}
+
+renderPovMode(povSelection.mode)
 
 window.addEventListener('message', (event) => {
   if (event.origin !== location.origin) return
@@ -300,6 +323,7 @@ function updatePovCard(card, bot) {
 }
 $('povSearch')?.addEventListener('input', renderPovBots)
 $('povSort')?.addEventListener('click', () => { povSortAscending = !povSortAscending; renderPovBots() })
+document.querySelectorAll('[data-pov-mode]').forEach((button) => button.addEventListener('click', () => { povSelection.setMode(button.dataset.povMode) }))
 
 function renderDiagnostics() {
   const bots = state.bots?.length ? state.bots : [state]

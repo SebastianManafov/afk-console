@@ -78,7 +78,23 @@
           <div class="inventory-layout"><div class="panel"><div class="subbar"><h2>Player inventory</h2><label>Account<select id="inventoryAccountSelect" class="operational-account-select"></select></label></div><div id="inventoryGrid" class="inventory-grid"></div><h3>Hotbar</h3><div id="hotbar" class="inventory-grid hotbar"></div></div><aside class="panel bulk"><h2>Slot action</h2><label>On click<select id="inventoryActionMode"><option value="inspect">Inspect item</option><option value="shift">Shift-click</option><option value="drop-one">Drop one item</option><option value="drop-stack">Drop entire stack</option><option value="offhand">Move to offhand</option></select></label><button id="useInventory" class="btn dark full">Right-click active hand</button><button id="dropInventory" class="btn red full" disabled>Drop entire inventory</button><p class="warning">Full stacks require confirmation. Bulk dropping stays disabled.</p></aside></div>
         </section>
 
-        <section class="page hidden" data-view="pov"><div class="page-intro"><span class="eyebrow">Live view</span><h2>Point of view</h2><p>Watch connected accounts in real time. Maximize one POV to unlock admin controls.</p></div><div class="pov-workspace"><div class="pov-heading"><div><h2>Bots</h2><p>Live POV streams for connected accounts.</p></div><div class="pov-tools"><input id="povSearch" class="filter" aria-label="Search bots" placeholder="Search bots"><button id="povSort" class="icon-button" title="Sort bots">Sort</button><button class="icon-button" type="button" title="POV information">Info</button></div></div><div id="povBotGrid" class="pov-bot-grid"></div></div></section>
+        <section class="page hidden" data-view="pov">
+          <div class="page-intro"><span class="eyebrow">Live view</span><h2>Point of view</h2><p>Choose how to inspect the loaded world, then maximize one account to open its live view.</p></div>
+          <div class="pov-workspace">
+            <div class="pov-heading"><div><h2>Bots</h2><p>Live POV streams for connected accounts.</p></div><div class="pov-tools"><input id="povSearch" class="filter" aria-label="Search bots" placeholder="Search bots"><button id="povSort" class="icon-button" title="Sort bots">Sort</button><button class="icon-button" type="button" title="POV information">Info</button></div></div>
+            <div class="pov-layout">
+              <div id="povBotGrid" class="pov-bot-grid"></div>
+              <aside class="panel pov-mode-panel" aria-labelledby="povModeTitle">
+                <div class="pov-mode-heading"><span class="eyebrow">View mode</span><h2 id="povModeTitle">Choose a perspective</h2><p>The mode applies to the selected live POV.</p></div>
+                <div id="povModeOptions" class="pov-mode-options" role="group" aria-label="POV mode">
+                  <button type="button" class="pov-mode-option active" data-pov-mode="bot" aria-pressed="true"><span class="pov-mode-index">01</span><span class="pov-mode-copy"><strong>Bot POV</strong><small>Control the real Minecraft bot with pointer lock.</small></span><span class="pov-mode-mark" aria-hidden="true">↗</span></button>
+                  <button type="button" class="pov-mode-option" data-pov-mode="freecam" aria-pressed="false"><span class="pov-mode-index">02</span><span class="pov-mode-copy"><strong>Freecam</strong><small>Inspect the loaded area without moving the bot.</small></span><span class="pov-mode-mark" aria-hidden="true">↗</span></button>
+                </div>
+                <div class="pov-mode-context"><span>Selected mode</span><strong id="povModeState">Bot POV</strong><small id="povModeContext">Choose a bot to open its live view.</small></div>
+              </aside>
+            </div>
+          </div>
+        </section>
 
 
         <section class="page hidden" data-view="macros">

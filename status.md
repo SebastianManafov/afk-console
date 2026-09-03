@@ -5,13 +5,14 @@ Updated: 2026-09-03
 ## Current status
 
 RCC’s browser dashboard and POV control path are implemented and verified. The
-latest pushed movement fix is available on `origin/main` in commit `4c1de8a`
-(`Fix modern movement packet synchronization`); it includes the frontend
-redesign from `ef81477`.
+POV page now exposes Bot POV and Freecam as outer dashboard mode choices while
+retaining the shared renderer and existing Bot POV control path.
 
 ## Completed
 
 - POV control uses Mineflayer movement and interaction states directly.
+- POV mode selection lives in the dashboard’s POV section: Bot POV controls the
+  real bot, while Freecam moves only the local camera through the loaded world.
 - Viewer leases use reliable one-second heartbeats with a five-second dead-man
   timeout and refresh on valid movement, look, and action input.
 - Lease expiry and every authoritative cleanup path clear movement states,
@@ -34,22 +35,24 @@ redesign from `ef81477`.
 ## Verification
 
 - `pnpm build` passed.
-- `pnpm test` passed: 54 tests, 0 failures.
+- `pnpm test` passed: 56 tests, 0 failures.
 - POV item-icon and geometry regressions passed for 1.21.4, including Y=`-64`
   and Y=`288` sections.
 - `git diff --check` passed.
-- Browser visual QA passed across login, dashboard pages, settings, POV,
-  macros, inventory, chat, dark theme, dialogs, and responsive layout using
-  an offline local run. No Minecraft server was joined during verification.
+- Browser visual QA passed across login, dashboard pages, settings, POV mode
+  selection, macros, inventory, chat, dark theme, dialogs, and responsive
+  layout using an offline local run. No Minecraft server was joined during
+  verification.
 - The working tree is clean and `HEAD` matches `origin/main`.
 
 ## Using browser controls
 
 1. Log in with an admin dashboard session.
-2. Open `POV` and maximize the bot card.
-3. Click the canvas to acquire pointer lock.
-4. Use `W`, `A`, `S`, `D` for movement; mouse movement to look; `Space` to
-   jump; `Shift` to sneak; and `Ctrl` to sprint.
+2. Open `POV` and choose `Bot POV` or `Freecam` in the right-side mode panel.
+3. Maximize one bot card, then click the canvas to acquire pointer lock.
+4. In Bot POV, use `W`, `A`, `S`, `D` for movement; mouse movement to look;
+   `Space` to jump; `Shift` to sneak; and `Ctrl` to sprint. Freecam movement
+   stays client-side and does not send Minecraft movement controls.
 5. Press `Escape` to release controls. After a disconnect, timeout, or world
    transition, click the canvas again once the bot is stable to reacquire the
    lease.
@@ -60,7 +63,8 @@ Non-maximized cards and Freecam never emit bot controls.
 
 Pull the pushed commit, rebuild, and start the dashboard in the target
 environment. Then perform live browser QA with an authorized admin account
-against the intended Minecraft server, including pointer-lock switching,
+against the intended Minecraft server, including POV mode switching,
+pointer-lock switching,
 minimize/restore, tab hiding, reconnects, macros, and world transitions.
 
 For Codespaces:

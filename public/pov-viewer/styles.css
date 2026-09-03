@@ -30,7 +30,7 @@ body:not(.live) #minecraftHud { display: none; }
   color: var(--viewer-paper);
   font-size: 12px;
 }
-#hud button, #hud span {
+#hud span {
   min-height: 34px;
   display: inline-flex;
   align-items: center;
@@ -40,9 +40,6 @@ body:not(.live) #minecraftHud { display: none; }
   background: var(--viewer-panel);
   color: var(--viewer-paper);
 }
-#hud button { cursor: pointer; }
-#hud button:hover { border-color: #f7f6f380; }
-#hud button.active { border-color: var(--viewer-success); color: var(--viewer-success); }
 #status { color: var(--viewer-muted); }
 #controlStatus { color: var(--viewer-muted); }
 #vitals { color: var(--viewer-paper); font-family: "SF Mono", "Geist Mono", ui-monospace, monospace; font-size: 10px; }

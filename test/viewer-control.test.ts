@@ -279,6 +279,37 @@ test("browser control session replays movement held before the lease grant", () 
   assert.equal(session.pressedControls.size, 0);
 });
 
+test("browser control session releases bot state before entering freecam", () => {
+  const { createControlSession } = require(join(process.cwd(), "viewer-client/control-session.cjs")) as { createControlSession: (options: Record<string, unknown>) => any };
+  const events: Array<{ event: string; payload?: unknown }> = [];
+  const session = createControlSession({
+    emit: (event: string, payload: unknown) => events.push({ event, payload }),
+    setInterval: () => 1,
+    clearInterval: () => {},
+    setTimeout: () => 1,
+    clearTimeout: () => {}
+  }) as { setCapability(value: boolean): void; setParentActive(value: boolean): void; setSocketConnected(value: boolean): void; setPointerLocked(value: boolean): void; setLeaseGranted(value: boolean): void; setMode(value: string): void; keyDown(value: string): boolean; look(yaw: number, pitch: number): boolean; canControl: boolean };
+  session.setCapability(true);
+  session.setParentActive(true);
+  session.setSocketConnected(true);
+  session.setPointerLocked(true);
+  session.setLeaseGranted(true);
+  assert.equal(session.keyDown("forward"), true);
+  assert.equal(session.keyDown("right"), true);
+  const switchStart = events.length;
+
+  session.setMode("freecam");
+
+  assert.equal(session.canControl, false);
+  assert.equal(session.keyDown("forward"), false);
+  assert.equal(session.look(0.5, 0.25), false);
+  assert.deepEqual(events.slice(switchStart).map((entry) => [entry.event, (entry.payload as { control?: string; enabled?: boolean } | undefined)?.control, (entry.payload as { enabled?: boolean } | undefined)?.enabled]), [
+    ["botControl", "forward", false],
+    ["botControl", "right", false],
+    ["viewerControlRelease", undefined, undefined]
+  ]);
+});
+
 test("POV selection releases before switching and replays replacement iframe activation", async () => {
   const { createPovSelectionController } = await import(pathToFileURL(join(process.cwd(), "public/pov-selection.js")).href) as { createPovSelectionController: (options: Record<string, unknown>) => any };
   const calls: string[] = [];
@@ -296,6 +327,21 @@ test("POV selection releases before switching and replays replacement iframe act
   assert.deepEqual(calls.slice(-2), ["message:b:false", "message:b:true"]);
   selection.minimize("b");
   assert.equal(selection.activeAccountId, null);
+});
+
+test("POV selection propagates the chosen mode to the active viewer", async () => {
+  const { createPovSelectionController } = await import(pathToFileURL(join(process.cwd(), "public/pov-selection.js")).href) as { createPovSelectionController: (options: Record<string, unknown>) => any };
+  const activations: Array<{ accountId: string; active: boolean; mode?: string }> = [];
+  const selection = createPovSelectionController({
+    sendActivation: (accountId: string, active: boolean, mode?: string) => activations.push({ accountId, active, mode }),
+    setCardMaximized: () => {}
+  });
+
+  assert.equal(selection.setMode("freecam"), true);
+  selection.select("a");
+  assert.deepEqual(activations.at(-1), { accountId: "a", active: true, mode: "freecam" });
+  assert.equal(selection.setMode("bot"), true);
+  assert.deepEqual(activations.at(-1), { accountId: "a", active: true, mode: "bot" });
 });
 
 test("viewer socket handlers keep guests read-only and bind admin input to the socket account", async () => {

@@ -41,7 +41,15 @@ test("Offline-Dashboard: Login, State, Health, Preview und Sicherheitsfehler", {
     assert.equal((await fetch(`${baseUrl}/pov-viewer/`)).status, 401);
     const viewerPage = await fetch(`${baseUrl}/pov-viewer/`, { headers });
     assert.equal(viewerPage.status, 200);
-    assert.match(await viewerPage.text(), /WASD · Mouse/);
+    const viewerHtml = await viewerPage.text();
+    assert.match(viewerHtml, /WASD · Mouse/);
+    assert.match(viewerHtml, /Choose a mode in the dashboard/);
+    assert.doesNotMatch(viewerHtml, /id="follow"|id="freecam"/);
+    const dashboardPage = await fetch(`${baseUrl}/`, { headers });
+    assert.equal(dashboardPage.status, 200);
+    const dashboardHtml = await dashboardPage.text();
+    assert.match(dashboardHtml, /data-pov-mode="bot"/);
+    assert.match(dashboardHtml, /data-pov-mode="freecam"/);
     const viewerBundle = await fetch(`${baseUrl}/pov-viewer/index.js`, { headers });
     assert.equal(viewerBundle.status, 200);
     assert.ok(Number(viewerBundle.headers.get("content-length") ?? 0) > 0 || (await viewerBundle.arrayBuffer()).byteLength > 1_000_000);

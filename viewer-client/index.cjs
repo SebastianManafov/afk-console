@@ -58,8 +58,6 @@ socket.on('viewerDiagnostics', (data) => {
   if (data.stage === 'error') status.textContent = `POV error: ${data.message}`
   reportViewerState(`server ${data.stage}`, data)
 })
-const followButton = document.getElementById('follow')
-const freecamButton = document.getElementById('freecam')
 const status = document.getElementById('status')
 const controlStatus = document.getElementById('controlStatus')
 const vitals = document.getElementById('vitals')
@@ -132,6 +130,7 @@ window.addEventListener('message', (event) => {
   const message = event.data
   if (!message || typeof message !== 'object' || message.accountId !== accountId) return
   if (message.type === 'rcc-pov-activation' || message.type === 'povActivation') {
+    if (message.mode === 'bot' || message.mode === 'freecam') setMode(message.mode)
     if (message.active !== true) keys.clear()
     controlSession.setParentActive(message.active === true)
     if (message.active !== true && document.pointerLockElement === renderer.domElement) document.exitPointerLock()
@@ -151,27 +150,31 @@ function lockPointer () {
     if (result?.catch) result.catch(() => {})
   } catch {}
 }
-function setMode(nextFreecam) {
+function setMode (nextMode) {
+  const nextFreecam = nextMode === 'freecam'
+  if (nextFreecam === freecam) return
+  keys.clear()
   freecam = nextFreecam
   controlSession.setBotPov(!freecam)
-  followButton.classList.toggle('active', !freecam)
-  freecamButton.classList.toggle('active', freecam)
-  followButton.setAttribute('aria-pressed', String(!freecam))
-  freecamButton.setAttribute('aria-pressed', String(freecam))
-  if (freecam && botPosition) viewer.camera.position.set(botPosition.x, botPosition.y + 1.62, botPosition.z)
+  if (freecam && botPosition) {
+    yaw = botYaw
+    pitch = botPitch
+    viewer.camera.position.set(botPosition.x, botPosition.y + 1.62, botPosition.z)
+  } else if (!freecam && botPosition) {
+    yaw = botYaw
+    pitch = botPitch
+    viewer.setFirstPersonCamera(botPosition, botYaw, botPitch)
+  }
   syncSelfVisibility()
 }
 function syncSelfVisibility () {
   const mesh = selfEntityId === null ? null : viewer.entities.entities[selfEntityId]
   if (mesh) mesh.visible = freecam
 }
-followButton.onclick = () => { setMode(false); lockPointer() }
-freecamButton.onclick = () => { setMode(true); lockPointer() }
 renderer.domElement.addEventListener('click', lockPointer)
 const movementControls = { KeyW: 'forward', KeyS: 'back', KeyA: 'left', KeyD: 'right', Space: 'jump', ShiftLeft: 'sneak', ShiftRight: 'sneak', ControlLeft: 'sprint', ControlRight: 'sprint' }
 document.addEventListener('keydown', (event) => {
   keys.add(event.code)
-  if (event.code === 'KeyF' && !event.repeat) setMode(!freecam)
   if (event.code === 'KeyE' && !event.repeat) setInventoryVisible(inventoryPanel.hidden)
   if (event.code === 'Escape' && !inventoryPanel.hidden) setInventoryVisible(false)
   if (event.code === 'Tab') { event.preventDefault(); playerList.hidden = false }
