@@ -1,6 +1,91 @@
 import { createCipheriv, createDecipheriv, createHash, randomBytes } from "node:crypto";
-import { existsSync, mkdirSync, readdirSync, readFileSync, renameSync, rmSync, statSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readdirSync, readFileSync, renameSync, rmSync, writeFileSync } from "node:fs";
 import { basename, dirname, join } from "node:path";
+import type { TokenStatus } from "./types.js";
+
+interface TokenScan {
+  configured: boolean;
+  invalid: boolean;
+  expiries: number[];
+}
+
+const emptyTokenStatus = (): TokenStatus => ({ configured: false, valid: false, expiresAt: null, status: "not_set" });
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return Boolean(value) && typeof value === "object" && !Array.isArray(value);
+}
+
+function parseTimestamp(value: unknown): number | null {
+  if (typeof value === "number" && Number.isFinite(value)) return value > 10_000_000_000 ? value : value * 1000;
+  if (typeof value !== "string" || !value.trim()) return null;
+  const numeric = Number(value);
+  if (Number.isFinite(numeric) && /^\d+(?:\.\d+)?$/.test(value.trim())) return numeric > 10_000_000_000 ? numeric : numeric * 1000;
+  const parsed = Date.parse(value);
+  return Number.isFinite(parsed) ? parsed : null;
+}
+
+function parseDuration(value: unknown): number | null {
+  const duration = typeof value === "number" ? value : typeof value === "string" && value.trim() ? Number(value) : Number.NaN;
+  return Number.isFinite(duration) ? duration : null;
+}
+
+function inspectAccessToken(value: string): { expiresAt: number | null; malformed: boolean } {
+  const segments = value.split(".");
+  if (segments.length !== 3) return { expiresAt: null, malformed: false };
+  try {
+    const payload = JSON.parse(Buffer.from(segments[1]!, "base64url").toString("utf8")) as unknown;
+    if (!isRecord(payload)) return { expiresAt: null, malformed: true };
+    if (payload.exp === undefined) return { expiresAt: null, malformed: false };
+    const expiresAt = parseTimestamp(payload.exp);
+    return { expiresAt, malformed: expiresAt === null };
+  } catch {
+    return { expiresAt: null, malformed: true };
+  }
+}
+
+function isCredentialField(key: string): boolean {
+  return /token|secret/i.test(key) && !/token[_-]?type/i.test(key);
+}
+
+function isExpiryField(key: string): boolean {
+  return /^(?:expires(?:on|at|_on|_at)?|validuntil|notafter|expiration(?:date)?)$/i.test(key);
+}
+
+function isDurationField(key: string): boolean {
+  return /^expires_?in$/i.test(key);
+}
+
+function scanTokenData(value: unknown): TokenScan {
+  const result: TokenScan = { configured: false, invalid: false, expiries: [] };
+  const visit = (item: unknown, key = ""): void => {
+    if (Array.isArray(item)) {
+      for (const child of item) visit(child, key);
+      return;
+    }
+    if (isRecord(item)) {
+      const obtainedOn = parseTimestamp(item.obtainedOn);
+      for (const [childKey, child] of Object.entries(item)) {
+        if (isExpiryField(childKey)) {
+          const expiresAt = parseTimestamp(child);
+          if (expiresAt !== null) result.expiries.push(expiresAt);
+        }
+        if (isDurationField(childKey) && obtainedOn !== null) {
+          const duration = parseDuration(child);
+          if (duration !== null) result.expiries.push(obtainedOn + duration * 1000);
+        }
+        visit(child, childKey);
+      }
+      return;
+    }
+    if (typeof item !== "string" || !item.trim() || !isCredentialField(key)) return;
+    result.configured = true;
+    const inspected = inspectAccessToken(item);
+    if (inspected.malformed) result.invalid = true;
+    if (inspected.expiresAt !== null) result.expiries.push(inspected.expiresAt);
+  };
+  visit(value);
+  return result;
+}
 
 export class TokenVault {
   private readonly key: Buffer;
@@ -26,26 +111,54 @@ export class TokenVault {
   }
 
   hasTokens(): boolean {
-    try { return this.files(this.directory).some((file) => statSync(file).size > 16); } catch { return false; }
+    return this.status().configured;
   }
 
   expiresAt(): string | null {
-    let best = Number.POSITIVE_INFINITY;
-    for (const file of this.files(this.directory)) {
+    return this.status().expiresAt;
+  }
+
+  status(): TokenStatus {
+    const files = this.files(this.directory).filter((file) => !file.endsWith(".tmp"));
+    if (!files.length) return emptyTokenStatus();
+    let configured = false;
+    let invalid = false;
+    const expiries: number[] = [];
+    for (const file of files) {
       try {
         const raw = file.endsWith(".vault") ? this.decrypt(readFileSync(file, "utf8")) : readFileSync(file);
-        const value = JSON.parse(raw.toString("utf8"));
-        const visit = (item: unknown, key = "") => {
-          if (item && typeof item === "object") for (const [childKey, child] of Object.entries(item)) visit(child, childKey);
-          else if (/expires(on|at|_on|_at)$/i.test(key) && (typeof item === "number" || typeof item === "string")) {
-            const parsed = typeof item === "number" ? (item > 10_000_000_000 ? item : item * 1000) : Date.parse(item);
-            if (Number.isFinite(parsed) && parsed > Date.now() - 86_400_000) best = Math.min(best, parsed);
-          }
-        };
-        visit(value);
-      } catch { /* Cache formats without JSON are ignored. */ }
+        const scan = scanTokenData(JSON.parse(raw.toString("utf8")) as unknown);
+        configured = configured || scan.configured;
+        invalid = invalid || scan.invalid;
+        expiries.push(...scan.expiries);
+      } catch {
+        invalid = true;
+      }
     }
-    return Number.isFinite(best) ? new Date(best).toISOString() : null;
+    if (!configured) return invalid ? { configured: true, valid: false, expiresAt: null, status: "invalid" } : emptyTokenStatus();
+    const now = Date.now();
+    const future = expiries.filter((value) => value > now).sort((left, right) => left - right);
+    if (invalid && !future.length) return { configured: true, valid: false, expiresAt: expiries.length ? new Date(Math.max(...expiries)).toISOString() : null, status: "invalid" };
+    if (future.length) return { configured: true, valid: true, expiresAt: new Date(future[0]!).toISOString(), status: "valid" };
+    if (expiries.length) return { configured: true, valid: false, expiresAt: new Date(Math.max(...expiries)).toISOString(), status: "expired" };
+    return { configured: true, valid: !invalid, expiresAt: null, status: invalid ? "invalid" : "valid" };
+  }
+
+  setAccessToken(username: string, accessToken: string): void {
+    const normalizedUsername = username.trim();
+    const normalizedToken = accessToken.trim();
+    if (!normalizedUsername) throw new Error("Microsoft account email is required before saving an access token");
+    if (!normalizedToken) throw new Error("Access token is required");
+    this.clear();
+    mkdirSync(this.directory, { recursive: true, mode: 0o700 });
+    const obtainedOn = Date.now();
+    const inspected = inspectAccessToken(normalizedToken);
+    const expiresIn = inspected.malformed ? 0 : inspected.expiresAt === null ? 3_600 : Math.floor((inspected.expiresAt - obtainedOn) / 1000);
+    const cache = JSON.stringify({ token: { access_token: normalizedToken, refresh_token: normalizedToken, token_type: "Bearer", expires_in: expiresIn, obtainedOn } });
+    const file = join(this.directory, `${createHash("sha1").update(normalizedUsername, "binary").digest("hex").slice(0, 6)}_live-cache.json.vault`);
+    const temporary = `${file}.tmp`;
+    writeFileSync(temporary, this.encrypt(Buffer.from(cache, "utf8")), { encoding: "utf8", mode: 0o600 });
+    renameSync(temporary, file);
   }
 
   clear(): void { if (existsSync(this.directory)) rmSync(this.directory, { recursive: true, force: true }); }

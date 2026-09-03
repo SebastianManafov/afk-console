@@ -12,7 +12,7 @@ import { decideAutoGuiJoin, determineControlLock, isMovementReady, isNewWorldSta
 import { readableMinecraftReason } from "./minecraft-text.js";
 import { SellMacro } from "./sell-macro.js";
 import { SpawnerMacro } from "./spawner-macro.js";
-import type { BotSnapshot } from "./types.js";
+import type { BotSnapshot, TokenStatus } from "./types.js";
 import type { WebhookNotifier } from "./webhook.js";
 import { TokenVault } from "./token-vault.js";
 import { ViewerControlDeniedError, ViewerControlLease, type ViewerControlInput } from "./viewer-control.js";
@@ -536,6 +536,16 @@ export class BotService {
     bot.chat(trimmed);
   }
 
+  setAccessToken(accessToken: string): TokenStatus {
+    if (this.authPromise || this.authPending) throw new Error("Microsoft authentication is already in progress");
+    const username = this.config.get().connection.username;
+    this.stop();
+    this.tokenVault.setAccessToken(username, accessToken);
+    this.lastError = null;
+    this.publish();
+    return this.tokenVault.status();
+  }
+
   async control(input: Record<string, unknown>): Promise<void> {
     if (!this.isPlayReady()) throw new Error(this.connection === "online" ? "World change in progress – controls are temporarily paused" : "Bot is not online");
     const controlLock = this.currentControlLock();
@@ -693,6 +703,7 @@ export class BotService {
     const shownEndpoint = this.bot && this.activeEndpoint ? this.activeEndpoint : configuredConnection;
     const position = this.bot?.entity?.position;
     const currentWindow = this.bot?.currentWindow;
+    const tokenStatus = this.tokenVault.status();
     return {
       connection: this.connection,
       username: this.bot?.username ?? null,
@@ -715,9 +726,10 @@ export class BotService {
         service: "rcc"
       },
       accountId: this.accountId,
-      authenticated: !this.authPending && this.tokenVault.hasTokens(),
+      authenticated: !this.authPending && tokenStatus.configured,
       authenticating: this.authPending,
-      authExpiresAt: this.tokenVault.expiresAt(),
+      authExpiresAt: tokenStatus.expiresAt,
+      tokenStatus,
       lastError: this.lastError,
       health: this.bot?.health ?? null,
       food: this.bot?.food ?? null,

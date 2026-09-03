@@ -23,6 +23,13 @@ Guests can inspect dashboard state, diagnostics, previews, inventory and POV ter
 
 Each account receives a private directory at `DATA_DIR/accounts/<account-id>/auth`. RCC restores Microsoft cache files only while authenticating or connecting and stores them encrypted at rest. Keep the same encryption key to reuse a session.
 
+The Accounts editor can replace a Microsoft access token without revealing the
+stored value. RCC writes the supplied token into the encrypted OAuth cache and
+the dashboard receives only derived status metadata (`valid`, `expired`,
+`invalid`, or `not_set`) and an optional expiry timestamp. Leaving the field
+empty preserves the current token; **Remove token** deletes the account's
+Microsoft authentication cache.
+
 ## Network identity
 
 Without a configured proxy, Minecraft sees the public egress IP of the machine running RCC. A Codespace therefore uses the Codespace egress IP. HTTP CONNECT proxies are optional and selected per account.

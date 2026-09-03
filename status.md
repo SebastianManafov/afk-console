@@ -14,6 +14,8 @@ while retaining the shared renderer and existing Bot POV control path.
 - POV mode selection lives in the expandable sidebar item under `08 POV`: Bot
   POV controls the real bot, while Freecam moves only the local camera through
   the loaded world.
+- Accounts show a derived Microsoft token status with no token value in the
+  browser; token replacement uses the encrypted per-account OAuth vault.
 - Viewer leases use reliable one-second heartbeats with a five-second dead-man
   timeout and refresh on valid movement, look, and action input.
 - Lease expiry and every authoritative cleanup path clear movement states,
@@ -44,6 +46,8 @@ while retaining the shared renderer and existing Bot POV control path.
   selection, macros, inventory, chat, dark theme, dialogs, and responsive
   layout using an offline local run. No Minecraft server was joined during
   verification.
+- Token-vault and dashboard redaction tests confirm submitted access tokens are
+  encrypted at rest and absent from normal API/state responses.
 - The working tree is clean and `HEAD` matches `origin/main`.
 
 ## Using browser controls

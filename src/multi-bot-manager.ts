@@ -4,7 +4,7 @@ import { rm } from "node:fs/promises";
 import type { ConfigReader, ConfigStore } from "./config.js";
 import { BotService } from "./bot-service.js";
 import { AppEvents } from "./events.js";
-import type { AppConfig, BotSnapshot } from "./types.js";
+import type { AppConfig, BotSnapshot, TokenStatus } from "./types.js";
 import type { WebhookNotifier } from "./webhook.js";
 import { selectPrimarySnapshot } from "./snapshot-policy.js";
 import { selectRoutedAccountId } from "./routing-policy.js";
@@ -98,6 +98,12 @@ export class MultiBotManager {
   }
   sendChat(message: string, accountId?: string): void { this.routedBot(accountId).sendChat(message); }
   control(input: Record<string, unknown>, accountId?: string): Promise<void> { return this.routedBot(accountId).control(input); }
+  setAccessToken(accountId: string, accessToken: string): TokenStatus {
+    this.sync();
+    const target = this.bots.get(accountId);
+    if (!target) throw new Error("Account not found");
+    return target.setAccessToken(accessToken);
+  }
   acquireViewerControl(accountId: string, controllerId: string): void { this.viewerBotService(accountId).acquireViewerControl(accountId, controllerId); }
   heartbeatViewerControl(accountId: string, controllerId: string): boolean { return this.viewerBotService(accountId).heartbeatViewerControl(accountId, controllerId); }
   viewerControl(accountId: string, controllerId: string, input: ViewerControlInput): Promise<void> { return this.viewerBotService(accountId).viewerControl(accountId, controllerId, input); }

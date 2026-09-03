@@ -423,10 +423,54 @@ function renderConfig() {
   renderProfiles()
 }
 
+const tokenStatusKinds = new Set(['valid', 'expired', 'invalid', 'not_set'])
+
+function normalizeTokenStatus (raw, fallbackBot = null) {
+  const hasStatus = raw && typeof raw === 'object' && tokenStatusKinds.has(raw.status)
+  if (hasStatus) {
+    const expiresAt = typeof raw.expiresAt === 'string' && Number.isFinite(Date.parse(raw.expiresAt)) ? raw.expiresAt : null
+    return { status: raw.status, configured: raw.status !== 'not_set', valid: raw.status === 'valid', expiresAt }
+  }
+  const expiresAt = typeof fallbackBot?.authExpiresAt === 'string' && Number.isFinite(Date.parse(fallbackBot.authExpiresAt)) ? fallbackBot.authExpiresAt : null
+  if (fallbackBot?.authenticated) return { status: expiresAt && Date.parse(expiresAt) <= Date.now() ? 'expired' : 'valid', configured: true, valid: !expiresAt || Date.parse(expiresAt) > Date.now(), expiresAt }
+  return { status: 'not_set', configured: false, valid: false, expiresAt: null }
+}
+
+function tokenStatusFor (bot) { return normalizeTokenStatus(bot?.tokenStatus, bot) }
+
+function formatTokenDate (value) {
+  if (!value || !Number.isFinite(Date.parse(value))) return null
+  return new Date(value).toLocaleString('en-GB', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' })
+}
+
+function tokenStatusIcon (status) {
+  const mark = status === 'valid'
+    ? '<path class="token-status-icon-mark" d="m8.5 12 2.3 2.3 4.7-5"></path>'
+    : status === 'not_set'
+      ? ''
+      : '<path class="token-status-icon-mark" d="M12 8.5v4.5m0 3h.01"></path>'
+  return `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3 19 6v5c0 4.5-3 8.4-7 10-4-1.6-7-5.5-7-10V6l7-3Z"></path>${mark}</svg>`
+}
+
+function tokenStatusCell (metadata) {
+  const status = normalizeTokenStatus(metadata).status
+  const label = { valid: 'Valid', expired: 'Expired', invalid: 'Invalid', not_set: 'Not set' }[status]
+  const expiry = formatTokenDate(metadata.expiresAt)
+  const tooltipLines = status === 'valid'
+    ? ['Token is valid', ...(expiry ? [`Expires: ${expiry}`] : [])]
+    : status === 'expired'
+      ? ['Token expired', ...(expiry ? [`Expired: ${expiry}`] : [])]
+      : status === 'invalid'
+        ? ['Token invalid']
+        : ['No access token configured']
+  const tooltip = tooltipLines.join('. ')
+  return `<td class="token-status-cell"><span class="token-status token-status-${status}" tabindex="0" aria-label="${escapeHtml(tooltip)}"><span class="token-status-icon">${tokenStatusIcon(status)}</span><span class="token-status-label">${label}</span><span class="token-status-tooltip" role="tooltip">${tooltipLines.map((line) => `<span>${escapeHtml(line)}</span>`).join('')}</span></span></td>`
+}
+
 function renderProfiles() {
   if (!config || !state) return
   const botMap = new Map((state.bots || [state]).map((bot) => [bot.accountId || 'primary', bot]))
-  const signature = JSON.stringify({ servers: config.servers, proxies: config.proxies, accounts: config.accounts, bots: [...botMap].map(([id, bot]) => ({ id, connection: bot.connection, authenticated: bot.authenticated, authenticating: bot.authenticating, hasAuthCode: Boolean(bot.authCode), authExpiresAt: bot.authExpiresAt, paused: bot.paused, lastError: bot.lastError, worldTransition: bot.worldTransition?.state, controlLocked: bot.controlLock?.locked })) })
+  const signature = JSON.stringify({ servers: config.servers, proxies: config.proxies, accounts: config.accounts, bots: [...botMap].map(([id, bot]) => ({ id, connection: bot.connection, authenticated: bot.authenticated, authenticating: bot.authenticating, hasAuthCode: Boolean(bot.authCode), authExpiresAt: bot.authExpiresAt, tokenStatus: bot.tokenStatus?.status, tokenExpiresAt: bot.tokenStatus?.expiresAt, paused: bot.paused, lastError: bot.lastError, worldTransition: bot.worldTransition?.state, controlLocked: bot.controlLock?.locked })) })
   if (signature === lastProfilesSignature) return
   lastProfilesSignature = signature
   if ($('serversTable')) {
@@ -451,12 +495,13 @@ function renderProfiles() {
       const proxyOptions = `<option value="">Direct</option>` + config.proxies.map((item) => `<option value="${escapeHtml(item.id)}" ${item.id === account.proxyId ? 'selected' : ''}>${escapeHtml(item.name)}</option>`).join('')
       const row = document.createElement('tr')
       const tokenWarning = bot?.authExpiresAt && Date.parse(bot.authExpiresAt) - Date.now() < 900_000 ? '<small class="token-warning">Token renewal soon</small>' : ''
+      const tokenStatus = tokenStatusFor(bot)
       const connectionAction = bot?.authenticating ? 'Microsoft login running …' : bot?.connection === 'online' ? 'Reconnect' : bot?.authenticated ? 'Connect' : 'Microsoft login'
       const connectionError = bot?.lastError ? `<small class="connection-error">${escapeHtml(bot.lastError)}</small>` : ''
       const loginDisabledReason = account.paused ? 'Paused accounts must be resumed first' : bot?.authenticating ? 'Microsoft authentication is already running' : ['connecting', 'reconnecting'].includes(status) ? 'Connection attempt is already running' : ''
       const emailHidden = hiddenEmailAccountIds.has(account.id)
       const visibleEmail = account.username || 'Not configured'
-      row.innerHTML = `<td><span class="player-head">${escapeHtml(account.name.slice(0, 1).toUpperCase())}</span></td><td><b>${escapeHtml(account.name)}</b><span class="email-visibility"><small class="account-email">${escapeHtml(emailHidden ? maskedEmail(visibleEmail) : visibleEmail)}</small><button type="button" class="email-toggle" aria-pressed="${emailHidden}" title="Email ${emailHidden ? 'show' : 'hide'}">${emailHidden ? 'Show' : 'Hide'}</button></span></td><td><select class="server-assignment">${serverOptions}</select></td><td><select class="proxy-assignment">${proxyOptions}</select></td><td><span class="status ${account.paused ? 'offline' : status}">${account.paused ? 'Paused' : labelStatus(status)}</span>${connectionError}</td><td><span class="status ${bot?.authenticated ? 'online' : bot?.authenticating ? 'connecting' : 'offline'}">${bot?.authenticated ? 'Signed in' : bot?.authenticating ? 'Waiting for Microsoft' : 'Login required'}</span>${tokenWarning}</td><td><div class="reconnect-rule"><label><input class="reconnect-enabled" type="checkbox" ${account.reconnectEnabled ? 'checked' : ''}> Auto reconnect</label><input class="reconnect-delays" value="${escapeHtml(account.reconnectDelaysSeconds.join(','))}" title="Seconds, comma separated"></div><div class="account-actions"><button class="btn dark account-edit">Edit</button><button class="btn dark account-pause">${account.paused ? 'Resume' : 'Pause'}</button><button class="btn green account-login" ${loginDisabledReason ? `disabled title="${escapeHtml(loginDisabledReason)}"` : ''}>${connectionAction}</button><button class="btn dark account-logout" ${bot?.authenticated && !bot?.authenticating ? '' : 'disabled'}>Logout</button><button class="btn red account-delete" ${config.accounts.length <= 1 ? 'disabled title="The last account cannot be deleted"' : ''}>Delete</button></div></td>`
+      row.innerHTML = `<td><span class="player-head">${escapeHtml(account.name.slice(0, 1).toUpperCase())}</span></td><td><b>${escapeHtml(account.name)}</b><span class="email-visibility"><small class="account-email">${escapeHtml(emailHidden ? maskedEmail(visibleEmail) : visibleEmail)}</small><button type="button" class="email-toggle" aria-pressed="${emailHidden}" title="Email ${emailHidden ? 'show' : 'hide'}">${emailHidden ? 'Show' : 'Hide'}</button></span></td><td><select class="server-assignment">${serverOptions}</select></td><td><select class="proxy-assignment">${proxyOptions}</select></td><td><span class="status ${account.paused ? 'offline' : status}">${account.paused ? 'Paused' : labelStatus(status)}</span>${connectionError}</td><td><span class="status ${bot?.authenticated ? 'online' : bot?.authenticating ? 'connecting' : 'offline'}">${bot?.authenticated ? 'Signed in' : bot?.authenticating ? 'Waiting for Microsoft' : 'Login required'}</span>${tokenWarning}</td>${tokenStatusCell(tokenStatus)}<td><div class="reconnect-rule"><label><input class="reconnect-enabled" type="checkbox" ${account.reconnectEnabled ? 'checked' : ''}> Auto reconnect</label><input class="reconnect-delays" value="${escapeHtml(account.reconnectDelaysSeconds.join(','))}" title="Seconds, comma separated"></div><div class="account-actions"><button class="btn dark account-edit">Edit</button><button class="btn dark account-pause">${account.paused ? 'Resume' : 'Pause'}</button><button class="btn green account-login" ${loginDisabledReason ? `disabled title="${escapeHtml(loginDisabledReason)}"` : ''}>${connectionAction}</button><button class="btn dark account-logout" ${bot?.authenticated && !bot?.authenticating ? '' : 'disabled'}>Logout</button><button class="btn red account-delete" ${config.accounts.length <= 1 ? 'disabled title="The last account cannot be deleted"' : ''}>Delete</button></div></td>`
       row.querySelector('.email-toggle').onclick = (event) => {
         const hidden = !hiddenEmailAccountIds.has(account.id)
         setEmailHidden(account.id, hidden)
@@ -645,6 +690,16 @@ async function saveMacros(notify = false) {
 }
 
 $('addWebhook').onclick = () => $('webhookUrl').focus()
+function renderProfileTokenState (raw) {
+  const metadata = normalizeTokenStatus(raw)
+  const configured = metadata.status !== 'not_set'
+  const state = { valid: 'Access token already configured', expired: 'Access token already configured · expired', invalid: 'Access token already configured · invalid', not_set: 'No access token configured' }[metadata.status]
+  $('profileTokenState').textContent = state
+  $('profileTokenHint').textContent = configured ? 'Leave the field empty to keep the current token unchanged.' : 'Enter an access token only if you have one available.'
+  $('profileInputToken').placeholder = configured ? 'Enter new token to replace existing token' : 'Enter access token'
+  $('removeAccountToken').classList.toggle('hidden', !configured)
+}
+
 function openProfileDialog(type, item = null) {
   editingProfileId = item?.id || null; $('profileType').value = type; $('profileForm').reset(); $('profileType').value = type
   const account = type === 'account'; const proxy = type === 'proxy'; const server = type === 'server'
@@ -660,13 +715,26 @@ function openProfileDialog(type, item = null) {
   $('profileInputPort').value = server ? '25565' : proxy ? '8080' : ''
   $('profileInputVersion').value = config.servers[0]?.version || config.connection.version
   $('profileAutoGuiSlot').value = '0'; $('profileAutoGuiDelay').value = '750'
+  $('profileInputToken').value = ''
+  renderProfileTokenState(account && item ? tokenStatusFor(botForAccount(item.id)) : null)
   if (item) { $('profileInputName').value = item.name; $('profileInputHost').value = item.host || ''; $('profileInputPort').value = item.port || ''; $('profileInputVersion').value = item.version || config.servers[0]?.version || config.connection.version; $('profileInputEmail').value = account ? item.username || '' : ''; $('profileInputUser').value = proxy ? item.username || '' : ''; $('profileInputPassword').value = ''; $('profileAutoGuiEnabled').checked = Boolean(item.autoGuiJoinEnabled); $('profileAutoGuiTitle').value = item.autoGuiJoinTitleIncludes || ''; $('profileAutoGuiSlot').value = String(item.autoGuiJoinSlot ?? 0); $('profileAutoGuiDelay').value = String(item.autoGuiJoinDelayMs ?? 750) }
   $('profileDialog').showModal()
 }
 $('addServerProfile').onclick = () => openProfileDialog('server')
 $('addAccountProfile').onclick = () => openProfileDialog('account')
 $('addProxyProfile').onclick = () => openProfileDialog('proxy')
-$('closeProfileDialog').onclick = $('cancelProfileDialog').onclick = () => $('profileDialog').close()
+$('closeProfileDialog').onclick = $('cancelProfileDialog').onclick = () => { $('profileInputToken').value = ''; $('profileDialog').close() }
+$('removeAccountToken').onclick = async () => {
+  const accountId = editingProfileId
+  if ($('profileType').value !== 'account' || !accountId) return
+  if (!confirm('Remove the saved Microsoft access token?')) return
+  try {
+    const result = await api('/api/account/token', { method: 'DELETE', body: JSON.stringify({ accountId }) })
+    $('profileInputToken').value = ''
+    renderProfileTokenState(result.tokenStatus)
+    toast('Access token removed')
+  } catch (error) { toast(error.message, true) }
+}
 async function deleteServerProfile(server) { if (config.servers.length <= 1) return toast('The last server cannot be deleted.', true); if (config.accounts.some((account) => account.serverId === server.id)) return toast('This server is still assigned to an account.', true); if (!confirm(`Delete server “${server.name}”?`)) return; try { await saveProfilePatch({ servers: config.servers.filter((item) => item.id !== server.id) }); toast('Server deleted') } catch (error) { toast(error.message, true) } }
 async function deleteProxyProfile(proxy) { if (!confirm(`Delete proxy “${proxy.name}” and switch affected accounts to Direct?`)) return; try { await saveProfilePatch({ proxies: config.proxies.filter((item) => item.id !== proxy.id), accounts: config.accounts.map((account) => account.proxyId === proxy.id ? { ...account, proxyId: null } : account) }); toast('Proxy deleted') } catch (error) { toast(error.message, true) } }
 $('profileForm').onsubmit = async (event) => {
@@ -675,13 +743,19 @@ $('profileForm').onsubmit = async (event) => {
     if (type === 'server') { const item = { id: editingProfileId || `server-${Date.now()}`, name, host: $('profileInputHost').value.trim(), port: Number($('profileInputPort').value), version: $('profileInputVersion').value.trim(), autoGuiJoinEnabled: $('profileAutoGuiEnabled').checked, autoGuiJoinTitleIncludes: $('profileAutoGuiTitle').value.trim(), autoGuiJoinSlot: Number($('profileAutoGuiSlot').value), autoGuiJoinDelayMs: Number($('profileAutoGuiDelay').value) }; await saveProfilePatch({ servers: editingProfileId ? config.servers.map((server) => server.id === editingProfileId ? item : server) : [...config.servers, item] }) }
     if (type === 'account') {
       const email = $('profileInputEmail').value.trim(); const previous = config.accounts.find((account) => account.id === editingProfileId)
+      const accessToken = $('profileInputToken').value.trim()
       if (previous && previous.username !== email && !confirm('The email address changed. The existing Microsoft authentication will be removed. Continue?')) return
       if (previous && previous.username !== email) await api('/api/account/logout', { method: 'POST', body: JSON.stringify({ accountId: previous.id }) })
       const item = previous ? { ...previous, name, username: email } : { id: `account-${Date.now()}`, name, username: email, serverId: config.servers[0].id, proxyId: null, enabled: true, paused: false, autoConnect: false, reconnectEnabled: true, reconnectDelaysSeconds: [5, 15, 30, 60], sell: structuredClone(config.sell), spawner: structuredClone(config.spawner) }
       await saveProfilePatch({ accounts: previous ? config.accounts.map((account) => account.id === previous.id ? item : account) : [...config.accounts, item] })
+      if (accessToken) {
+        const result = await api('/api/account/token', { method: 'PUT', body: JSON.stringify({ accountId: item.id, accessToken }) })
+        $('profileInputToken').value = ''
+        renderProfileTokenState(result.tokenStatus)
+      }
     }
     if (type === 'proxy') { const previous = config.proxies.find((proxy) => proxy.id === editingProfileId); const item = { id: editingProfileId || `proxy-${Date.now()}`, name, host: $('profileInputHost').value.trim(), port: Number($('profileInputPort').value), username: $('profileInputUser').value.trim(), password: $('profileInputPassword').value || previous?.password || '' }; await saveProfilePatch({ proxies: editingProfileId ? config.proxies.map((proxy) => proxy.id === editingProfileId ? item : proxy) : [...config.proxies, item] }) }
-    $('profileDialog').close(); editingProfileId = null; toast('Profile saved')
+    $('profileInputToken').value = ''; $('profileDialog').close(); editingProfileId = null; toast('Profile saved')
   } catch (error) { toast(error.message, true) }
 }
 $('saveWebhook').onclick = async () => {

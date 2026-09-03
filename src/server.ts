@@ -294,6 +294,18 @@ async function handleApi(
     events.log("warn", "safety", "Emergency stop executed: bot disconnected and macros disabled");
     return json(response, 200, { ok: true, config: value });
   }
+  if (request.url === "/api/account/token" && request.method === "PUT") {
+    const body = await readJson(request);
+    const accountId = String(body.accountId ?? "");
+    const accessToken = typeof body.accessToken === "string" ? body.accessToken : "";
+    const tokenStatus = bot.setAccessToken(accountId, accessToken);
+    return json(response, 200, { ok: true, tokenStatus });
+  }
+  if (request.url === "/api/account/token" && request.method === "DELETE") {
+    const body = await readJson(request);
+    await bot.logout(String(body.accountId ?? ""));
+    return json(response, 200, { ok: true, tokenStatus: { configured: false, valid: false, expiresAt: null, status: "not_set" } });
+  }
   if (request.url === "/api/account/logout" && request.method === "POST") {
     const body = await readJson(request); await bot.logout(String(body.accountId ?? ""));
     return json(response, 200, { ok: true });
@@ -342,7 +354,7 @@ export function httpStatusForError(error: unknown): number {
   if (/Request too large|Request zu groß/i.test(message)) return 413;
   if (/Too many login attempts|Zu viele Loginversuche/i.test(message)) return 429;
   if (/not online|no selected account is online|paused|connection attempt is already running|accountId is required|no macro is running|nicht online|kein ausgewählter Account ist online|pausiert|Verbindungsaufbau läuft bereits|accountId ist erforderlich|läuft kein Makro/i.test(message)) return 409;
-  if (error instanceof SyntaxError || /Invalid|missing|not found|not configured|last account|cannot be deleted|Ungültig|fehlt|nicht gefunden|nicht konfiguriert|letzte Account|kann nicht gelöscht/i.test(message)) return 400;
+  if (error instanceof SyntaxError || /Invalid|missing|not found|not configured|access token is required|Microsoft account email is required|last account|cannot be deleted|Ungültig|fehlt|nicht gefunden|nicht konfiguriert|letzte Account|kann nicht gelöscht/i.test(message)) return 400;
   return 500;
 }
 

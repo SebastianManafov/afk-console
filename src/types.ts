@@ -1,5 +1,14 @@
 export type MacroStatus = "off" | "waiting" | "running" | "success" | "blocked" | "error";
 
+export type TokenStatusKind = "valid" | "expired" | "invalid" | "not_set";
+
+export interface TokenStatus {
+  configured: boolean;
+  valid: boolean;
+  expiresAt: string | null;
+  status: TokenStatusKind;
+}
+
 export interface MacroRuntime {
   enabled: boolean;
   status: MacroStatus;
@@ -138,6 +147,7 @@ export interface BotSnapshot {
   authenticated?: boolean;
   authenticating?: boolean;
   authExpiresAt?: string | null;
+  tokenStatus: TokenStatus;
   lastError?: string | null;
   paused?: boolean;
   bots?: BotSnapshot[];

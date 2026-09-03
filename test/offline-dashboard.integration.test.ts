@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { mkdtemp, rm } from "node:fs/promises";
+import { mkdtemp, readFile, readdir, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
@@ -19,6 +19,8 @@ test("Offline-Dashboard: Login, State, Health, Preview und Sicherheitsfehler", {
   process.env.SESSION_SECRET = "offline-integration-session-secret-123456";
   const config = new ConfigStore(directory, "offline-integration-config-secret-123456");
   await config.load();
+  const initialConfig = config.get();
+  await config.update({ accounts: initialConfig.accounts.map((account) => ({ ...account, username: "player@example.com" })) });
   const events = new AppEvents(false);
   const webhook = new WebhookNotifier(config, events);
   const bot = new MultiBotManager(config, events, webhook, directory);
@@ -55,6 +57,9 @@ test("Offline-Dashboard: Login, State, Health, Preview und Sicherheitsfehler", {
     assert.match(dashboardHtml, /data-pov-mode="bot"/);
     assert.match(dashboardHtml, /data-pov-mode="freecam"/);
     assert.doesNotMatch(dashboardHtml, /pov-mode-panel|Choose a perspective/);
+    assert.match(dashboardHtml, /id="profileInputToken" type="password"/);
+    assert.match(dashboardHtml, /placeholder="Enter new token to replace existing token"/);
+    assert.match(dashboardHtml, /id="removeAccountToken"/);
     const viewerBundle = await fetch(`${baseUrl}/pov-viewer/index.js`, { headers });
     assert.equal(viewerBundle.status, 200);
     assert.ok(Number(viewerBundle.headers.get("content-length") ?? 0) > 0 || (await viewerBundle.arrayBuffer()).byteLength > 1_000_000);
@@ -74,11 +79,30 @@ test("Offline-Dashboard: Login, State, Health, Preview und Sicherheitsfehler", {
 
     const stateResponse = await fetch(`${baseUrl}/api/state`, { headers });
     assert.equal(stateResponse.status, 200);
-    const body = await stateResponse.json() as { state: { connection: string; reconnectAt: string | null; bots: Array<{ connection: string }> }; logs: Array<{ message: string }> };
+    const body = await stateResponse.json() as { state: { connection: string; reconnectAt: string | null; bots: Array<{ connection: string; tokenStatus?: unknown }> }; logs: Array<{ message: string }> };
     assert.equal(body.state.connection, "offline");
     assert.equal(body.state.reconnectAt, null);
     assert.ok(body.state.bots.every((entry) => entry.connection === "offline"));
+    assert.deepEqual(body.state.bots[0]?.tokenStatus, { configured: false, valid: false, expiresAt: null, status: "not_set" });
     assert.equal(body.logs.some((entry) => /Verbindungsaufbau zu/.test(entry.message)), false);
+
+    const accessToken = "synthetic-dashboard-access-token";
+    const setToken = await fetch(`${baseUrl}/api/account/token`, { method: "PUT", headers: { ...headers, "content-type": "application/json" }, body: JSON.stringify({ accountId: "primary", accessToken }) });
+    assert.equal(setToken.status, 200);
+    const setTokenBody = await setToken.json() as { tokenStatus: { configured: boolean; valid: boolean; expiresAt: string | null; status: string } };
+    assert.equal(setTokenBody.tokenStatus.configured, true);
+    assert.equal(setTokenBody.tokenStatus.valid, true);
+    assert.equal(setTokenBody.tokenStatus.status, "valid");
+    assert.doesNotMatch(JSON.stringify(setTokenBody), new RegExp(accessToken));
+    const stateAfterToken = await (await fetch(`${baseUrl}/api/state`, { headers })).text();
+    assert.doesNotMatch(stateAfterToken, new RegExp(accessToken));
+    const tokenFiles = await readdir(join(directory, "accounts", "primary", "auth"));
+    assert.equal(tokenFiles.length, 1);
+    assert.match(tokenFiles[0]!, /\.vault$/);
+    assert.doesNotMatch(await readFile(join(directory, "accounts", "primary", "auth", tokenFiles[0]!), "utf8"), new RegExp(accessToken));
+    const removeToken = await fetch(`${baseUrl}/api/account/token`, { method: "DELETE", headers: { ...headers, "content-type": "application/json" }, body: JSON.stringify({ accountId: "primary" }) });
+    assert.equal(removeToken.status, 200);
+    assert.deepEqual((await removeToken.json() as { tokenStatus: unknown }).tokenStatus, { configured: false, valid: false, expiresAt: null, status: "not_set" });
 
     const systemCheck = await fetch(`${baseUrl}/api/system-check`, { headers });
     assert.equal(systemCheck.status, 200);
