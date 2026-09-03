@@ -121,6 +121,50 @@ test("BotService refreshes the active lease for valid viewer input", async () =>
   }
 });
 
+test("BotService clears Mineflayer movement and interaction state on viewer release", async () => {
+  const events = new AppEvents(false);
+  const previousEncryptionKey = process.env.CONFIG_ENCRYPTION_KEY;
+  process.env.CONFIG_ENCRYPTION_KEY = "viewer-control-release-test-key-1234567890";
+  let service: BotService | null = null;
+  const cleanupCalls: string[] = [];
+  try {
+    service = new BotService({ get: () => DEFAULT_CONFIG }, events, { send: async () => false } as any, process.cwd(), "account-a");
+    const internal = service as any;
+    internal.bot = {
+      _client: { state: "play" },
+      entity: { position: { x: 0, y: 64, z: 0 } },
+      player: { ping: 0 },
+      username: "Synthetic viewer bot",
+      health: 20,
+      food: 20,
+      experience: { level: 0 },
+      inventory: { slots: [], items: () => [] },
+      currentWindow: null,
+      quickBarSlot: 0,
+      heldItem: null,
+      physicsEnabled: true,
+      setControlState: () => {},
+      clearControlStates: () => cleanupCalls.push("controls"),
+      stopDigging: () => cleanupCalls.push("digging"),
+      deactivateItem: () => cleanupCalls.push("held item"),
+      look: async () => {},
+      quit: () => {}
+    };
+    internal.connection = "online";
+    internal.worldTransition = { state: "stable", startedAt: null, message: "Ready" };
+    internal.movementPhysicsReady = true;
+    internal.publish = () => {};
+    service.acquireViewerControl("account-a", "controller");
+    internal.viewerControlLease.forceRelease("world transition");
+    assert.deepEqual(cleanupCalls, ["controls", "digging", "held item"]);
+    assert.equal(internal.viewerControlLease.isActive, false);
+  } finally {
+    service?.dispose();
+    if (previousEncryptionKey === undefined) delete process.env.CONFIG_ENCRYPTION_KEY;
+    else process.env.CONFIG_ENCRYPTION_KEY = previousEncryptionKey;
+  }
+});
+
 test("control-session heartbeats are reliable while mouse-look stays volatile", () => {
   const events: Array<{ event: string; options?: { reliable?: boolean; volatile?: boolean } }> = [];
   const heartbeatTimers: Array<() => void> = [];
