@@ -87,9 +87,13 @@ let botPosition = null
 let botYaw = 0
 let botPitch = 0
 let botPose = 'standing'
-let lastReceivedSelfEntityPose = null
-let lastReceivedPositionPose = null
+let botPoseSequence = null
+const lastReceivedPoseByEvent = new Map()
 let poseDiagnosticPending = false
+let poseDiagnosticToken = 0
+let pendingPoseDiagnosticToken = 0
+let lastModelRootUuid = null
+let lastScheduledPoseDiagnosticToken = 0
 let selectedSlot = 0
 let itemRenderVersion = '1.21.4'
 let selfEntityId = null
@@ -162,53 +166,62 @@ function poseDiagnosticValue (value) {
 function modelRotationX (model) {
   return typeof model?.rotation?.x === 'number' ? model.rotation.x : 'n/a'
 }
-function modelDescription (model) {
-  if (!model) return 'none'
-  return `name=${model.name || '<unnamed>'} type=${model.type || model.constructor?.name || '<unknown>'}`
-}
-function rootType (root) {
-  return root?.type || root?.constructor?.name || 'none'
-}
-function modelHierarchy (root, selectedModel) {
-  const directChildren = Array.isArray(root?.children) ? root.children : []
-  let skinnedMeshes = 0
-  const visit = (node) => {
-    if (!node) return
-    if (node.isSkinnedMesh) skinnedMeshes += 1
-    for (const child of Array.isArray(node.children) ? node.children : []) visit(child)
-  }
-  visit(root)
+function modelSnapshot (root, model) {
+  let boxDimensions = null
+  try {
+    if (root && model) {
+      root.updateMatrixWorld?.(true)
+      const box = new THREE.Box3().setFromObject(model)
+      const size = new THREE.Vector3()
+      box.getSize(size)
+      boxDimensions = { x: size.x, y: size.y, z: size.z }
+    }
+  } catch {}
   return {
-    entityFound: Boolean(root),
-    rootType: rootType(root),
-    children: directChildren.map(child => ({ name: child?.name || '<unnamed>', type: child?.type || child?.constructor?.name || '<unknown>', isSkinnedMesh: Boolean(child?.isSkinnedMesh) })),
-    skinnedMeshes,
-    selectedModel: modelDescription(selectedModel)
+    rotationX: modelRotationX(model),
+    rootUuid: root?.uuid || 'none',
+    meshUuid: model?.uuid || 'none',
+    boxDimensions
   }
 }
-function logPoseApplication (root, pose, stage) {
+function logModelPose (root, pose, stage, sequence, applyResult, rotationBefore) {
+  const model = findPlayerModel(root)
+  const snapshot = modelSnapshot(root, model)
+  console.info(`[POSE MODEL] timestamp=${new Date().toISOString()} stage=${stage} pose=${poseDiagnosticValue(pose)} sequence=${poseDiagnosticValue(sequence)} modelRotationX=${snapshot.rotationX} rootUuid=${snapshot.rootUuid} meshUuid=${snapshot.meshUuid} boxDimensions=${poseDiagnosticValue(snapshot.boxDimensions)} applyResult=${poseDiagnosticValue(applyResult)} rotationBefore=${poseDiagnosticValue(rotationBefore)}`)
+}
+function applyAndLogPose (root, pose, stage, sequence) {
   const beforeModel = findPlayerModel(root)
   const beforeRotationX = modelRotationX(beforeModel)
   const applied = applyPlayerPose(root, pose)
-  const afterModel = findPlayerModel(root)
-  const hierarchy = modelHierarchy(root, afterModel)
-  console.info(`[POSE MODEL] ${stage} ${poseDiagnosticValue(hierarchy)} applyResult=${applied} rotationBefore=${beforeRotationX} rotationAfter=${modelRotationX(afterModel)}`)
+  logModelPose(root, pose, stage, sequence, applied, beforeRotationX)
   return applied
 }
-function logPoseAfterViewerUpdate (root) {
-  const model = findPlayerModel(root)
-  console.info(`[POSE MODEL AFTER UPDATE] ${poseDiagnosticValue(modelHierarchy(root, model))} rotation=${modelRotationX(model)}`)
+function scheduleNextFramePose (root, pose, sequence, token) {
+  if (!token || token === lastScheduledPoseDiagnosticToken) return
+  lastScheduledPoseDiagnosticToken = token
+  requestAnimationFrame(() => {
+    const currentRoot = selfEntityId === null ? root : (viewer.entities.entities[selfEntityId] || root)
+    logModelPose(currentRoot, pose, 'nextFrame', sequence, 'snapshot', modelRotationX(findPlayerModel(currentRoot)))
+  })
 }
-function setBotPose (pose, forceDiagnostic = false) {
+function logPoseSocketReceive (eventType, payload) {
+  const pose = payload?.pose
+  if (lastReceivedPoseByEvent.get(eventType) === pose) return
+  lastReceivedPoseByEvent.set(eventType, pose)
+  console.info(`[POSE SOCKET RECEIVE] timestamp=${new Date().toISOString()} event=${eventType} sequence=${poseDiagnosticValue(payload?.poseSequence)} incomingPose=${poseDiagnosticValue(pose)} currentBotPose=${poseDiagnosticValue(botPose)} selfEntityId=${poseDiagnosticValue(selfEntityId)}`)
+}
+function setBotPose (pose, sequence, forceDiagnostic = false) {
   const previousPose = botPose
   if (PLAYER_POSES.has(pose)) botPose = pose
+  if (Number.isInteger(sequence)) botPoseSequence = sequence
   const changed = botPose !== previousPose
   viewer.playerHeight = playerPoseEyeHeight(botPose)
   const mesh = selfEntityId === null ? null : viewer.entities.entities[selfEntityId]
-  if (changed || forceDiagnostic) {
+  const rootChanged = Boolean(mesh && mesh.uuid !== lastModelRootUuid)
+  if (changed || forceDiagnostic || rootChanged) {
     poseDiagnosticPending = true
-    console.info(`[POSE CLIENT] botPose=${botPose} incoming=${poseDiagnosticValue(pose)} entityFound=${Boolean(mesh)} selfEntityId=${poseDiagnosticValue(selfEntityId)}`)
-    logPoseApplication(mesh, botPose, 'applyPlayerPose from setBotPose')
+    pendingPoseDiagnosticToken = ++poseDiagnosticToken
+    if (mesh) applyAndLogPose(mesh, botPose, 'setBotPose', botPoseSequence)
   } else if (mesh) {
     applyPlayerPose(mesh, botPose)
   }
@@ -226,13 +239,17 @@ function updateRenderedEntity (entity) {
   const isSelf = selfEntityId !== null && entity.id === selfEntityId
   viewer.updateEntity(entity)
   const pose = isSelf ? botPose : entity.pose
-  if (isSelf && poseDiagnosticPending) {
-    const mesh = viewer.entities.entities[entity.id]
-    logPoseAfterViewerUpdate(mesh)
-    if (PLAYER_POSES.has(pose)) logPoseApplication(mesh, pose, 'applyPlayerPose after viewer.updateEntity')
+  const mesh = viewer.entities.entities[entity.id]
+  const rootChanged = Boolean(isSelf && mesh && mesh.uuid !== lastModelRootUuid)
+  if (isSelf && (poseDiagnosticPending || rootChanged)) {
+    const token = pendingPoseDiagnosticToken || ++poseDiagnosticToken
+    const sequence = botPoseSequence ?? entity.poseSequence
+    const applied = PLAYER_POSES.has(pose) ? applyAndLogPose(mesh, pose, 'afterViewerUpdate', sequence) : false
     poseDiagnosticPending = false
+    pendingPoseDiagnosticToken = 0
+    lastModelRootUuid = mesh?.uuid || null
+    if (applied || mesh) scheduleNextFramePose(mesh, pose, sequence, token)
   } else if (PLAYER_POSES.has(pose)) {
-    const mesh = viewer.entities.entities[entity.id]
     if (mesh) applyPlayerPose(mesh, pose)
   }
 }
@@ -309,15 +326,13 @@ socket.on('version', (version) => {
   if (!viewer.setVersion(version)) return
   viewer.listen(socket)
 })
-socket.on('position', ({ pos, yaw: nextBotYaw, pitch: nextBotPitch, pose }) => {
-  if (pose !== lastReceivedPositionPose) {
-    lastReceivedPositionPose = pose
-    console.info(`[POSE CLIENT] positionPose=${poseDiagnosticValue(pose)} botPose=${botPose} exact payload=${poseDiagnosticValue({ pos, yaw: nextBotYaw, pitch: nextBotPitch, pose })}`)
-  }
+socket.on('position', (payload) => {
+  const { pos, yaw: nextBotYaw, pitch: nextBotPitch, pose, poseSequence } = payload
+  logPoseSocketReceive('position', payload)
   botPosition = pos
-  setBotPose(pose)
+  setBotPose(pose, poseSequence)
   if (selfEntityId !== null) {
-    updateRenderedEntity({ id: selfEntityId, pos, yaw: nextBotYaw, pitch: nextBotPitch, pose: botPose })
+    updateRenderedEntity({ id: selfEntityId, pos, yaw: nextBotYaw, pitch: nextBotPitch, pose: botPose, poseSequence: botPoseSequence })
     syncSelfVisibility()
   }
   if (!freecam) {
@@ -326,17 +341,16 @@ socket.on('position', ({ pos, yaw: nextBotYaw, pitch: nextBotPitch, pose }) => {
   }
 })
 socket.on('selfEntity', (entity) => {
-  if (entity?.pose !== lastReceivedSelfEntityPose) {
-    lastReceivedSelfEntityPose = entity?.pose
-    console.info(`[POSE CLIENT] selfEntityPose=${poseDiagnosticValue(entity?.pose)} botPose=${botPose} exact payload=${poseDiagnosticValue(entity)}`)
-  }
+  const isInitialSelfEntity = selfEntityId === null
   selfEntityId = entity.id
-  setBotPose(entity.pose, true)
+  logPoseSocketReceive('selfEntity', entity)
+  setBotPose(entity.pose, entity.poseSequence, isInitialSelfEntity)
   updateRenderedEntity(entity)
   syncSelfVisibility()
   if (!freecam && botPosition) setBotCamera(botPosition, botYaw, botPitch)
 })
 socket.on('entity', (entity) => {
+  if (entity?.id === selfEntityId) logPoseSocketReceive('entity', entity)
   if (entity.delete) {
     entities.delete(entity.id)
   } else {

@@ -15,7 +15,7 @@ import type { ConfigStore } from "./config.js";
 import type { AppEvents } from "./events.js";
 import type { WebhookNotifier } from "./webhook.js";
 import type { TokenType } from "./types.js";
-import { normalizePlayerPose } from "./player-pose.js";
+import { poseDiagnosticsFor } from "./pose-diagnostics.js";
 import { registerViewerStateSync } from "./viewer-state.js";
 import { registerViewerControlHandlers } from "./viewer-control-socket.js";
 
@@ -136,6 +136,7 @@ export function startServer(config: ConfigStore, events: AppEvents, bot: MultiBo
     }
     events.log("info", "viewer", `POV starting: Minecraft ${minecraftVersion}, render profile ${viewerVersion}, position ${Math.round(target.entity.position.x)},${Math.round(target.entity.position.y)},${Math.round(target.entity.position.z)}`);
     socket.emit("version", viewerVersion);
+    const poseDiagnostics = poseDiagnosticsFor(target as object, (message) => events.log("info", "viewer", message));
     const viewerEmitter = new EventEmitter();
     let loadedChunkCount = 0;
     let unloadedChunkCount = 0;
@@ -172,7 +173,6 @@ export function startServer(config: ConfigStore, events: AppEvents, bot: MultiBo
     let sendHud: (() => void) | null = null;
     let sendPosition: (() => void) | null = null;
     let sendChat: ((message: string) => void) | null = null;
-    let lastLoggedPositionPose: string | null = null;
     const handleMouseClick = (click: unknown) => viewerEmitter.emit("mouseClick", click);
     socket.on("mouseClick", handleMouseClick);
     const cleanupViewer = () => {
@@ -214,13 +214,10 @@ export function startServer(config: ConfigStore, events: AppEvents, bot: MultiBo
     };
     sendPosition = () => {
       if (!target.entity?.position) return;
-      const pose = normalizePlayerPose(target.entity);
-      const payload = { pos: target.entity.position, yaw: target.entity.yaw, pitch: target.entity.pitch, pose };
+      const normalized = poseDiagnostics.normalize(target.entity, "move");
+      const payload = { pos: target.entity.position, yaw: target.entity.yaw, pitch: target.entity.pitch, pose: normalized.pose, poseSequence: normalized.sequence };
+      poseDiagnostics.recordSocketSend("position", payload, normalized.sequence);
       socket.emit("position", payload);
-      if (pose !== lastLoggedPositionPose) {
-        lastLoggedPositionPose = pose;
-        events.log("info", "viewer", `[POSE SOCKET] positionPose=${pose} exact payload=${JSON.stringify(payload)}`);
-      }
       void worldView.updatePosition(target.entity.position);
     };
     worldView.listenToBot(target);

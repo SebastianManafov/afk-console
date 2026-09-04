@@ -1,12 +1,13 @@
 import type { Bot } from "mineflayer";
-import { inspect } from "node:util";
 import {
   normalizePlayerPose,
-  PLAYER_POSE_METADATA_INDEX,
-  PLAYER_SHARED_FLAGS_METADATA_INDEX,
-  PLAYER_SLEEPING_POSITION_METADATA_INDEX,
   type PlayerPose
 } from "./player-pose.js";
+import {
+  poseDiagnosticsFor,
+  type NormalizedPoseDiagnostic,
+  type PoseDiagnosticSource
+} from "./pose-diagnostics.js";
 
 type UnknownRecord = Record<string, unknown>;
 type EventListener = (...args: any[]) => void;
@@ -38,6 +39,7 @@ export interface ViewerEntityState {
   yaw?: number;
   pitch?: number;
   pose?: PlayerPose;
+  poseSequence?: number;
   delete?: boolean;
 }
 
@@ -68,40 +70,13 @@ function position(value: unknown): ViewerPosition | null {
   return x === null || y === null || z === null ? null : { x, y, z };
 }
 
-function diagnosticValue(value: unknown): string {
-  try {
-    const serialized = JSON.stringify(value, (_key, item) => typeof item === "bigint" ? `${item}n` : item);
-    if (serialized !== undefined) return serialized;
-  } catch {
-    // Fall back to an object-safe representation for diagnostic-only logging.
-  }
-  return inspect(value, { depth: 6, breakLength: Infinity, compact: true }).replace(/\s*\n\s*/g, " ");
-}
-
-function entityMetadataValue(entity: unknown, index: number, name: string): unknown {
-  const metadata = asRecord(entity)?.metadata;
-  if (Array.isArray(metadata)) return metadata[index];
-  const record = asRecord(metadata);
-  return record?.[String(index)] ?? record?.[name];
-}
-
-function metadataHex(value: unknown): string {
-  const number = finiteNumber(value);
-  return number === null ? "n/a" : `0x${(Math.trunc(number) >>> 0).toString(16)}`;
-}
-
-function hasSharedFlag(value: unknown, flag: number): boolean {
-  const number = finiteNumber(value);
-  return number !== null && (Math.trunc(number) & flag) !== 0;
-}
-
 function hasPoseState(record: UnknownRecord): boolean {
   return "pose" in record || "metadata" in record || "crouching" in record || "sleeping" in record || "isSleeping" in record || "elytraFlying" in record;
 }
 
 export function serializeViewerEntity(
   value: unknown,
-  options: { poseSource?: unknown; forcePose?: boolean; username?: string } = {}
+  options: { poseSource?: unknown; forcePose?: boolean; username?: string; normalizedPose?: NormalizedPoseDiagnostic } = {}
 ): ViewerEntityState | null {
   const record = asRecord(value);
   const id = entityId(value);
@@ -121,7 +96,11 @@ export function serializeViewerEntity(
   }
 
   const poseSource = options.poseSource ?? (hasPoseState(record) ? value : undefined);
-  if (options.forcePose || poseSource !== undefined) state.pose = normalizePlayerPose(poseSource);
+  if (options.forcePose || poseSource !== undefined) {
+    const normalized = options.normalizedPose ?? { pose: normalizePlayerPose(poseSource), sequence: undefined };
+    state.pose = normalized.pose;
+    if (normalized.sequence !== undefined) state.poseSequence = normalized.sequence;
+  }
   return state;
 }
 
@@ -138,18 +117,22 @@ export function registerViewerStateSync(options: {
   const target = options.target;
   const targetEvents = target as unknown as EventSource;
   const selfEntityId = target.entity.id;
+  const poseDiagnostics = poseDiagnosticsFor(target as object, options.diagnostic);
   let cleaned = false;
   let lastSelfPose: PlayerPose | null = null;
-  let lastRawMetadataSignature: string | null = null;
-  const diagnostic = options.diagnostic;
 
-  const emitSelfEntity = (force: boolean): void => {
+  const emitSelfEntity = (force: boolean, source: PoseDiagnosticSource, sequence?: number): void => {
     if (cleaned || !target.entity || target.entity.id !== selfEntityId) return;
-    const state = serializeViewerEntity(target.entity, { forcePose: true, username: target.username });
+    const normalized = poseDiagnostics.normalize(target.entity, source, sequence);
+    const state = serializeViewerEntity(target.entity, {
+      forcePose: true,
+      username: target.username,
+      normalizedPose: normalized
+    });
     if (!state) return;
     if (!force && state.pose === lastSelfPose) return;
     lastSelfPose = state.pose ?? null;
-    diagnostic?.(`[POSE SOCKET] selfEntityPose=${diagnosticValue(state.pose)} exact payload=${diagnosticValue(state)}`);
+    poseDiagnostics.recordSocketSend("selfEntity", state, normalized.sequence);
     options.socket.emit("selfEntity", state);
   };
 
@@ -157,24 +140,8 @@ export function registerViewerStateSync(options: {
     const packet = asRecord(value);
     const packetEntityId = finiteNumber(packet?.entityId);
     if (packetEntityId !== selfEntityId) return;
-
-    const entityMetadata = asRecord(target.entity)?.metadata;
-    const metadata0 = entityMetadataValue(target.entity, PLAYER_SHARED_FLAGS_METADATA_INDEX, "shared_flags");
-    const metadata6 = entityMetadataValue(target.entity, PLAYER_POSE_METADATA_INDEX, "pose");
-    const rawMetadata = packet?.metadata;
-    const rawPoseMetadata = Array.isArray(rawMetadata)
-      ? rawMetadata.filter((entry) => {
-        const key = finiteNumber(asRecord(entry)?.key);
-        return key === PLAYER_SHARED_FLAGS_METADATA_INDEX || key === PLAYER_POSE_METADATA_INDEX || key === PLAYER_SLEEPING_POSITION_METADATA_INDEX;
-      })
-      : rawMetadata;
-    const sleepingPosition = entityMetadataValue(target.entity, PLAYER_SLEEPING_POSITION_METADATA_INDEX, "sleeping_pos");
-    const signature = [diagnosticValue(rawPoseMetadata), diagnosticValue(metadata0), diagnosticValue(metadata6), diagnosticValue(sleepingPosition)].join("|");
-    if (signature === lastRawMetadataSignature) return;
-    lastRawMetadataSignature = signature;
-    const normalizedPose = normalizePlayerPose(target.entity);
-    diagnostic?.(`[POSE RAW] minecraftVersion=${diagnosticValue(target.version)} entityId=${selfEntityId} rawMetadataPacket=${diagnosticValue(value)} entityMetadata=${diagnosticValue(entityMetadata)} metadata0=${diagnosticValue(metadata0)} metadata6=${diagnosticValue(metadata6)} sharedFlagsHex=${metadataHex(metadata0)} sharedFlagSwimming=${hasSharedFlag(metadata0, 0x10)} registryPoseIndex=${PLAYER_POSE_METADATA_INDEX} registrySharedFlagsIndex=${PLAYER_SHARED_FLAGS_METADATA_INDEX}`);
-    diagnostic?.(`[POSE NORMALIZE] input=${diagnosticValue({ metadata0, metadata6, sleepingPosition, entityMetadata })} normalizedPose=${normalizedPose}`);
+    const sequence = poseDiagnostics.sequenceForPacket(value) ?? poseDiagnostics.takePendingEntitySequence(selfEntityId);
+    poseDiagnostics.recordEntity(target.entity, sequence);
   };
 
   const forwardBlockUpdate: EventListener = (value: unknown) => {
@@ -186,17 +153,25 @@ export function registerViewerStateSync(options: {
   };
 
   const forwardEntity: EventListener = (value: unknown) => {
+    const self = isSelfEntity(value, selfEntityId);
+    const normalized = self && !asRecord(value)?.delete
+      ? poseDiagnostics.normalize(target.entity, "entityMoved")
+      : undefined;
     const state = serializeViewerEntity(value, {
-      poseSource: isSelfEntity(value, selfEntityId) ? target.entity : undefined
+      poseSource: self ? target.entity : undefined,
+      normalizedPose: normalized
     });
-    if (state) options.socket.emit("entity", state);
+    if (state) {
+      if (self && normalized) poseDiagnostics.recordSocketSend("entity", state, normalized.sequence);
+      options.socket.emit("entity", state);
+    }
   };
 
   const forwardEntityUpdate: EventListener = (value: unknown) => {
     queueMicrotask(() => {
       if (cleaned) return;
       if (isSelfEntity(value, selfEntityId)) {
-        emitSelfEntity(false);
+        emitSelfEntity(false, "entityUpdate", poseDiagnostics.takePendingEntitySequence(selfEntityId));
         return;
       }
       const record = asRecord(value);
@@ -208,7 +183,7 @@ export function registerViewerStateSync(options: {
 
   const forwardPoseEvent: EventListener = (value: unknown) => {
     if (!isSelfEntity(value, selfEntityId)) return;
-    queueMicrotask(() => emitSelfEntity(false));
+    queueMicrotask(() => emitSelfEntity(false, "entityUpdate", poseDiagnostics.takePendingEntitySequence(selfEntityId)));
   };
 
   options.viewerEmitter.on("blockUpdate", forwardBlockUpdate);
@@ -221,7 +196,7 @@ export function registerViewerStateSync(options: {
   protocolEvents?.on("entity_metadata", forwardRawEntityMetadata);
 
   return {
-    sendSelfEntity: () => emitSelfEntity(true),
+    sendSelfEntity: () => emitSelfEntity(true, "initialSelfEntity"),
     cleanup: () => {
       if (cleaned) return;
       cleaned = true;

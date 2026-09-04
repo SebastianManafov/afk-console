@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { EventEmitter } from "node:events";
 import test from "node:test";
+import { PoseDiagnostics } from "../src/pose-diagnostics.js";
 import { registerViewerStateSync } from "../src/viewer-state.js";
 
 class SyntheticBot extends EventEmitter {
@@ -35,6 +36,32 @@ function emitMineflayerEntityMetadata(target: SyntheticBot, metadata: Array<{ ke
   target.emit("entityUpdate", target.entity);
 }
 
+test("pose packet diagnostics preserve raw metadata and protocol identity", () => {
+  const target = new SyntheticBot() as SyntheticBot & { version: string; protocolVersion: number };
+  target.version = "26.1.2";
+  target.protocolVersion = 107;
+  const logs: string[] = [];
+  const diagnostics = new PoseDiagnostics((message) => logs.push(message));
+  const packet = {
+    entityId: target.entity.id,
+    metadata: [
+      { key: 0, type: "byte", value: 0x10 },
+      { key: 6, type: "entity_pose", value: 3 }
+    ]
+  };
+
+  const sequence = diagnostics.recordPacket(packet, target);
+
+  assert.equal(diagnostics.sequenceForPacket(packet), sequence);
+  assert.equal(logs.length, 1);
+  const log = logs[0];
+  assert.ok(log);
+  assert.match(log, /^\[POSE PACKET\] timestamp=/);
+  assert.match(log, /selfEntityId=42 packetEntityId=42/);
+  assert.match(log, /minecraftVersion="26\.1\.2" protocol=107/);
+  assert.match(log, /rawMetadata=\[\{"key":0,"type":"byte","value":16\},\{"key":6,"type":"entity_pose","value":3\}\]/);
+});
+
 test("viewer state sync forwards authoritative block state updates", () => {
   const target = new SyntheticBot();
   const viewerEmitter = new EventEmitter();
@@ -47,6 +74,33 @@ test("viewer state sync forwards authoritative block state updates", () => {
     event: "blockUpdate",
     payload: { pos: { x: 17, y: -64, z: 4 }, stateId: 1234 }
   }]);
+  sync.cleanup();
+});
+
+test("pose diagnostics log only relevant state changes and carry a sequence", async () => {
+  const target = new SyntheticBot();
+  const viewerEmitter = new EventEmitter();
+  const socket = createSocket();
+  const logs: string[] = [];
+  const sync = registerViewerStateSync({ target: target as any, viewerEmitter, socket, diagnostic: (message) => logs.push(message) });
+
+  target.entity.metadata[0] = 0;
+  target.entity.metadata[6] = 0;
+  emitMineflayerEntityMetadata(target, [{ key: 0, type: "byte", value: 0x10 }]);
+  await new Promise<void>((resolve) => setImmediate(resolve));
+
+  assert.equal(logs.filter((message) => message.startsWith("[POSE ENTITY] ")).length, 1);
+  assert.equal(logs.filter((message) => message.startsWith("[POSE NORMALIZED] ")).length, 1);
+  assert.equal(logs.filter((message) => message.startsWith("[POSE SOCKET SEND] ")).length, 1);
+  assert.equal((socket.sent.at(-1)?.payload as { pose?: string; poseSequence?: number }).pose, "swimming");
+  assert.equal(typeof (socket.sent.at(-1)?.payload as { poseSequence?: number }).poseSequence, "number");
+
+  emitMineflayerEntityMetadata(target, [{ key: 0, type: "byte", value: 0x10 }]);
+  await new Promise<void>((resolve) => setImmediate(resolve));
+
+  assert.equal(logs.filter((message) => message.startsWith("[POSE ENTITY] ")).length, 1);
+  assert.equal(logs.filter((message) => message.startsWith("[POSE NORMALIZED] ")).length, 1);
+  assert.equal(logs.filter((message) => message.startsWith("[POSE SOCKET SEND] ")).length, 1);
   sync.cleanup();
 });
 
@@ -78,7 +132,8 @@ test("viewer state sync removes block and entity listeners without duplicates", 
       height: 1.8,
       yaw: 0,
       pitch: 0,
-      pose: "swimming"
+      pose: "swimming",
+      poseSequence: 2
     }
   });
 

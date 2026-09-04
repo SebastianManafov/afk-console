@@ -17,6 +17,7 @@ import type { BotSnapshot, TokenStatus, TokenType } from "./types.js";
 import type { WebhookNotifier } from "./webhook.js";
 import { TokenVault } from "./token-vault.js";
 import { ViewerControlDeniedError, ViewerControlLease, type ViewerControlInput } from "./viewer-control.js";
+import { poseDiagnosticsFor } from "./pose-diagnostics.js";
 
 const { Authflow, Titles } = prismarineAuth;
 
@@ -148,6 +149,7 @@ export class BotService {
       throw error;
     }
     this.bot = bot;
+    const poseDiagnostics = poseDiagnosticsFor(bot as object, (message) => this.events.log("info", "viewer", message));
     bot.once("inject_allowed", () => { installMovementInputBridge(bot); });
     this.movementPhysicsReady = false;
     this.activeEndpoint = { host: connection.host, port: connection.port };
@@ -205,6 +207,10 @@ export class BotService {
       const name = String(metadata.name ?? "");
       const key = `${phase}:${name}`;
       if (!["login", "configuration", "play"].includes(phase)) return;
+      if (phase === "play" && name === "entity_metadata") {
+        const packetEntityId = (data as { entityId?: unknown })?.entityId;
+        if (packetEntityId === bot.entity?.id) poseDiagnostics.recordPacket(data, bot);
+      }
       if (phase === "configuration" && name === "select_known_packs") {
         const offered = (data as { packs?: Array<{ namespace: string; id: string; version: string }> }).packs;
         const serverKnownPacks = Array.isArray(offered) ? offered : [];
