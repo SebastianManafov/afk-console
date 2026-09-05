@@ -23,6 +23,23 @@ export interface MacroRuntime {
   startedAt: string | null;
 }
 
+export interface ViewerWindowItem {
+  slot: number;
+  id: number;
+  name: string;
+  displayName: string;
+  count: number;
+  metadata?: number;
+}
+
+export interface ViewerWindowState {
+  id: number;
+  type: string | number;
+  title: string;
+  inventoryStart: number;
+  slots: Array<ViewerWindowItem | null>;
+}
+
 export interface AppConfig {
   servers: Array<{
     id: string; name: string; host: string; port: number; version: string;
@@ -158,7 +175,7 @@ export interface BotSnapshot {
   experienceLevel: number | null;
   position: { x: number; y: number; z: number } | null;
   inventory: Array<{ slot: number; name: string; displayName: string; count: number }>;
-  window: { title: string; inventoryStart: number; slots: Array<{ slot: number; name: string; displayName: string; count: number }> } | null;
+  window: ViewerWindowState | null;
   sell: MacroRuntime;
   spawner: MacroRuntime;
 }

@@ -17,7 +17,7 @@ Minecraft servers, accounts, reconnect rules, proxies, macros and webhooks are c
 
 The browser POV terrain renderer uses the Prismarine-compatible Minecraft `1.21.4` render profile. RCC keeps the configured `26.1` and `26.1.2` protocol paths working and maps them to that profile only inside viewer rendering.
 
-Guests can inspect dashboard state, diagnostics, previews, inventory and POV terrain, but all state-changing controls are admin-only. Browser bot control is available only to an admin who maximizes one POV card, clicks its canvas to acquire iframe-owned pointer lock, and keeps that view active. Minimizing, switching, hiding the tab, losing focus, disconnecting, or entering a world transition releases movement and interaction controls.
+Guests can inspect dashboard state, diagnostics, previews, inventory and POV terrain, but all state-changing controls are admin-only. Browser bot control is available only to an admin who maximizes one POV card, clicks its canvas to acquire iframe-owned pointer lock, and keeps that view active. Minimizing, switching, hiding the tab, losing focus, disconnecting, or entering a world transition releases movement and interaction controls. When Bot POV opens a real server container, pointer lock is released for the GUI; only the same active admin lease can click its server-provided slots, and Escape or `E` closes the server window through Mineflayer. Freecam never sends block, entity, item or GUI actions.
 
 ## Token persistence
 

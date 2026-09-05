@@ -23,6 +23,13 @@ fallback remains deliberately conservative: it requires a collision surface
 covering the full player footprint, so multi-box blocks can still require the
 manual override.
 
+Bot POV right-clicks now route against Mineflayer's live cursor target in entity,
+block, then held-item order. Server-opened chest-style, hopper,
+dispenser/dropper and furnace-family windows are forwarded as authoritative
+window state and rendered with the pinned 1.21.4 Minecraft GUI textures. Admin
+GUI clicks remain lease-bound and are sent through validated window events;
+guests retain read-only access.
+
 ## Completed
 
 - POV control uses Mineflayer movement and interaction states directly.
@@ -68,6 +75,15 @@ manual override.
   Minecraft.
 - Anvil and other multi-box collision layouts are documented as an inference
   limitation rather than changing Minecraft's authoritative pose state.
+- Bot POV right-click target routing prefers entities, then blocks, then held
+  item use while retaining right-button release/deactivation behavior.
+- The authenticated POV bridge forwards complete Mineflayer window slot state,
+  player-inventory slot updates, IDs, titles and inventory boundaries.
+- Generic chest rows, custom chest menus, hopper, dispenser/dropper, furnace,
+  blast furnace and smoker layouts use version-pinned vanilla GUI textures and
+  the existing item icon pipeline.
+- GUI clicks support left, right and shift click modes through the admin-only
+  viewer lease; stale window IDs and malformed modes are rejected server-side.
 
 ## Pose synchronization
 
@@ -91,14 +107,12 @@ manual override.
 
 ## Verification
 
-- The current collision-derived crawl fallback still needs verification in a
-  Node 22/pnpm 11 checkout; Node and pnpm were unavailable in this workspace,
-  so it was not rerun here.
-- The client-only Crawl view override was added after the recorded verification
-  and also needs the next Node 22/pnpm 11 build/test pass.
-- The preceding snapshot's `pnpm build` passed.
-- The preceding snapshot's `pnpm test` passed: 68 tests, 0 failures; the
-  client-only override still needs to be included in a fresh run.
+- The current build and test suite passed in this workspace with Node 24.20.0
+  and pnpm 11.24.0: 84 tests, 0 failures.
+- The current POV item-icon, GUI-asset and worker geometry regressions passed,
+  including Y=`-64` and Y=`288` sections.
+- Focused viewer-window coverage passes for target routing, authoritative slot
+  updates, admin-only clicks, stale IDs, cleanup and container layout selection.
 - POV item-icon and geometry regressions passed for 1.21.4, including Y=`-64`
   and Y=`288` sections.
 - `git diff --check` passed for the client override change.

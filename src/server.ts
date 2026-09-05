@@ -19,6 +19,7 @@ import type { TokenType } from "./types.js";
 import { isPlayerInCrawlSpace } from "./player-pose.js";
 import { poseDiagnosticsFor } from "./pose-diagnostics.js";
 import { registerViewerStateSync } from "./viewer-state.js";
+import { registerViewerWindowSync } from "./viewer-window.js";
 import { registerViewerControlHandlers } from "./viewer-control-socket.js";
 
 const contentTypes: Record<string, string> = {
@@ -117,7 +118,8 @@ export function startServer(config: ConfigStore, events: AppEvents, bot: MultiBo
     const requestedAccountId = typeof socket.handshake.query.accountId === "string" ? socket.handshake.query.accountId : undefined;
     const primarySnapshot = bot.snapshot();
     const accountId = requestedAccountId || primarySnapshot.accountId || primarySnapshot.bots?.[0]?.accountId || "primary";
-    const removeControlHandlers = registerViewerControlHandlers(socket, bot, accountId, role);
+    const viewerDiagnostic = process.env.RCC_VIEWER_DIAGNOSTICS === "true" ? (message: string) => events.log("info", "viewer", message) : undefined;
+    const removeControlHandlers = registerViewerControlHandlers(socket, bot, accountId, role, { diagnostic: viewerDiagnostic });
     const target = bot.viewerBot(accountId);
     if (!target?.entity?.position) {
       socket.emit("viewerUnavailable", "No bot is online");
@@ -178,6 +180,7 @@ export function startServer(config: ConfigStore, events: AppEvents, bot: MultiBo
       diagnostic: process.env.RCC_POSE_DIAGNOSTICS === "true" ? (message) => events.log("info", "viewer", message) : undefined,
       poseContextResolver
     });
+    const viewerWindowSync = registerViewerWindowSync({ target, socket, diagnostic: viewerDiagnostic });
     let viewerCleaned = false;
     let hudInterval: NodeJS.Timeout | null = null;
     let sendHud: (() => void) | null = null;
@@ -188,6 +191,7 @@ export function startServer(config: ConfigStore, events: AppEvents, bot: MultiBo
     const cleanupViewer = () => {
       if (viewerCleaned) return;
       viewerCleaned = true;
+      try { bot.releaseViewerControl(accountId, socket.id, "viewer cleanup"); } catch { /* The account may already be offline or removed. */ }
       removeControlHandlers();
       socket.off("disconnect", cleanupViewer);
       socket.off("mouseClick", handleMouseClick);
@@ -202,6 +206,7 @@ export function startServer(config: ConfigStore, events: AppEvents, bot: MultiBo
       viewerEmitter.off("loadChunk", handleLoadChunk);
       viewerEmitter.off("unloadChunk", handleUnloadChunk);
       viewerStateSync.cleanup();
+      viewerWindowSync.cleanup();
       worldView.removeListenersFromBot(target);
     };
     socket.on("disconnect", cleanupViewer);
@@ -250,6 +255,7 @@ export function startServer(config: ConfigStore, events: AppEvents, bot: MultiBo
     socket.emit("viewerDiagnostics", { stage: "init", loaded: loadedChunkCount, initialized: initializedChunks, unloaded: unloadedChunkCount });
     sendPosition();
     sendHud();
+    viewerWindowSync.sendCurrentWindow();
     hudInterval = setInterval(sendHud, 500);
     sendChat = (message: string): void => { socket.emit("chatLine", String(message)); };
     target.on("move", sendPosition);

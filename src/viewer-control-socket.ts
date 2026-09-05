@@ -1,7 +1,7 @@
 import type { Socket } from "socket.io";
 import type { DashboardRole } from "./auth.js";
 import type { MultiBotManager } from "./multi-bot-manager.js";
-import { ViewerControlDeniedError, type ViewerMovementControl } from "./viewer-control.js";
+import { parseViewerWindowClick, parseViewerWindowClose, ViewerControlDeniedError, type ViewerMovementControl } from "./viewer-control.js";
 
 const movementControls = new Set<ViewerMovementControl>(["forward", "back", "left", "right", "jump", "sneak", "sprint"]);
 
@@ -10,15 +10,19 @@ export interface ViewerControlCapabilities {
   accountId: string;
 }
 
-export function registerViewerControlHandlers(socket: Socket, manager: MultiBotManager, accountId: string, role: DashboardRole): () => void {
+export function registerViewerControlHandlers(socket: Socket, manager: MultiBotManager, accountId: string, role: DashboardRole, options: { diagnostic?: (message: string) => void } = {}): () => void {
   const controllerId = socket.id;
-  const emitDenied = (reason: string): void => { socket.emit("viewerControlDenied", { reason: genericDenialReason(reason) }); };
-  const run = (operation: () => void | Promise<void>): void => {
+  const emitDenied = (reason: string, context = "viewer control"): void => {
+    const normalizedReason = genericDenialReason(reason);
+    options.diagnostic?.(`Rejected ${context}: ${normalizedReason}`);
+    socket.emit("viewerControlDenied", { reason: normalizedReason });
+  };
+  const run = (operation: () => void | Promise<void>, context = "viewer control"): void => {
     try {
       const result = operation();
-      if (result && typeof (result as Promise<void>).catch === "function") void (result as Promise<void>).catch((error: unknown) => emitDenied(errorReason(error)));
+      if (result && typeof (result as Promise<void>).catch === "function") void (result as Promise<void>).catch((error: unknown) => emitDenied(errorReason(error), context));
     } catch (error) {
-      emitDenied(errorReason(error));
+      emitDenied(errorReason(error), context);
     }
   };
   const requireAdmin = (): boolean => {
@@ -88,6 +92,24 @@ export function registerViewerControlHandlers(socket: Socket, manager: MultiBotM
       ? manager.viewerControl(accountId, controllerId, { kind: "action", action: "use", enabled: payload.enabled !== false })
       : manager.viewerControl(accountId, controllerId, { kind: "action", action: "attack" }));
   };
+  const windowClick = (payload: unknown): void => {
+    if (!requireAdmin()) return;
+    const click = parseViewerWindowClick(payload);
+    if (!click) {
+      emitDenied("invalid_input", "GUI click");
+      return;
+    }
+    run(() => manager.viewerWindowClick(accountId, controllerId, click), "GUI click");
+  };
+  const windowClose = (payload: unknown): void => {
+    if (!requireAdmin()) return;
+    const close = parseViewerWindowClose(payload);
+    if (!close) {
+      emitDenied("invalid_input", "GUI close");
+      return;
+    }
+    run(() => manager.viewerWindowClose(accountId, controllerId, close.windowId), "GUI close");
+  };
   const compatibilityRelease = (): void => release();
   const disconnect = (): void => {
     release();
@@ -104,6 +126,8 @@ export function registerViewerControlHandlers(socket: Socket, manager: MultiBotM
   socket.on("botControl", control);
   socket.on("botLook", look);
   socket.on("botAction", action);
+  socket.on("viewerWindowClick", windowClick);
+  socket.on("viewerWindowClose", windowClose);
   socket.on("releaseControls", compatibilityRelease);
   socket.on("disconnect", disconnect);
 
@@ -118,6 +142,8 @@ export function registerViewerControlHandlers(socket: Socket, manager: MultiBotM
     socket.off("botControl", control);
     socket.off("botLook", look);
     socket.off("botAction", action);
+    socket.off("viewerWindowClick", windowClick);
+    socket.off("viewerWindowClose", windowClose);
     socket.off("releaseControls", compatibilityRelease);
     socket.off("disconnect", disconnect);
   }
@@ -142,6 +168,6 @@ function errorReason(error: unknown): string {
 
 function genericDenialReason(reason: string): string {
   if (reason === "already_controlled") return "competing_session";
-  if (["role", "competing_session", "not_owner", "expired", "not_ready", "locked", "invalid_input"].includes(reason)) return reason;
+  if (["role", "competing_session", "not_owner", "expired", "not_ready", "locked", "invalid_input", "stale_window"].includes(reason)) return reason;
   return "not_ready";
 }

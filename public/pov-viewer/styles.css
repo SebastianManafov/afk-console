@@ -72,6 +72,18 @@ body:not(.live) #minecraftHud { display: none; }
 .standalone-icon { display: block; width: 62px; height: 62px; }
 
 .minecraft-window { position: fixed; z-index: 8; inset: 0; display: grid; place-items: center; padding: 18px; box-sizing: border-box; background: #11120fb8; color: var(--viewer-ink); pointer-events: auto; }
+.minecraft-server-window { position: fixed; z-index: 9; inset: 0; display: grid; place-items: center; box-sizing: border-box; background: #0008; pointer-events: auto; }
+.minecraft-server-surface { position: relative; box-sizing: border-box; width: calc(176px * var(--gui-scale, 1)); height: calc(166px * var(--gui-scale, 1)); background-repeat: no-repeat; background-size: calc(256px * var(--gui-scale, 1)) calc(256px * var(--gui-scale, 1)); image-rendering: pixelated; color: #404040; font: calc(8px * var(--gui-scale, 1))/1 monospace; }
+.minecraft-server-title, .minecraft-server-inventory-title { position: absolute; left: calc(8px * var(--gui-scale, 1)); z-index: 1; max-width: calc(160px * var(--gui-scale, 1)); overflow: hidden; color: #404040; font: calc(8px * var(--gui-scale, 1))/1 monospace; text-overflow: ellipsis; white-space: nowrap; pointer-events: none; }
+.minecraft-server-title { top: calc(6px * var(--gui-scale, 1)); }
+.minecraft-server-inventory-title { top: calc((var(--gui-height, 166px) - 94px) * var(--gui-scale, 1)); }
+.minecraft-server-slots { position: absolute; inset: 0; }
+.server-window-slot { position: absolute; box-sizing: border-box; width: calc(18px * var(--gui-scale, 1)); height: calc(18px * var(--gui-scale, 1)); padding: 0; border: 0; background: transparent; color: #fff; cursor: pointer; image-rendering: pixelated; }
+.server-window-slot:focus-visible { outline: calc(1px * var(--gui-scale, 1)) solid #fff; outline-offset: calc(-1px * var(--gui-scale, 1)); }
+.server-window-slot:hover::after { position: absolute; inset: 0; background: url("ui-assets/container/1.21.4/slot_highlight_back.png") center / 100% 100% no-repeat; content: ""; pointer-events: none; }
+.server-window-slot .item-icon { position: relative; z-index: 1; width: calc(16px * var(--gui-scale, 1)); height: calc(16px * var(--gui-scale, 1)); margin: calc(1px * var(--gui-scale, 1)); }
+.server-window-slot .item-count { right: calc(1px * var(--gui-scale, 1)); bottom: calc(1px * var(--gui-scale, 1)); z-index: 2; font-size: calc(8px * var(--gui-scale, 1)); }
+body.server-window-open #minecraftHud, body.server-window-open #crosshair, body.server-window-open #poseToggle, body.server-window-open #chatOverlay, body.server-window-open #minimap, body.server-window-open #playerList { visibility: hidden; }
 .inventory-window { width: min(700px, calc(100vw - 28px)); max-height: calc(100vh - 28px); overflow: auto; padding: 20px; border: 1px solid #d4d1ca; border-radius: 6px; background: var(--window); font: 13px "SF Mono", "Geist Mono", ui-monospace, monospace; }
 .inventory-window-header { display: flex; align-items: center; justify-content: space-between; gap: 16px; margin-bottom: 18px; padding-bottom: 12px; border-bottom: 1px solid #d4d1ca; }
 .inventory-window h2, .inventory-window h3 { margin: 0; font-size: 15px; font-weight: 700; }

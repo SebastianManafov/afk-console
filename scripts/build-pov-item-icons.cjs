@@ -7,7 +7,10 @@ const { referenceItemAssets, referenceHudAssets } = require('../viewer-client/po
 const renderVersions = ['1.21.4']
 const destinationRoot = path.resolve(__dirname, '../public/pov-viewer/item-icons')
 const hudDestinationRoot = path.resolve(__dirname, '../public/pov-viewer/ui-assets')
+const windowDestinationRoot = path.resolve(hudDestinationRoot, 'container')
 const prefix = 'data:image/png;base64,'
+const windowTextures = ['generic_54', 'hopper', 'dispenser', 'furnace', 'blast_furnace', 'smoker']
+const windowSprites = ['slot_highlight_back', 'slot_highlight_front']
 
 function writeReferenceHudAssets () {
   fs.mkdirSync(hudDestinationRoot, { recursive: true })
@@ -50,5 +53,30 @@ function writeVersionIcons (version) {
   console.log(`[pov] Generated ${generated.size} item icons for ${version}: ${path.relative(process.cwd(), destination)}`)
 }
 
+function writeVersionWindowAssets (version) {
+  const assets = minecraftAssets(version)
+  if (!assets?.directory) throw new Error(`No Minecraft GUI assets available for render profile ${version}`)
+  const destination = path.join(windowDestinationRoot, version)
+  fs.mkdirSync(destination, { recursive: true })
+  const generated = []
+  for (const name of windowTextures) {
+    const source = path.join(assets.directory, 'gui', 'container', `${name}.png`)
+    if (!fs.statSync(source).isFile()) throw new Error(`Minecraft GUI texture is missing: ${name}`)
+    fs.copyFileSync(source, path.join(destination, `${name}.png`))
+    generated.push(name)
+  }
+  for (const name of windowSprites) {
+    const source = path.join(assets.directory, 'gui', 'sprites', 'container', `${name}.png`)
+    if (!fs.statSync(source).isFile()) throw new Error(`Minecraft GUI sprite is missing: ${name}`)
+    fs.copyFileSync(source, path.join(destination, `${name}.png`))
+    generated.push(name)
+  }
+  fs.writeFileSync(path.join(destination, 'manifest.json'), `${JSON.stringify({ version, textures: windowTextures, sprites: windowSprites }, null, 2)}\n`)
+  console.log(`[pov] Generated ${generated.length} Minecraft GUI assets for ${version}: ${path.relative(process.cwd(), destination)}`)
+}
+
 writeReferenceHudAssets()
-for (const version of renderVersions) writeVersionIcons(version)
+for (const version of renderVersions) {
+  writeVersionIcons(version)
+  writeVersionWindowAssets(version)
+}

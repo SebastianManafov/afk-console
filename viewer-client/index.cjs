@@ -3,6 +3,7 @@ global.THREE = require('three')
 const { Viewer } = require('prismarine-viewer/viewer')
 const { io } = require('socket.io-client')
 const { itemIconUrl } = require('./item-icons.cjs')
+const { getWindowLayout, windowSlotPosition } = require('./window-layout.cjs')
 const { createControlSession } = require('./control-session.cjs')
 const { createPoseOverrideState } = require('./pose-override.cjs')
 const { findPlayerModel, applyPlayerPose, playerPoseEyeHeight } = require('./player-pose.cjs')
@@ -73,6 +74,11 @@ const offhandIcon = document.getElementById('offhandIcon')
 const chatOverlay = document.getElementById('chatOverlay')
 const inventoryPanel = document.getElementById('inventoryPanel')
 const closeInventory = document.getElementById('closeInventory')
+const serverWindowPanel = document.getElementById('serverWindowPanel')
+const serverWindowSurface = document.getElementById('serverWindowSurface')
+const serverWindowTitle = document.getElementById('serverWindowTitle')
+const serverWindowInventoryTitle = document.getElementById('serverWindowInventoryTitle')
+const serverWindowSlots = document.getElementById('serverWindowSlots')
 const armorSlots = [...document.querySelectorAll('.armor-slot')]
 const inventoryMainSlots = document.getElementById('inventoryMainSlots')
 const inventoryHotbar = document.getElementById('inventoryHotbar')
@@ -101,6 +107,7 @@ let lastScheduledPoseDiagnosticToken = 0
 let selectedSlot = 0
 let itemRenderVersion = '1.21.4'
 let selfEntityId = null
+let serverWindowState = null
 const entities = new Map()
 
 const controlSession = createControlSession({
@@ -111,6 +118,7 @@ const controlSession = createControlSession({
   },
   onRevoked: () => {
     keys.clear()
+    clearServerWindowOverlay()
     if (document.pointerLockElement === renderer.domElement) document.exitPointerLock()
   }
 })
@@ -125,7 +133,13 @@ window.addEventListener('message', (event) => {
   if (!message || typeof message !== 'object' || message.accountId !== accountId) return
   if (message.type === 'rcc-pov-activation' || message.type === 'povActivation') {
     if (message.mode === 'bot' || message.mode === 'freecam') setMode(message.mode)
-    if (message.active !== true) keys.clear()
+    if (message.active !== true) {
+      if (serverWindowState) {
+        requestCloseServerWindow()
+        clearServerWindowOverlay()
+      }
+      keys.clear()
+    }
     controlSession.setParentActive(message.active === true)
     if (message.active !== true && document.pointerLockElement === renderer.domElement) document.exitPointerLock()
   }
@@ -133,12 +147,90 @@ window.addEventListener('message', (event) => {
 postParent({ type: 'rcc-pov-ready', accountId })
 
 function setInventoryVisible (visible) {
+  if (serverWindowState) return
   inventoryPanel.hidden = !visible
   if (visible && document.pointerLockElement) document.exitPointerLock()
 }
 
 closeInventory.onclick = () => setInventoryVisible(false)
+function validServerWindowState (value) {
+  return value && typeof value === 'object' && Number.isInteger(value.id) && value.id >= 0 && value.id <= 255 &&
+    (typeof value.type === 'string' || Number.isInteger(value.type)) && typeof value.title === 'string' &&
+    Number.isInteger(value.inventoryStart) && value.inventoryStart >= 0 && Array.isArray(value.slots)
+}
+function serverWindowScale (layout) {
+  return Math.max(.75, Math.min(4, (window.innerWidth - 24) / layout.width, (window.innerHeight - 24) / layout.height))
+}
+function renderServerWindow () {
+  if (!serverWindowState || !serverWindowSurface || !serverWindowSlots) return
+  const layout = getWindowLayout(serverWindowState)
+  const scale = serverWindowScale(layout)
+  const safeVersion = /^[A-Za-z0-9._-]+$/.test(itemRenderVersion) ? itemRenderVersion : '1.21.4'
+  const safeAsset = /^[A-Za-z0-9_]+$/.test(layout.asset) ? layout.asset : 'generic_54'
+  serverWindowSurface.style.setProperty('--gui-scale', String(scale))
+  serverWindowSurface.style.setProperty('--gui-height', `${layout.height}px`)
+  serverWindowSurface.style.width = `${layout.width * scale}px`
+  serverWindowSurface.style.height = `${layout.height * scale}px`
+  serverWindowSurface.style.backgroundImage = `url("ui-assets/container/${safeVersion}/${safeAsset}.png")`
+  serverWindowTitle.textContent = serverWindowState.title
+  serverWindowInventoryTitle.textContent = 'Inventory'
+  serverWindowSlots.replaceChildren()
+  const renderedWindow = serverWindowState
+  const renderedWindowId = serverWindowState.id
+  serverWindowState.slots.forEach((item, slotId) => {
+    const position = windowSlotPosition(layout, slotId, serverWindowState.inventoryStart)
+    if (!position) return
+    const slot = document.createElement('button')
+    slot.type = 'button'
+    slot.className = 'server-window-slot inventory-slot mc-slot'
+    slot.style.left = `${position.x * scale}px`
+    slot.style.top = `${position.y * scale}px`
+    slot.dataset.slot = String(slotId)
+    fillSlot(slot, item)
+    slot.addEventListener('pointerdown', (event) => {
+      if (event.button !== 0 && event.button !== 2) return
+      event.preventDefault()
+      event.stopPropagation()
+      const current = serverWindowState
+      if (!current || current !== renderedWindow || current.id !== renderedWindowId) return
+      controlSession.action('windowClick', {
+        windowId: current.id,
+        slot: slotId,
+        mouseButton: event.button === 2 ? 1 : 0,
+        mode: event.shiftKey ? 1 : 0
+      })
+    })
+    serverWindowSlots.append(slot)
+  })
+}
+function setServerWindowState (state) {
+  if (!validServerWindowState(state)) {
+    clearServerWindowOverlay()
+    return
+  }
+  serverWindowState = state
+  inventoryPanel.hidden = true
+  serverWindowPanel.hidden = false
+  document.body.classList.add('server-window-open')
+  controlSession.setWindowOpen(true)
+  renderServerWindow()
+  if (document.pointerLockElement === renderer.domElement) document.exitPointerLock()
+}
+function clearServerWindowOverlay () {
+  if (!serverWindowState && serverWindowPanel.hidden) return
+  serverWindowState = null
+  serverWindowPanel.hidden = true
+  serverWindowSlots?.replaceChildren()
+  document.body.classList.remove('server-window-open')
+  controlSession.setWindowOpen(false)
+}
+function requestCloseServerWindow () {
+  if (!serverWindowState) return false
+  return controlSession.action('windowClose', { windowId: serverWindowState.id })
+}
+serverWindowPanel?.addEventListener('contextmenu', (event) => event.preventDefault())
 function lockPointer () {
+  if (serverWindowState) return
   try {
     const result = renderer.domElement.requestPointerLock?.()
     if (result?.catch) result.catch(() => {})
@@ -147,6 +239,10 @@ function lockPointer () {
 function setMode (nextMode) {
   const nextFreecam = nextMode === 'freecam'
   if (nextFreecam === freecam) return
+  if (nextFreecam && serverWindowState) {
+    requestCloseServerWindow()
+    clearServerWindowOverlay()
+  }
   keys.clear()
   freecam = nextFreecam
   controlSession.setBotPov(!freecam)
@@ -286,6 +382,16 @@ function syncSelfVisibility () {
 renderer.domElement.addEventListener('click', lockPointer)
 const movementControls = { KeyW: 'forward', KeyS: 'back', KeyA: 'left', KeyD: 'right', Space: 'jump', ShiftLeft: 'sneak', ShiftRight: 'sneak', ControlLeft: 'sprint', ControlRight: 'sprint' }
 document.addEventListener('keydown', (event) => {
+  if (serverWindowState) {
+    keys.delete(event.code)
+    if ((event.code === 'Escape' || event.code === 'KeyE') && !event.repeat) {
+      event.preventDefault()
+      requestCloseServerWindow()
+    } else {
+      event.preventDefault()
+    }
+    return
+  }
   keys.add(event.code)
   if (event.code === 'KeyC' && !event.repeat) {
     event.preventDefault()
@@ -317,7 +423,7 @@ document.addEventListener('mousemove', (event) => {
   if (!freecam) { botYaw = yaw; botPitch = pitch; controlSession.look(botYaw, botPitch) }
 })
 renderer.domElement.addEventListener('mousedown', (event) => {
-  if (freecam || document.pointerLockElement !== renderer.domElement) return
+  if (freecam || serverWindowState || document.pointerLockElement !== renderer.domElement) return
   if (event.button === 0) controlSession.action('attack')
   if (event.button === 2) controlSession.action('use', { enabled: true })
 })
@@ -329,14 +435,22 @@ renderer.domElement.addEventListener('wheel', (event) => {
   controlSession.action('hotbar', { slot: selectedSlot })
 }, { passive: true })
 
-const releaseOnFocusLoss = (reason) => { keys.clear(); controlSession.releaseControl(reason); if (document.pointerLockElement === renderer.domElement) document.exitPointerLock() }
+const releaseOnFocusLoss = (reason) => {
+  keys.clear()
+  if (serverWindowState) {
+    requestCloseServerWindow()
+    clearServerWindowOverlay()
+  }
+  controlSession.releaseControl(reason)
+  if (document.pointerLockElement === renderer.domElement) document.exitPointerLock()
+}
 window.addEventListener('blur', () => releaseOnFocusLoss('window blur'))
 document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'hidden') releaseOnFocusLoss('tab hidden') })
 window.addEventListener('pagehide', () => controlSession.cleanup('page hidden'))
 window.addEventListener('beforeunload', () => controlSession.cleanup('page unloading'))
 
 socket.on('connect', () => { controlSession.setSocketConnected(true) })
-socket.on('disconnect', () => { keys.clear(); controlSession.setSocketConnected(false) })
+socket.on('disconnect', () => { keys.clear(); controlSession.setSocketConnected(false); clearServerWindowOverlay() })
 socket.on('viewerControlCapabilities', (capabilities) => {
   if (!capabilities || capabilities.accountId !== accountId) return
   controlSession.setCapability(capabilities.canControl === true)
@@ -349,6 +463,14 @@ socket.on('viewerControlDenied', () => {
   controlSession.serverDenied()
 })
 socket.on('viewerControlRevoked', (revocation) => controlSession.serverRevoked(revocation?.reason || 'server revoked control'))
+socket.on('windowOpen', (state) => setServerWindowState(state))
+socket.on('windowUpdate', (state) => {
+  if (!validServerWindowState(state)) return
+  if (serverWindowState && serverWindowState.id === state.id) setServerWindowState(state)
+})
+socket.on('windowClose', (payload) => {
+  if (!serverWindowState || payload?.id === undefined || payload.id === serverWindowState.id) clearServerWindowOverlay()
+})
 socket.on('viewerUnavailable', () => {
   setTimeout(() => { socket.disconnect(); socket.connect() }, 2000)
 })
@@ -508,4 +630,5 @@ function drawMinimap() {
 requestAnimationFrame(animate)
 window.addEventListener('resize', () => {
   viewer.camera.aspect = window.innerWidth / window.innerHeight; viewer.camera.updateProjectionMatrix(); renderer.setSize(window.innerWidth, window.innerHeight)
+  renderServerWindow()
 })

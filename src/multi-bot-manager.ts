@@ -8,7 +8,7 @@ import type { AppConfig, BotSnapshot, TokenStatus, TokenType } from "./types.js"
 import type { WebhookNotifier } from "./webhook.js";
 import { selectPrimarySnapshot } from "./snapshot-policy.js";
 import { selectRoutedAccountId } from "./routing-policy.js";
-import type { ViewerControlInput } from "./viewer-control.js";
+import type { ViewerControlInput, ViewerWindowClickInput } from "./viewer-control.js";
 
 export class MultiBotManager {
   private readonly bots = new Map<string, BotService>();
@@ -112,6 +112,8 @@ export class MultiBotManager {
   acquireViewerControl(accountId: string, controllerId: string): void { this.viewerBotService(accountId).acquireViewerControl(accountId, controllerId); }
   heartbeatViewerControl(accountId: string, controllerId: string): boolean { return this.viewerBotService(accountId).heartbeatViewerControl(accountId, controllerId); }
   viewerControl(accountId: string, controllerId: string, input: ViewerControlInput): Promise<void> { return this.viewerBotService(accountId).viewerControl(accountId, controllerId, input); }
+  viewerWindowClick(accountId: string, controllerId: string, input: ViewerWindowClickInput): Promise<void> { return this.viewerBotService(accountId).viewerWindowClick(accountId, controllerId, input); }
+  viewerWindowClose(accountId: string, controllerId: string, windowId: number): void { return this.viewerBotService(accountId).viewerWindowClose(accountId, controllerId, windowId); }
   releaseViewerControl(accountId: string, controllerId: string, reason?: string): boolean { return this.viewerBotService(accountId).releaseViewerControl(accountId, controllerId, reason); }
   onViewerControlRevoked(listener: (payload: { accountId: string; reason: string }) => void): () => void {
     const handler = (payload: unknown) => {

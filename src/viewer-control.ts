@@ -34,6 +34,17 @@ export interface ViewerHotbarInput {
 export type ViewerActionInput = ViewerAttackInput | ViewerUseInput | ViewerHotbarInput;
 export type ViewerControlInput = ViewerMovementInput | ViewerLookInput | ViewerActionInput;
 
+export interface ViewerWindowClickInput {
+  windowId: number;
+  slot: number;
+  mouseButton: 0 | 1;
+  mode: 0 | 1;
+}
+
+export interface ViewerWindowCloseInput {
+  windowId: number;
+}
+
 export type ViewerControlDenialReason =
   | "invalid_controller"
   | "already_controlled"
@@ -43,7 +54,8 @@ export type ViewerControlDenialReason =
   | "not_ready"
   | "locked"
   | "role"
-  | "invalid_input";
+  | "invalid_input"
+  | "stale_window";
 
 export const VIEWER_CONTROL_HEARTBEAT_MS = 1_000;
 export const VIEWER_CONTROL_LEASE_EXPIRY_MS = 5_000;
@@ -56,6 +68,41 @@ export class ViewerControlDeniedError extends Error {
     this.name = "ViewerControlDeniedError";
     this.reason = reason;
   }
+}
+
+export function parseViewerWindowClick(value: unknown): ViewerWindowClickInput | null {
+  if (!isRecord(value)) return null;
+  const windowId = integerInRange(value.windowId, 0, 255);
+  const slot = integerInRange(value.slot, 0, 255);
+  const mouseButton = integerInRange(value.mouseButton, 0, 1);
+  const mode = integerInRange(value.mode, 0, 1);
+  if (windowId === null || slot === null || mouseButton === null || mode === null) return null;
+  return { windowId, slot, mouseButton: mouseButton as 0 | 1, mode: mode as 0 | 1 };
+}
+
+export function parseViewerWindowClose(value: unknown): ViewerWindowCloseInput | null {
+  if (!isRecord(value)) return null;
+  const windowId = integerInRange(value.windowId, 0, 255);
+  return windowId === null ? null : { windowId };
+}
+
+export function validateViewerWindowClick(value: unknown, currentWindow: unknown): ViewerWindowClickInput {
+  const click = parseViewerWindowClick(value);
+  if (!click) throw new ViewerControlDeniedError("invalid_input");
+  const window = isRecord(currentWindow) ? currentWindow : null;
+  const windowId = window ? integerInRange(window.id, 0, 255) : null;
+  if (!window || windowId === null || windowId !== click.windowId) throw new ViewerControlDeniedError("stale_window");
+  const slots = window.slots;
+  if (!Array.isArray(slots) || click.slot >= slots.length) throw new ViewerControlDeniedError("invalid_input");
+  return click;
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return Boolean(value) && typeof value === "object" && !Array.isArray(value);
+}
+
+function integerInRange(value: unknown, minimum: number, maximum: number): number | null {
+  return Number.isInteger(value) && (value as number) >= minimum && (value as number) <= maximum ? value as number : null;
 }
 
 export interface ViewerControlLeaseOptions {

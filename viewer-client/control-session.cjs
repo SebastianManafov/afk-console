@@ -20,6 +20,7 @@ class ControlSession {
     this.botPov = true
     this.socketConnected = false
     this.leaseGranted = false
+    this.windowOpen = false
     this.acquireRequested = false
     this.pressed = new Set()
     this.held = new Set()
@@ -31,11 +32,15 @@ class ControlSession {
   }
 
   get canControl () {
-    return !this.disposed && this.adminCapable && this.parentActive && this.botPov && this.pointerLocked && this.socketConnected && this.leaseGranted
+    return !this.disposed && this.adminCapable && this.parentActive && this.botPov && this.pointerLocked && !this.windowOpen && this.socketConnected && this.leaseGranted
+  }
+
+  get canGuiControl () {
+    return !this.disposed && this.adminCapable && this.parentActive && this.botPov && this.windowOpen && this.socketConnected && this.leaseGranted
   }
 
   get canAcquire () {
-    return !this.disposed && this.adminCapable && this.parentActive && this.botPov && this.pointerLocked && this.socketConnected
+    return !this.disposed && this.adminCapable && this.parentActive && this.botPov && (this.pointerLocked || this.windowOpen) && this.socketConnected
   }
 
   get pressedControls () {
@@ -61,6 +66,14 @@ class ControlSession {
     this.reconcile(this.pointerLocked ? 'pointer lock acquired' : 'pointer lock lost')
   }
 
+  setWindowOpen (open) {
+    const nextOpen = open === true
+    if (this.windowOpen === nextOpen) return
+    this.windowOpen = nextOpen
+    if (nextOpen) this.stopGameplayInputs(true)
+    this.reconcile(nextOpen ? 'server window opened' : 'server window closed')
+  }
+
   setMode (mode) {
     this.botPov = mode === 'bot' || mode === 'botPov' || mode === false
     this.reconcile(this.botPov ? 'Bot POV active' : 'Freecam active')
@@ -83,8 +96,8 @@ class ControlSession {
     if (!granted) this.failSafe('lease not granted', false)
     this.leaseGranted = granted === true
     this.acquireRequested = false
-    if (this.leaseGranted && this.canControl) {
-      this.syncHeldControls()
+    if (this.leaseGranted && (this.canControl || this.canGuiControl)) {
+      if (this.canControl) this.syncHeldControls()
       this.startHeartbeat()
     }
     else if (!this.leaseGranted) this.stopHeartbeat()
@@ -133,6 +146,11 @@ class ControlSession {
   }
 
   action (action, payload = {}) {
+    if (action === 'windowClick' || action === 'windowClose') {
+      if (!this.canGuiControl) return false
+      this.emitReliable(action === 'windowClick' ? 'viewerWindowClick' : 'viewerWindowClose', payload)
+      return true
+    }
     if (!this.canControl) return false
     if (action === 'use') {
       const enabled = payload.enabled !== false
@@ -192,7 +210,7 @@ class ControlSession {
   startHeartbeat () {
     if (this.heartbeatTimer || !this.leaseGranted) return
     this.heartbeatTimer = this.setInterval(() => {
-      if (!this.canControl) {
+      if (!this.canControl && !this.canGuiControl) {
         this.failSafe('control condition lost', true)
         return
       }
@@ -227,23 +245,31 @@ class ControlSession {
   failSafe (reason, notifyServer) {
     const hadLease = this.leaseGranted
     const canNotify = notifyServer && this.socketConnected && this.leaseGranted
-    const controls = [...this.pressed]
-    this.pressed.clear()
-    this.held.clear()
+    this.stopGameplayInputs(canNotify)
     if (canNotify) {
-      for (const control of controls) this.emitReliable('botControl', { control, enabled: false })
-      if (this.activeUse) this.emitReliable('botAction', { action: 'use', enabled: false })
       this.emitReliable('viewerControlRelease', { reason })
     }
-    this.activeUse = false
-    this.pendingLook = null
-    if (this.lookTimer) this.clearTimeout(this.lookTimer)
-    this.lookTimer = null
     if (hadLease) {
       this.leaseGranted = false
       this.acquireRequested = false
     }
     if (!this.canControl) this.stopHeartbeat()
+  }
+
+  stopGameplayInputs (notifyServer) {
+    const controls = [...this.pressed]
+    const canNotify = notifyServer === true && this.socketConnected && this.leaseGranted
+    this.pressed.clear()
+    this.held.clear()
+    if (canNotify) {
+      for (const control of controls) this.emitReliable('botControl', { control, enabled: false })
+      if (this.activeUse) this.emitReliable('botAction', { action: 'use', enabled: false })
+    }
+    this.activeUse = false
+    this.pendingLook = null
+    if (this.lookTimer) this.clearTimeout(this.lookTimer)
+    this.lookTimer = null
+    return controls
   }
 
   emitReliable (event, payload) {

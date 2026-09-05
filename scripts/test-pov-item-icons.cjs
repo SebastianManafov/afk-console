@@ -18,4 +18,13 @@ for (const name of ['hotbar', 'hotbarSelected', 'xpEmpty', 'xpFilled']) {
     throw new Error(`POV HUD reference asset is missing: ${name}`)
   }
 }
+const windowDirectory = path.resolve(__dirname, `../public/pov-viewer/ui-assets/container/${version}`)
+const windowManifest = JSON.parse(fs.readFileSync(path.join(windowDirectory, 'manifest.json'), 'utf8'))
+if (windowManifest.version !== version) throw new Error(`POV GUI asset manifest has unexpected version: ${windowManifest.version}`)
+for (const name of ['generic_54', 'hopper', 'dispenser', 'furnace', 'blast_furnace', 'smoker', 'slot_highlight_back', 'slot_highlight_front']) {
+  const collection = windowManifest.textures?.includes(name) ? windowManifest.textures : windowManifest.sprites
+  if (!collection?.includes(name) || !fs.statSync(path.join(windowDirectory, `${name}.png`)).isFile()) {
+    throw new Error(`POV Minecraft GUI asset is missing: ${name}`)
+  }
+}
 console.log(`[pov] Item icon test passed for ${manifest.items.length} ${version} items`)

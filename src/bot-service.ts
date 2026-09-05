@@ -16,7 +16,8 @@ import { SpawnerMacro } from "./spawner-macro.js";
 import type { BotSnapshot, TokenStatus, TokenType } from "./types.js";
 import type { WebhookNotifier } from "./webhook.js";
 import { TokenVault } from "./token-vault.js";
-import { ViewerControlDeniedError, ViewerControlLease, type ViewerControlInput } from "./viewer-control.js";
+import { parseViewerWindowClose, validateViewerWindowClick, ViewerControlDeniedError, ViewerControlLease, type ViewerControlInput, type ViewerWindowClickInput } from "./viewer-control.js";
+import { serializeViewerWindow } from "./viewer-window.js";
 import { poseDiagnosticsFor } from "./pose-diagnostics.js";
 
 const { Authflow, Titles } = prismarineAuth;
@@ -687,9 +688,20 @@ export class BotService {
         bot.deactivateItem();
         return;
       }
+      const entity = bot.entityAtCursor(5);
+      if (entity) {
+        this.viewerDiagnostic(`Right-click target: entity=${String(entity.type ?? entity.name ?? entity.username ?? "unknown")}`);
+        await bot.activateEntity(entity);
+        return;
+      }
       const block = bot.blockAtCursor(5);
-      if (block) await bot.activateBlock(block);
-      else bot.activateItem();
+      if (block) {
+        this.viewerDiagnostic(`Right-click target: block=${String(block.name ?? block.type ?? "unknown")}`);
+        await bot.activateBlock(block);
+      } else {
+        this.viewerDiagnostic("Right-click target: item");
+        bot.activateItem();
+      }
       return;
     }
     const entity = bot.entityAtCursor(5);
@@ -700,6 +712,27 @@ export class BotService {
       else bot.swingArm("right");
     }
     if (generation !== this.viewerActionGeneration || !this.viewerControlLease.owns(controllerId)) return;
+  }
+
+  async viewerWindowClick(accountId: string, controllerId: string, input: ViewerWindowClickInput): Promise<void> {
+    this.assertAccount(accountId);
+    this.assertViewerControl(controllerId);
+    const bot = this.bot!;
+    const click = validateViewerWindowClick(input, bot.currentWindow);
+    this.viewerDiagnostic(`GUI click: window=${click.windowId} slot=${click.slot} button=${click.mouseButton} mode=${click.mode}`);
+    const generation = this.viewerActionGeneration;
+    await bot.clickWindow(click.slot, click.mouseButton, click.mode);
+    if (generation !== this.viewerActionGeneration || !this.viewerControlLease.owns(controllerId)) return;
+  }
+
+  viewerWindowClose(accountId: string, controllerId: string, windowId: number): void {
+    this.assertAccount(accountId);
+    this.assertViewerControl(controllerId);
+    const close = parseViewerWindowClose({ windowId });
+    const currentWindow = this.bot?.currentWindow;
+    if (!close || !currentWindow || currentWindow.id !== close.windowId) throw new ViewerControlDeniedError("stale_window");
+    this.viewerDiagnostic(`GUI close: window=${close.windowId}`);
+    this.bot!.closeWindow(currentWindow);
   }
 
   releaseViewerControl(accountId: string, controllerId: string, reason = "released"): boolean {
@@ -770,11 +803,7 @@ export class BotService {
         displayName: item.displayName,
         count: item.count
       })) ?? [],
-      window: currentWindow ? {
-        title: readableMinecraftReason(currentWindow.title),
-        inventoryStart: currentWindow.inventoryStart,
-        slots: currentWindow.slots.slice(0, currentWindow.inventoryStart).flatMap((item, slot) => item ? [{ slot, name: item.name, displayName: item.displayName, count: item.count }] : [])
-      } : null,
+      window: currentWindow ? serializeViewerWindow(currentWindow) : null,
       sell: this.sell.snapshot(),
       spawner: this.spawner.snapshot()
     };
@@ -992,6 +1021,10 @@ export class BotService {
     if (!this.viewerControlLease.heartbeat(controllerId)) throw new ViewerControlDeniedError("not_owner");
   }
 
+  private viewerDiagnostic(message: string): void {
+    if (process.env.RCC_VIEWER_DIAGNOSTICS === "true") this.events.log("info", "viewer", message);
+  }
+
   private normalizeYaw(yaw: number): number {
     if (!Number.isFinite(yaw)) throw new Error("Invalid view angle");
     return Math.atan2(Math.sin(yaw), Math.cos(yaw));
@@ -1009,6 +1042,7 @@ export class BotService {
       try { bot.clearControlStates(); } catch { /* The protocol may already be closed. */ }
       try { bot.stopDigging(); } catch { /* The protocol may already be closed. */ }
       try { bot.deactivateItem(); } catch { /* The protocol may already be closed. */ }
+      try { if (bot.currentWindow) bot.closeWindow(bot.currentWindow); } catch { /* The protocol may already be closed. */ }
     }
     this.sneak = false;
     this.events.emit("viewerControlRevoked", { accountId: this.accountId, reason });
