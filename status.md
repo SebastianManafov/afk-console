@@ -18,7 +18,10 @@ longer part of the investigation.
 The fallback is render-only; Minecraft remains authoritative for the actual
 server-side pose. The viewer now also has a client-only Crawl view override,
 available from the button in the POV or with the `C` key, for layouts such as
-an anvil in a 1x1 space where collision inference is ambiguous.
+an anvil in a 1x1 space where collision inference is ambiguous. The automatic
+fallback remains deliberately conservative: it requires a collision surface
+covering the full player footprint, so multi-box blocks can still require the
+manual override.
 
 ## Completed
 
@@ -63,6 +66,8 @@ an anvil in a 1x1 space where collision inference is ambiguous.
 - The client-only Crawl view button and `C` key lower the local POV and rotate
   the rendered self-player model without sending a pose or movement change to
   Minecraft.
+- Anvil and other multi-box collision layouts are documented as an inference
+  limitation rather than changing Minecraft's authoritative pose state.
 
 ## Pose synchronization
 
@@ -91,11 +96,12 @@ an anvil in a 1x1 space where collision inference is ambiguous.
   so it was not rerun here.
 - The client-only Crawl view override was added after the recorded verification
   and also needs the next Node 22/pnpm 11 build/test pass.
-- `pnpm build` passed.
-- `pnpm test` passed: 68 tests, 0 failures.
+- The preceding snapshot's `pnpm build` passed.
+- The preceding snapshot's `pnpm test` passed: 68 tests, 0 failures; the
+  client-only override still needs to be included in a fresh run.
 - POV item-icon and geometry regressions passed for 1.21.4, including Y=`-64`
   and Y=`288` sections.
-- `git diff --check` passed.
+- `git diff --check` passed for the client override change.
 - Browser visual QA passed across login, dashboard pages, settings, POV mode
   selection, accounts token-type editor, macros, inventory, chat, dark theme,
   dialogs, and responsive layout using an offline local run. No Minecraft
@@ -105,7 +111,8 @@ an anvil in a 1x1 space where collision inference is ambiguous.
   Minecraft sessions bypass Microsoft Authflow, and tokens are absent from
   normal API/state responses.
 - Pose instrumentation and the shared-flags fix are committed and pushed to
-  `origin/main` at `ed8d998`.
+  `origin/main` at `ed8d998`; collision inference is at `580ad5a`, and the
+  client-only Crawl view override is at `18f2375`.
 
 ## Using browser controls
 
@@ -114,23 +121,24 @@ an anvil in a 1x1 space where collision inference is ambiguous.
    `Freecam`.
 3. Maximize one bot card, then click the canvas to acquire pointer lock.
 4. In Bot POV, use `W`, `A`, `S`, `D` for movement; mouse movement to look;
-  `Space` to jump; `Shift` to sneak; and `Ctrl` to sprint. Freecam movement
-  stays client-side and does not send Minecraft movement controls.
+   `Space` to jump; `Shift` to sneak; and `Ctrl` to sprint. Freecam movement
+   stays client-side and does not send Minecraft movement controls.
 5. Use `Crawl view` or press `C` to force a client-only swimming/crawling view;
    press it again to return to the server-reported pose.
 6. Press `Escape` to release controls. After a disconnect, timeout, or world
-  transition, click the canvas again once the bot is stable to reacquire the
-  lease.
+   transition, click the canvas again once the bot is stable to reacquire the
+   lease.
 
 Non-maximized cards and Freecam never emit bot controls.
 
 ## Next operator step
 
-Once the pose fix is available in the target environment, rebuild and start
-the dashboard. Reproduce the bot's swimming/crawling state, then verify that
-the browser model rotates horizontally. If the raw metadata path still needs
-investigation, set `RCC_POSE_DIAGNOSTICS=true` and add `?poseDiagnostics=1`
-to the viewer URL temporarily.
+Once the latest commit is available in the target environment, rebuild and
+start the dashboard. In the 1x1 anvil layout, use `Crawl view` or press `C` and
+verify that the POV camera lowers and the rendered model rotates horizontally.
+Then test automatic detection separately. If the raw metadata path still
+needs investigation, set `RCC_POSE_DIAGNOSTICS=true` and add
+`?poseDiagnostics=1` to the viewer URL temporarily.
 
 For Codespaces:
 
