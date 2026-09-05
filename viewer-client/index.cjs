@@ -4,6 +4,7 @@ const { Viewer } = require('prismarine-viewer/viewer')
 const { io } = require('socket.io-client')
 const { itemIconUrl } = require('./item-icons.cjs')
 const { createControlSession } = require('./control-session.cjs')
+const { createPoseOverrideState } = require('./pose-override.cjs')
 const { findPlayerModel, applyPlayerPose, playerPoseEyeHeight } = require('./player-pose.cjs')
 
 const renderer = new THREE.WebGLRenderer({ antialias: true })
@@ -77,6 +78,8 @@ const inventoryMainSlots = document.getElementById('inventoryMainSlots')
 const inventoryHotbar = document.getElementById('inventoryHotbar')
 const craftingGrid = document.getElementById('craftingGrid')
 const craftingOutput = document.getElementById('craftingOutput')
+const poseToggle = document.getElementById('poseToggle')
+const poseToggleLabel = document.getElementById('poseToggleLabel')
 
 const keys = new Set()
 let freecam = false
@@ -86,7 +89,8 @@ let lastFrame = performance.now()
 let botPosition = null
 let botYaw = 0
 let botPitch = 0
-let botPose = 'standing'
+const poseOverrideState = createPoseOverrideState()
+let botPose = poseOverrideState.currentPose()
 let botPoseSequence = null
 const lastReceivedPoseByEvent = new Map()
 let poseDiagnosticPending = false
@@ -160,6 +164,12 @@ function setMode (nextMode) {
 
 const PLAYER_POSES = new Set(['standing', 'crouching', 'swimming', 'sleeping', 'fall_flying'])
 const poseDiagnosticsEnabled = new URLSearchParams(window.location.search).get('poseDiagnostics') === '1'
+function updatePoseToggle () {
+  const active = poseOverrideState.isClientOverrideEnabled()
+  poseToggle?.classList.toggle('active', active)
+  poseToggle?.setAttribute('aria-pressed', String(active))
+  if (poseToggleLabel) poseToggleLabel.textContent = active ? 'Crawl view: On' : 'Crawl view: Off'
+}
 function poseDiagnosticValue (value) {
   if (value === undefined) return 'undefined'
   try { return JSON.stringify(value) } catch { return String(value) }
@@ -213,10 +223,9 @@ function logPoseSocketReceive (eventType, payload) {
   lastReceivedPoseByEvent.set(eventType, pose)
   console.info(`[POSE SOCKET RECEIVE] timestamp=${new Date().toISOString()} event=${eventType} sequence=${poseDiagnosticValue(payload?.poseSequence)} incomingPose=${poseDiagnosticValue(pose)} currentBotPose=${poseDiagnosticValue(botPose)} selfEntityId=${poseDiagnosticValue(selfEntityId)}`)
 }
-function setBotPose (pose, sequence, forceDiagnostic = false) {
+function refreshBotPose (forceDiagnostic = false) {
   const previousPose = botPose
-  if (PLAYER_POSES.has(pose)) botPose = pose
-  if (Number.isInteger(sequence)) botPoseSequence = sequence
+  botPose = poseOverrideState.currentPose()
   const changed = botPose !== previousPose
   viewer.playerHeight = playerPoseEyeHeight(botPose)
   const mesh = selfEntityId === null ? null : viewer.entities.entities[selfEntityId]
@@ -228,6 +237,20 @@ function setBotPose (pose, sequence, forceDiagnostic = false) {
   } else if (mesh) {
     applyPlayerPose(mesh, botPose)
   }
+}
+function setBotPose (pose, sequence, forceDiagnostic = false) {
+  poseOverrideState.setServerPose(pose)
+  if (Number.isInteger(sequence)) botPoseSequence = sequence
+  refreshBotPose(forceDiagnostic)
+}
+function setClientPoseOverride (enabled) {
+  poseOverrideState.setClientOverride(enabled)
+  refreshBotPose(true)
+  if (!freecam && botPosition) setBotCamera(botPosition, botYaw, botPitch)
+  if (selfEntityId !== null && botPosition) {
+    updateRenderedEntity({ id: selfEntityId, pos: botPosition, yaw: botYaw, pitch: botPitch, pose: botPose, poseSequence: botPoseSequence })
+  }
+  updatePoseToggle()
 }
 function setBotCamera (pos, nextYaw, nextPitch) {
   viewer.playerHeight = playerPoseEyeHeight(botPose)
@@ -264,6 +287,10 @@ renderer.domElement.addEventListener('click', lockPointer)
 const movementControls = { KeyW: 'forward', KeyS: 'back', KeyA: 'left', KeyD: 'right', Space: 'jump', ShiftLeft: 'sneak', ShiftRight: 'sneak', ControlLeft: 'sprint', ControlRight: 'sprint' }
 document.addEventListener('keydown', (event) => {
   keys.add(event.code)
+  if (event.code === 'KeyC' && !event.repeat) {
+    event.preventDefault()
+    setClientPoseOverride(!poseOverrideState.isClientOverrideEnabled())
+  }
   if (event.code === 'KeyE' && !event.repeat) setInventoryVisible(inventoryPanel.hidden)
   if (event.code === 'Escape' && !inventoryPanel.hidden) setInventoryVisible(false)
   if (event.code === 'Tab') { event.preventDefault(); playerList.hidden = false }
@@ -271,6 +298,8 @@ document.addEventListener('keydown', (event) => {
   if (!freecam && movementControls[event.code] && !event.repeat) controlSession.keyDown(movementControls[event.code])
   if (!freecam && /^Digit[1-9]$/.test(event.code)) { selectedSlot = Number(event.code.slice(5)) - 1; controlSession.action('hotbar', { slot: selectedSlot }) }
 })
+poseToggle?.addEventListener('click', () => setClientPoseOverride(!poseOverrideState.isClientOverrideEnabled()))
+updatePoseToggle()
 document.addEventListener('keyup', (event) => {
   keys.delete(event.code)
   if (event.code === 'Tab') playerList.hidden = true

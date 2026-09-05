@@ -21,6 +21,9 @@ canvas { display: block; }
 body:not(.live) #minecraftHud { display: none; }
 
 #crosshair { position: fixed; left: 50%; top: 50%; z-index: 3; translate: -50% -50%; color: #fff; font: 22px "SF Mono", "Geist Mono", ui-monospace, monospace; text-shadow: 0 1px 2px #000; }
+#poseToggle { position: fixed; z-index: 6; top: 18px; right: 18px; display: inline-flex; align-items: center; gap: 9px; padding: 8px 10px; border: 1px solid var(--viewer-border); border-radius: 5px; background: var(--viewer-panel); color: var(--viewer-paper); font: 11px "SF Mono", "Geist Mono", ui-monospace, monospace; cursor: pointer; pointer-events: auto; }
+#poseToggle:hover, #poseToggle.active { border-color: var(--viewer-success); background: var(--viewer-panel-solid); }
+#poseToggle kbd { padding: 2px 5px; border: 1px solid var(--viewer-muted); border-radius: 3px; color: var(--viewer-muted); font: 10px "SF Mono", "Geist Mono", ui-monospace, monospace; }
 
 .panel {
   position: fixed;

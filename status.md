@@ -16,7 +16,9 @@ the player footprint leaves between 0.6 and 1.5 blocks of clearance. Relevant
 block updates re-evaluate the render pose immediately. Browser caching is no
 longer part of the investigation.
 The fallback is render-only; Minecraft remains authoritative for the actual
-server-side pose.
+server-side pose. The viewer now also has a client-only Crawl view override,
+available from the button in the POV or with the `C` key, for layouts such as
+an anvil in a 1x1 space where collision inference is ambiguous.
 
 ## Completed
 
@@ -58,6 +60,9 @@ server-side pose.
 - When the self bot is inside a low-clearance collision space and the server
   omits a swimming pose, the viewer bridge maps the geometry-derived state to
   the swimming/crawling render pose without changing Minecraft movement.
+- The client-only Crawl view button and `C` key lower the local POV and rotate
+  the rendered self-player model without sending a pose or movement change to
+  Minecraft.
 
 ## Pose synchronization
 
@@ -82,8 +87,10 @@ server-side pose.
 ## Verification
 
 - The current collision-derived crawl fallback still needs verification in a
-  Node 22/pnpm 11 checkout; this local snapshot has no Node, pnpm, Git, or
-  `.git` directory.
+  Node 22/pnpm 11 checkout; Node and pnpm were unavailable in this workspace,
+  so it was not rerun here.
+- The client-only Crawl view override was added after the recorded verification
+  and also needs the next Node 22/pnpm 11 build/test pass.
 - `pnpm build` passed.
 - `pnpm test` passed: 68 tests, 0 failures.
 - POV item-icon and geometry regressions passed for 1.21.4, including Y=`-64`
@@ -107,11 +114,13 @@ server-side pose.
    `Freecam`.
 3. Maximize one bot card, then click the canvas to acquire pointer lock.
 4. In Bot POV, use `W`, `A`, `S`, `D` for movement; mouse movement to look;
-   `Space` to jump; `Shift` to sneak; and `Ctrl` to sprint. Freecam movement
-   stays client-side and does not send Minecraft movement controls.
-5. Press `Escape` to release controls. After a disconnect, timeout, or world
-   transition, click the canvas again once the bot is stable to reacquire the
-   lease.
+  `Space` to jump; `Shift` to sneak; and `Ctrl` to sprint. Freecam movement
+  stays client-side and does not send Minecraft movement controls.
+5. Use `Crawl view` or press `C` to force a client-only swimming/crawling view;
+   press it again to return to the server-reported pose.
+6. Press `Escape` to release controls. After a disconnect, timeout, or world
+  transition, click the canvas again once the bot is stable to reacquire the
+  lease.
 
 Non-maximized cards and Freecam never emit bot controls.
 

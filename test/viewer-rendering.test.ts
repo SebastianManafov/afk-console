@@ -119,6 +119,28 @@ test("player pose normalization keeps legacy crouch and Elytra signals", () => {
   assert.equal(normalizePlayerPose({ pose: "crawling" }), "swimming");
 });
 
+test("client pose override forces swimming view without changing the server pose", () => {
+  const { createPoseOverrideState } = require(join(process.cwd(), "viewer-client/pose-override.cjs")) as {
+    createPoseOverrideState: (initialPose?: string) => {
+      setServerPose: (pose: string) => void;
+      setClientOverride: (enabled: boolean) => void;
+      currentPose: () => string;
+      isClientOverrideEnabled: () => boolean;
+    };
+  };
+  const state = createPoseOverrideState("standing");
+
+  assert.equal(state.currentPose(), "standing");
+  state.setClientOverride(true);
+  assert.equal(state.isClientOverrideEnabled(), true);
+  assert.equal(state.currentPose(), "swimming");
+  state.setServerPose("sleeping");
+  assert.equal(state.currentPose(), "swimming");
+  state.setClientOverride(false);
+  assert.equal(state.isClientOverrideEnabled(), false);
+  assert.equal(state.currentPose(), "sleeping");
+});
+
 test("player pose transform leaves entity-root orientation unchanged", () => {
   const { applyPlayerPose, POSE_TRANSFORMS } = require(join(process.cwd(), "viewer-client/player-pose.cjs")) as {
     applyPlayerPose: (root: unknown, pose: string) => boolean;
