@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { EventEmitter } from "node:events";
 import test from "node:test";
+import { isPlayerInCrawlSpace } from "../src/player-pose.js";
 import { PoseDiagnostics } from "../src/pose-diagnostics.js";
 import { registerViewerStateSync } from "../src/viewer-state.js";
 
@@ -74,6 +75,41 @@ test("viewer state sync forwards authoritative block state updates", () => {
     event: "blockUpdate",
     payload: { pos: { x: 17, y: -64, z: 4 }, stateId: 1234 }
   }]);
+  sync.cleanup();
+});
+
+test("viewer state sync refreshes the self pose when entering and leaving a crawl space", async () => {
+  const target = new SyntheticBot();
+  target.entity.position.z = -2.5;
+  const air = { boundingBox: "empty", shapes: [] };
+  const fullBlock = { boundingBox: "block", shapes: [[0, 0, 0, 1, 1, 1]] };
+  const blocks = new Map<string, unknown>();
+  (target as any).blockAt = ({ x, y, z }: { x: number; y: number; z: number }) => blocks.get(`${x},${y},${z}`) ?? air;
+  const viewerEmitter = new EventEmitter();
+  const socket = createSocket();
+  const sync = registerViewerStateSync({
+    target: target as any,
+    viewerEmitter,
+    socket,
+    poseContextResolver: (entity) => ({
+      inCrawlSpace: isPlayerInCrawlSpace(entity, (position) => (target as any).blockAt(position))
+    })
+  });
+
+  target.entity.metadata[0] = 0;
+  target.entity.metadata[6] = 0;
+  sync.sendSelfEntity();
+  assert.equal((socket.sent.at(-1)?.payload as { pose?: string }).pose, "standing");
+
+  blocks.set("4,71,-3", fullBlock);
+  viewerEmitter.emit("blockUpdate", { pos: { x: 4, y: 71, z: -3 }, stateId: 1 });
+  await new Promise<void>((resolve) => setImmediate(resolve));
+  assert.equal((socket.sent.at(-1)?.payload as { pose?: string }).pose, "swimming");
+
+  blocks.delete("4,71,-3");
+  viewerEmitter.emit("blockUpdate", { pos: { x: 4, y: 71, z: -3 }, stateId: 0 });
+  await new Promise<void>((resolve) => setImmediate(resolve));
+  assert.equal((socket.sent.at(-1)?.payload as { pose?: string }).pose, "standing");
   sync.cleanup();
 });
 

@@ -159,6 +159,7 @@ function setMode (nextMode) {
 }
 
 const PLAYER_POSES = new Set(['standing', 'crouching', 'swimming', 'sleeping', 'fall_flying'])
+const poseDiagnosticsEnabled = new URLSearchParams(window.location.search).get('poseDiagnostics') === '1'
 function poseDiagnosticValue (value) {
   if (value === undefined) return 'undefined'
   try { return JSON.stringify(value) } catch { return String(value) }
@@ -185,6 +186,7 @@ function modelSnapshot (root, model) {
   }
 }
 function logModelPose (root, pose, stage, sequence, applyResult, rotationBefore) {
+  if (!poseDiagnosticsEnabled) return
   const model = findPlayerModel(root)
   const snapshot = modelSnapshot(root, model)
   console.info(`[POSE MODEL] timestamp=${new Date().toISOString()} stage=${stage} pose=${poseDiagnosticValue(pose)} sequence=${poseDiagnosticValue(sequence)} modelRotationX=${snapshot.rotationX} rootUuid=${snapshot.rootUuid} meshUuid=${snapshot.meshUuid} boxDimensions=${poseDiagnosticValue(snapshot.boxDimensions)} applyResult=${poseDiagnosticValue(applyResult)} rotationBefore=${poseDiagnosticValue(rotationBefore)}`)
@@ -197,7 +199,7 @@ function applyAndLogPose (root, pose, stage, sequence) {
   return applied
 }
 function scheduleNextFramePose (root, pose, sequence, token) {
-  if (!token || token === lastScheduledPoseDiagnosticToken) return
+  if (!poseDiagnosticsEnabled || !token || token === lastScheduledPoseDiagnosticToken) return
   lastScheduledPoseDiagnosticToken = token
   requestAnimationFrame(() => {
     const currentRoot = selfEntityId === null ? root : (viewer.entities.entities[selfEntityId] || root)
@@ -205,6 +207,7 @@ function scheduleNextFramePose (root, pose, sequence, token) {
   })
 }
 function logPoseSocketReceive (eventType, payload) {
+  if (!poseDiagnosticsEnabled) return
   const pose = payload?.pose
   if (lastReceivedPoseByEvent.get(eventType) === pose) return
   lastReceivedPoseByEvent.set(eventType, pose)

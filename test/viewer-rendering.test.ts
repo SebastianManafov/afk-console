@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { createRequire } from "node:module";
 import { join } from "node:path";
 import test from "node:test";
-import { normalizePlayerPose, playerPoseEyeHeight } from "../src/player-pose.js";
+import { isPlayerInCrawlSpace, normalizePlayerPose, playerPoseEyeHeight } from "../src/player-pose.js";
 import { viewerRenderVersion } from "../src/server.js";
 
 const require = createRequire(import.meta.url);
@@ -36,6 +36,79 @@ test("player pose normalization uses the authoritative swimming shared flag", ()
 
   metadata[0] = 0x02;
   assert.equal(normalizePlayerPose({ metadata }), "crouching");
+});
+
+test("normal standing remains standing without a crawl-space signal", () => {
+  const metadata: unknown[] = [];
+  metadata[0] = 0;
+  metadata[6] = 0;
+  assert.equal(normalizePlayerPose({ metadata }), "standing");
+  assert.equal(normalizePlayerPose({ metadata }, { inCrawlSpace: false }), "standing");
+});
+
+test("crouching remains crouching when there is no crawl-space signal", () => {
+  const metadata: unknown[] = [];
+  metadata[0] = 0x02;
+  metadata[6] = 0;
+  assert.equal(normalizePlayerPose({ metadata }), "crouching");
+  assert.equal(normalizePlayerPose({ metadata }, { inCrawlSpace: false }), "crouching");
+});
+
+test("player pose normalization infers crawling in a one-block crawl space", () => {
+  assert.equal(normalizePlayerPose({ pose: "crouching" }, { inCrawlSpace: true }), "swimming");
+  assert.equal(normalizePlayerPose({ pose: "sleeping" }, { inCrawlSpace: true }), "sleeping");
+  assert.equal(normalizePlayerPose({ elytraFlying: true }, { inCrawlSpace: true }), "fall_flying");
+  assert.equal(normalizePlayerPose({ pose: "crouching" }, { inCrawlSpace: false }), "crouching");
+});
+
+test("crawl-space detection uses full collision shapes and vertical clearance", () => {
+  const air = { boundingBox: "empty", shapes: [] };
+  const fullBlock = { boundingBox: "block", shapes: [[0, 0, 0, 1, 1, 1]] };
+  const upperSlab = { boundingBox: "block", shapes: [[0, 0.5, 0, 1, 1, 1]] };
+  const lowerSlab = { boundingBox: "block", shapes: [[0, 0, 0, 1, 0.5, 1]] };
+  const minimumCrawlClearance = { boundingBox: "block", shapes: [[0, 0.6, 0, 1, 1, 1]] };
+  const stairs = {
+    boundingBox: "block",
+    shapes: [[0, 0, 0, 0.5, 0.5, 1], [0, 0.5, 0, 0.5, 1, 1]]
+  };
+  const openTrapdoor = { boundingBox: "block", shapes: [[0, 0, 0, 0.1875, 1, 1]] };
+  const closedTrapdoor = { boundingBox: "block", shapes: [[0, 0, 0, 1, 0.1875, 1]] };
+  const water = { boundingBox: "empty", name: "water", shapes: [] };
+  const blocks = new Map<string, unknown>([
+    ["0,10,0", air],
+    ["0,11,0", fullBlock]
+  ]);
+  const blockAt = ({ x, y, z }: { x: number; y: number; z: number }) => blocks.get(`${x},${y},${z}`) ?? air;
+  const entity = { position: { x: 0.5, y: 10, z: 0.5 } };
+
+  assert.equal(isPlayerInCrawlSpace(entity, blockAt), true);
+  for (const partial of [upperSlab, stairs, openTrapdoor, water, air]) {
+    blocks.set("0,11,0", partial);
+    assert.equal(isPlayerInCrawlSpace(entity, blockAt), false);
+  }
+
+  blocks.set("0,11,0", lowerSlab);
+  assert.equal(isPlayerInCrawlSpace(entity, blockAt), true);
+  blocks.set("0,11,0", closedTrapdoor);
+  assert.equal(isPlayerInCrawlSpace(entity, blockAt), true);
+
+  blocks.set("0,10,0", minimumCrawlClearance);
+  blocks.set("0,11,0", air);
+  assert.equal(isPlayerInCrawlSpace(entity, blockAt), true);
+
+  blocks.set("0,10,0", water);
+  blocks.set("0,11,0", fullBlock);
+  assert.equal(isPlayerInCrawlSpace(entity, blockAt), false);
+  assert.equal(isPlayerInCrawlSpace({ ...entity, isInWater: true }, blockAt), false);
+  blocks.set("0,10,0", air);
+
+  blocks.set("0,11,0", fullBlock);
+  assert.equal(isPlayerInCrawlSpace({ position: { x: 0.5, y: 10.51, z: 0.5 } }, blockAt), false);
+  blocks.delete("0,11,0");
+  blocks.set("0,12,0", fullBlock);
+  assert.equal(isPlayerInCrawlSpace({ position: { x: 0.5, y: 10.75, z: 0.5 } }, blockAt), true);
+  blocks.delete("0,12,0");
+  assert.equal(isPlayerInCrawlSpace(entity, blockAt), false);
 });
 
 test("player pose normalization keeps legacy crouch and Elytra signals", () => {

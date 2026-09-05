@@ -149,7 +149,10 @@ export class BotService {
       throw error;
     }
     this.bot = bot;
-    const poseDiagnostics = poseDiagnosticsFor(bot as object, (message) => this.events.log("info", "viewer", message));
+    const poseDiagnostics = poseDiagnosticsFor(
+      bot as object,
+      process.env.RCC_POSE_DIAGNOSTICS === "true" ? (message) => this.events.log("info", "viewer", message) : undefined
+    );
     bot.once("inject_allowed", () => { installMovementInputBridge(bot); });
     this.movementPhysicsReady = false;
     this.activeEndpoint = { host: connection.host, port: connection.port };

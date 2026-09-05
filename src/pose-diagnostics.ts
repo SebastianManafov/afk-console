@@ -1,9 +1,14 @@
 import { inspect } from "node:util";
 import minecraftData from "minecraft-data";
-import { normalizePlayerPose, type PlayerPose } from "./player-pose.js";
+import {
+  normalizePlayerPose,
+  type PlayerPose,
+  type PlayerPoseNormalizationOptions
+} from "./player-pose.js";
 
-export type PoseDiagnosticSource = "initialSelfEntity" | "entityUpdate" | "move" | "entityMoved";
+export type PoseDiagnosticSource = "initialSelfEntity" | "entityUpdate" | "move" | "entityMoved" | "blockUpdate";
 export type PoseDiagnosticLogger = (message: string) => void;
+export type PoseContextResolver = (entity: unknown) => PlayerPoseNormalizationOptions | undefined;
 
 export interface NormalizedPoseDiagnostic {
   pose: PlayerPose;
@@ -99,8 +104,15 @@ export class PoseDiagnostics {
   private readonly lastSocketPose = new Map<string, string>();
   private readonly packetSequences = new WeakMap<object, number>();
   private readonly pendingEntitySequences = new Map<number, number>();
+  private poseContextResolver: PoseContextResolver | undefined;
 
-  constructor(private readonly logger?: PoseDiagnosticLogger) {}
+  constructor(private readonly logger?: PoseDiagnosticLogger, poseContextResolver?: PoseContextResolver) {
+    this.poseContextResolver = poseContextResolver;
+  }
+
+  setPoseContextResolver(resolver: PoseContextResolver): void {
+    this.poseContextResolver = resolver;
+  }
 
   nextSequence(): number {
     this.sequence += 1;
@@ -176,7 +188,10 @@ export class PoseDiagnostics {
 
   normalize(entity: unknown, source: PoseDiagnosticSource, sequence?: number): NormalizedPoseDiagnostic {
     const actualSequence = sequence ?? this.nextSequence();
-    const pose = normalizePlayerPose(entity);
+    let options: PlayerPoseNormalizationOptions = {};
+    try { options = this.poseContextResolver?.(entity) ?? {}; }
+    catch { options = {}; }
+    const pose = normalizePlayerPose(entity, options);
     const fields = poseFields(entity);
     const signature = diagnosticValue({ ...fields, pose });
     if (signature !== this.lastNormalizedSignature) {
@@ -187,6 +202,7 @@ export class PoseDiagnostics {
         ` metadata[6]=${diagnosticValue(fields.metadata6)}` +
         ` metadata[14]=${diagnosticValue(fields.metadata14)}` +
         ` directPose=${diagnosticValue(fields.directPose)}` +
+        ` inCrawlSpace=${diagnosticValue(options.inCrawlSpace === true)}` +
         ` normalized=${pose} sequence=${actualSequence}`
       );
     }
@@ -213,10 +229,13 @@ export class PoseDiagnostics {
 
 const diagnosticsByTarget = new WeakMap<object, PoseDiagnostics>();
 
-export function poseDiagnosticsFor(target: object, logger?: PoseDiagnosticLogger): PoseDiagnostics {
+export function poseDiagnosticsFor(target: object, logger?: PoseDiagnosticLogger, poseContextResolver?: PoseContextResolver): PoseDiagnostics {
   const existing = diagnosticsByTarget.get(target);
-  if (existing) return existing;
-  const diagnostics = new PoseDiagnostics(logger);
+  if (existing) {
+    if (poseContextResolver) existing.setPoseContextResolver(poseContextResolver);
+    return existing;
+  }
+  const diagnostics = new PoseDiagnostics(logger, poseContextResolver);
   diagnosticsByTarget.set(target, diagnostics);
   return diagnostics;
 }

@@ -1,6 +1,6 @@
 # RCC Status
 
-Updated: 2026-09-03
+Updated: 2026-09-05
 
 ## Current status
 
@@ -10,10 +10,13 @@ while retaining the shared renderer and existing Bot POV control path.
 
 Live block-state forwarding is implemented. The self-player swimming/crawling
 pose path now recognizes both the authoritative metadata pose and Minecraft’s
-shared-flags swimming bit. Browser caching is no longer part of the
-investigation. The currently available live trace only captured the standing
-state, so a live crawl transition still needs to be observed in the target
-environment after commit `ed8d998`.
+shared-flags swimming bit. The viewer also infers crawling for the self bot
+from authoritative collision shapes when the lowest collision face covering
+the player footprint leaves between 0.6 and 1.5 blocks of clearance. Relevant
+block updates re-evaluate the render pose immediately. Browser caching is no
+longer part of the investigation.
+The fallback is render-only; Minecraft remains authoritative for the actual
+server-side pose.
 
 ## Completed
 
@@ -52,10 +55,13 @@ environment after commit `ed8d998`.
 - Authoritative Mineflayer/WorldView `blockUpdate` events are forwarded to the
   browser viewer as position plus state ID, so redstone and other live block
   states do not require chunk reloads.
+- When the self bot is inside a low-clearance collision space and the server
+  omits a swimming pose, the viewer bridge maps the geometry-derived state to
+  the swimming/crawling render pose without changing Minecraft movement.
 
 ## Pose synchronization
 
-- Commit `ed8d998` logs self-only raw `entity_metadata` packets,
+- Commit `ed8d998` added self-only raw `entity_metadata` packet logging,
   Mineflayer metadata indexes 0 and 6, shared flag `0x10`, normalized pose,
   emitted `selfEntity`/`position` payloads, browser pose reception, viewer
   entity lookup, `SkinnedMesh` selection, and model rotation before/after
@@ -68,12 +74,16 @@ environment after commit `ed8d998`.
   no `0x10`; the browser received `standing`, found the real viewer
   `SkinnedMesh`, and applied rotation `0`. No crawl transition was present in
   that capture.
-- Listener cleanup is covered by the viewer-state test; no live Minecraft
-  crawl reproduction has been captured yet. The fixed code path addresses
-  Case B when a swimming shared flag is received without pose metadata.
+- Listener cleanup and low-clearance enter/leave transitions are covered by
+  the viewer-state tests. Server traces are now gated by
+  `RCC_POSE_DIAGNOSTICS=true`; browser model traces are gated by the
+  `poseDiagnostics=1` viewer query parameter.
 
 ## Verification
 
+- The current collision-derived crawl fallback still needs verification in a
+  Node 22/pnpm 11 checkout; this local snapshot has no Node, pnpm, Git, or
+  `.git` directory.
 - `pnpm build` passed.
 - `pnpm test` passed: 68 tests, 0 failures.
 - POV item-icon and geometry regressions passed for 1.21.4, including Y=`-64`
@@ -107,11 +117,11 @@ Non-maximized cards and Freecam never emit bot controls.
 
 ## Next operator step
 
-Pull the pushed pose fix, rebuild, and start the dashboard in the target
-environment. Reproduce the bot’s swimming/crawling state, then collect all
-server log lines and browser DevTools console lines containing `[POSE`. The
-change-gated trace should show the raw metadata, normalized state, Socket.IO
-payload, real model hierarchy, and model rotation after `viewer.updateEntity`.
+Once the pose fix is available in the target environment, rebuild and start
+the dashboard. Reproduce the bot's swimming/crawling state, then verify that
+the browser model rotates horizontally. If the raw metadata path still needs
+investigation, set `RCC_POSE_DIAGNOSTICS=true` and add `?poseDiagnostics=1`
+to the viewer URL temporarily.
 
 For Codespaces:
 

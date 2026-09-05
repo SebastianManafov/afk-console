@@ -7,6 +7,7 @@ import { createServer, request as httpRequest, type IncomingMessage, type Server
 import { createConnection } from "node:net";
 import { createGzip } from "node:zlib";
 import { extname, join, normalize } from "node:path";
+import { Vec3 } from "vec3";
 import { WebSocketServer } from "ws";
 import { Server as SocketIOServer } from "socket.io";
 import { DashboardAuth, type DashboardRole } from "./auth.js";
@@ -15,6 +16,7 @@ import type { ConfigStore } from "./config.js";
 import type { AppEvents } from "./events.js";
 import type { WebhookNotifier } from "./webhook.js";
 import type { TokenType } from "./types.js";
+import { isPlayerInCrawlSpace } from "./player-pose.js";
 import { poseDiagnosticsFor } from "./pose-diagnostics.js";
 import { registerViewerStateSync } from "./viewer-state.js";
 import { registerViewerControlHandlers } from "./viewer-control-socket.js";
@@ -136,7 +138,14 @@ export function startServer(config: ConfigStore, events: AppEvents, bot: MultiBo
     }
     events.log("info", "viewer", `POV starting: Minecraft ${minecraftVersion}, render profile ${viewerVersion}, position ${Math.round(target.entity.position.x)},${Math.round(target.entity.position.y)},${Math.round(target.entity.position.z)}`);
     socket.emit("version", viewerVersion);
-    const poseDiagnostics = poseDiagnosticsFor(target as object, (message) => events.log("info", "viewer", message));
+    const poseContextResolver = (entity: unknown) => ({
+      inCrawlSpace: isPlayerInCrawlSpace(entity, (position) => target.blockAt(new Vec3(position.x, position.y, position.z)))
+    });
+    const poseDiagnostics = poseDiagnosticsFor(
+      target as object,
+      process.env.RCC_POSE_DIAGNOSTICS === "true" ? (message) => events.log("info", "viewer", message) : undefined,
+      poseContextResolver
+    );
     const viewerEmitter = new EventEmitter();
     let loadedChunkCount = 0;
     let unloadedChunkCount = 0;
@@ -166,7 +175,8 @@ export function startServer(config: ConfigStore, events: AppEvents, bot: MultiBo
       target,
       viewerEmitter,
       socket,
-      diagnostic: (message) => events.log("info", "viewer", message)
+      diagnostic: process.env.RCC_POSE_DIAGNOSTICS === "true" ? (message) => events.log("info", "viewer", message) : undefined,
+      poseContextResolver
     });
     let viewerCleaned = false;
     let hudInterval: NodeJS.Timeout | null = null;

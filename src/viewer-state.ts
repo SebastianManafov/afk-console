@@ -6,6 +6,7 @@ import {
 import {
   poseDiagnosticsFor,
   type NormalizedPoseDiagnostic,
+  type PoseContextResolver,
   type PoseDiagnosticSource
 } from "./pose-diagnostics.js";
 
@@ -108,16 +109,30 @@ function isSelfEntity(value: unknown, selfEntityId: number): boolean {
   return entityId(value) === selfEntityId;
 }
 
+function blockUpdateAffectsSelf(value: ViewerPosition, entity: unknown): boolean {
+  const entityRecord = asRecord(entity);
+  const entityPosition = position(entityRecord?.position ?? entityRecord?.pos);
+  if (!entityPosition) return false;
+  const width = finiteNumber(entityRecord?.width);
+  const halfWidth = width !== null && width > 0 && width <= 4 ? width / 2 : 0.3;
+  const overlapsX = value.x < entityPosition.x + halfWidth && value.x + 1 > entityPosition.x - halfWidth;
+  const overlapsZ = value.z < entityPosition.z + halfWidth && value.z + 1 > entityPosition.z - halfWidth;
+  const feetBlockY = Math.floor(entityPosition.y + 0.001);
+  const highestCrawlBlockY = Math.floor(entityPosition.y + 1.5 - 0.001);
+  return overlapsX && overlapsZ && value.y >= feetBlockY - 1 && value.y <= highestCrawlBlockY;
+}
+
 export function registerViewerStateSync(options: {
   target: Bot;
   viewerEmitter: EventSource;
   socket: ViewerSocket;
   diagnostic?: DiagnosticLogger;
+  poseContextResolver?: PoseContextResolver;
 }): ViewerStateSync {
   const target = options.target;
   const targetEvents = target as unknown as EventSource;
   const selfEntityId = target.entity.id;
-  const poseDiagnostics = poseDiagnosticsFor(target as object, options.diagnostic);
+  const poseDiagnostics = poseDiagnosticsFor(target as object, options.diagnostic, options.poseContextResolver);
   let cleaned = false;
   let lastSelfPose: PlayerPose | null = null;
 
@@ -150,6 +165,9 @@ export function registerViewerStateSync(options: {
     const stateId = finiteNumber(update?.stateId);
     if (!pos || stateId === null || !Number.isInteger(stateId) || stateId < 0) return;
     options.socket.emit("blockUpdate", { pos, stateId });
+    if (blockUpdateAffectsSelf(pos, target.entity)) {
+      queueMicrotask(() => emitSelfEntity(false, "blockUpdate"));
+    }
   };
 
   const forwardEntity: EventListener = (value: unknown) => {
